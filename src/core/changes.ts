@@ -5,8 +5,34 @@ import { classifyPath } from "./project.js";
 import type { Change, ChangeType } from "./types.js";
 import { toPosix, uniqBy } from "./util.js";
 
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+export function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+/**
+ * Reject git refs that could be parsed as options or contain whitespace/control characters.
+ * Refs come from CLI flags, MCP tool calls and CI inputs, so treat them as untrusted.
+ */
+export function assertSafeRef(ref: string, label = "ref"): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
+  if (!ref || ref.startsWith("-") || /[\s\x00-\x1f\x7f]/.test(ref) || ref.includes("..")) {
+    throw new Error(`Invalid git ${label}: ${JSON.stringify(ref)}`);
+  }
+  return ref;
+}
+
+/** Absolute path of the git work tree containing `dir`, or undefined when it isn't in one. */
+export function gitRoot(dir: string): string | undefined {
+  try {
+    return git(path.resolve(dir), ["rev-parse", "--show-toplevel"]).trim();
+  } catch {
+    return undefined;
+  }
 }
 
 export interface GitDiffOptions {
@@ -30,7 +56,10 @@ export function gitChangedFiles(
   opts: GitDiffOptions,
 ): { file: string; changeType: ChangeType; previousFile?: string }[] {
   const projectDir = path.resolve(opts.projectDir);
-  const repoRoot = git(projectDir, ["rev-parse", "--show-toplevel"]).trim();
+  assertSafeRef(opts.base, "base ref");
+  if (opts.head) assertSafeRef(opts.head, "head ref");
+  const repoRoot = gitRoot(projectDir);
+  if (!repoRoot) throw new Error(`Not a git repository: ${projectDir}`);
   const range = opts.head ? [`${opts.base}...${opts.head}`] : [opts.base];
   const out = git(repoRoot, ["diff", "--name-status", "-M", ...range, "--", projectDir]);
 
@@ -59,8 +88,10 @@ export function gitChangedFiles(
 /** Read a file's content at a git ref (used to diff permission sets against the base). */
 export function gitShow(projectDir: string, ref: string, projectRelFile: string): string | undefined {
   try {
+    assertSafeRef(ref);
     const abs = path.resolve(projectDir, projectRelFile);
-    const repoRoot = git(path.resolve(projectDir), ["rev-parse", "--show-toplevel"]).trim();
+    const repoRoot = gitRoot(projectDir);
+    if (!repoRoot) return undefined;
     const repoRel = toPosix(path.relative(repoRoot, abs));
     return execFileSync("git", ["show", `${ref}:${repoRel}`], {
       cwd: repoRoot,

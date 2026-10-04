@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 import path from "node:path";
 import { analyze } from "./analyze.js";
-import { filesFromArgs, gitChangedFiles, gitShow, toChanges } from "./changes.js";
+import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./changes.js";
 import { loadProject } from "./project.js";
+import { gitProvenance } from "./provenance.js";
 import type { AnalysisResult, ChangeType } from "./types.js";
+import { toPosix } from "./util.js";
 
 export { analyze, fieldReferences } from "./analyze.js";
-export { filesFromArgs, gitChangedFiles, toChanges } from "./changes.js";
+export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
 export { saveProcedure } from "./orderOfExecution.js";
 export { classifyPath, loadProject, sourceRoots } from "./project.js";
+export { detectAiTools, gitProvenance } from "./provenance.js";
 export { toMarkdown } from "./report/markdown.js";
+export { toSarif } from "./report/sarif.js";
+export { RULES, ruleInfo } from "./rules.js";
 export * from "./types.js";
 
 export interface RunOptions {
@@ -36,7 +41,8 @@ export function run(opts: RunOptions): AnalysisResult {
     throw new Error("Provide either --base <git ref> or --files <paths...>");
   }
   const { changes, ignored } = toChanges(changedFiles);
-  return analyze({
+  const root = gitRoot(projectDir);
+  const result = analyze({
     model,
     changes,
     ignoredFiles: ignored,
@@ -44,5 +50,8 @@ export function run(opts: RunOptions): AnalysisResult {
     head: opts.head,
     maxDepth: opts.maxDepth,
     readBase: opts.base ? (file) => gitShow(projectDir, opts.base!, file) : undefined,
+    provenance: opts.base && !opts.files?.length ? gitProvenance(projectDir, opts.base, opts.head) : undefined,
   });
+  if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
+  return result;
 }

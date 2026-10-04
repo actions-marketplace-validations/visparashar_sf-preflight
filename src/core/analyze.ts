@@ -12,6 +12,7 @@ import type {
   LoopIssue,
   OrgModel,
   PermissionContainerDef,
+  Provenance,
   Reference,
   SaveEvent,
   SaveProcedure,
@@ -28,6 +29,8 @@ export interface AnalyzeOptions {
   head?: string;
   /** Max cascade depth (default 4). */
   maxDepth?: number;
+  /** Commit authorship for the analyzed range (see provenance.ts). */
+  provenance?: Provenance;
   /** Read a project-relative file at the base ref, to diff permission sets. */
   readBase?: (file: string) => string | undefined;
 }
@@ -341,7 +344,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   };
 
   let nodeCount = 0;
-  const cycleMap = new Map<string, string[]>();
+  const cycleMap = new Map<string, { labels: string[]; files: string[] }>();
   const label = (n: { object: string; event: SaveEvent; via?: AutomationRef }) =>
     `${n.object} (${n.event})${n.via && n.via.kind !== "Change" ? ` ← ${describe(n.via)}` : ""}`;
 
@@ -378,7 +381,12 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             .map((n) => `${key(n.object)}|${n.via?.name ?? ""}`)
             .sort()
             .join(">");
-          if (!cycleMap.has(signature)) cycleMap.set(signature, loop.map(label));
+          if (!cycleMap.has(signature)) {
+            cycleMap.set(signature, {
+              labels: loop.map(label),
+              files: uniq(loop.map((n) => n.via?.file).filter((f): f is string => !!f)),
+            });
+          }
           continue;
         }
         expand(child, [...path, child]);
@@ -415,14 +423,14 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   // ------------------------------------------------------------------------------------
   // 3. Findings from the cascade
   // ------------------------------------------------------------------------------------
-  const cycles = [...cycleMap.values()];
-  for (const loop of cycles) {
+  const cycles = [...cycleMap.values()].map((c) => c.labels);
+  for (const { labels: loop, files } of cycleMap.values()) {
     addFinding({
       rule: "recursion-cycle",
       severity: "high",
       title: `Automation cycle: ${loop.map((l) => l.split(" ")[0]).join(" → ")}`,
       detail: `${loop.join(" → ")}. At human pace this may settle; at bulk or agent volume it can cause recursion, duplicate updates or governor-limit failures mid-batch.`,
-      files: [],
+      files,
     });
     tests.push({
       kind: "recursion",
@@ -535,6 +543,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       title: `${a.issues.length} DML/SOQL statement(s) inside loops in ${a.name}${a.changed ? " (changed)" : " (in blast radius)"}`,
       detail: a.issues.map((i) => `line ${i.line} ${i.kind}: ${i.snippet}`).join("; "),
       files: [a.file],
+      line: a.issues[0]?.line,
     });
   }
 
@@ -586,6 +595,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       findingsBySeverity,
     },
     warnings: model.warnings,
+    provenance: opts.provenance,
   };
 }
 
