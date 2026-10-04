@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-05
+
+First public release.
+
 ### Added
 
 - Offline analysis of SFDX source projects, driven by a git diff (`--base`/`--head`) or an
@@ -23,7 +27,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Suggested test plan per change (bulk, recursion, validation-collision, idempotency, boundary,
   permission-negative).
 - Markdown (PR-comment ready) and JSON reports; `--fail-on` exit codes for CI.
-- `blast-radius explain <Object>` to print an object's save procedure.
+- `preflight explain <Object>` to print an object's save procedure.
 - Sample SFDX org fixture reproducing common failure modes.
 
-[Unreleased]: https://github.com/visparashar/sf-blast-radius/commits/main
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/visparashar/sf-preflight/releases/tag/v0.1.0

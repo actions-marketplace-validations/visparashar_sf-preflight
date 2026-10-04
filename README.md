@@ -1,14 +1,15 @@
-# sf-blast-radius
+# sf-preflight
 
-[![CI](https://github.com/visparashar/sf-blast-radius/actions/workflows/ci.yml/badge.svg)](https://github.com/visparashar/sf-blast-radius/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/visparashar/sf-blast-radius/actions/workflows/codeql.yml/badge.svg)](https://github.com/visparashar/sf-blast-radius/actions/workflows/codeql.yml)
+[![CI](https://github.com/visparashar/sf-preflight/actions/workflows/ci.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml)
+[![npm](https://img.shields.io/npm/v/sf-preflight.svg)](https://www.npmjs.com/package/sf-preflight)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Node.js 22.12+](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen.svg)
 
-**Know what a Salesforce change will set off — before it ships.**
+**Preflight checks for Salesforce changes: know what a change will set off — before it ships.**
 
 AI coding agents and Headless 360 make Salesforce changes cheap to produce, but verifying them
-is still slow and manual. `sf-blast-radius` reads your SFDX project and a git diff, follows the
+is still slow and manual. `sf-preflight` reads your SFDX project and a git diff, follows the
 change through the org's order of execution — flows, triggers, validation rules, roll-ups,
 permissions — and reports the blast radius, the risks and the tests that matter.
 
@@ -36,38 +37,38 @@ idempotency, boundary and permission-negative tests for exactly what the change 
 
 ## Quick start
 
-Requires Node.js 22.12 or newer.
+Requires Node.js 22.12 or newer. Run it from the root of an SFDX project:
 
 ```bash
-git clone https://github.com/visparashar/sf-blast-radius.git
-cd sf-blast-radius
-npm install && npm run build
-npm link            # makes the `blast-radius` command available
+npx sf-preflight analyze --base origin/main
 ```
 
-Once a release is published to npm you will be able to run it without cloning:
+or install the `preflight` command globally:
 
 ```bash
-npx sf-blast-radius analyze --base origin/main
+npm install -g sf-preflight
+preflight analyze --base origin/main
 ```
+
+To run from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md#development-setup).
 
 ### Usage
 
 ```bash
 # Everything changed since origin/main (committed and uncommitted)
-blast-radius analyze --project path/to/sfdx-project --base origin/main
+preflight analyze --project path/to/sfdx-project --base origin/main
 
 # Compare two refs
-blast-radius analyze --base origin/main --head HEAD
+preflight analyze --base origin/main --head HEAD
 
 # Specific files
-blast-radius analyze --files force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml
+preflight analyze --files force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml
 
 # JSON for machines; exit code 2 when risk is high
-blast-radius analyze --base origin/main --format json --out blast-radius.json --fail-on high
+preflight analyze --base origin/main --format json --out preflight.json --fail-on high
 
 # What runs, in order, when an object is saved?
-blast-radius explain Opportunity --event update
+preflight explain Opportunity --event update
 ```
 
 | Option | Default | Description |
@@ -106,8 +107,8 @@ object, references to the changed field and a test checklist — ready to paste 
 - uses: actions/setup-node@v4
   with:
     node-version: 22
-- run: npx sf-blast-radius analyze --base origin/${{ github.base_ref }} --out blast-radius.md --fail-on high
-- run: cat blast-radius.md >> "$GITHUB_STEP_SUMMARY"
+- run: npx sf-preflight analyze --base origin/${{ github.base_ref }} --out preflight.md --fail-on high
+- run: cat preflight.md >> "$GITHUB_STEP_SUMMARY"
   if: always()
 ```
 
@@ -116,7 +117,7 @@ A dedicated GitHub Action that comments on pull requests is planned for mileston
 ### As a library
 
 ```ts
-import { run, toMarkdown } from "sf-blast-radius";
+import { run, toMarkdown } from "sf-preflight";
 
 const result = run({ projectDir: ".", base: "origin/main" });
 console.log(result.summary.risk, result.findings.length);

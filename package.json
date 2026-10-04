@@ -1,20 +1,21 @@
 {
-  "name": "sf-blast-radius",
+  "name": "sf-preflight",
   "version": "0.1.0",
-  "description": "Org-aware change verifier for Salesforce: computes what a change will set off (automation, permissions, cascades) before it ships.",
+  "description": "Preflight checks for Salesforce changes: follows a git diff through flows, triggers, validation rules, roll-ups and permissions to show what it will set off before it ships.",
   "license": "Apache-2.0",
-  "author": "sf-blast-radius contributors",
-  "homepage": "https://github.com/visparashar/sf-blast-radius#readme",
+  "author": "sf-preflight contributors",
+  "homepage": "https://github.com/visparashar/sf-preflight#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/visparashar/sf-blast-radius.git"
+    "url": "git+https://github.com/visparashar/sf-preflight.git"
   },
   "bugs": {
-    "url": "https://github.com/visparashar/sf-blast-radius/issues"
+    "url": "https://github.com/visparashar/sf-preflight/issues"
   },
   "type": "module",
   "bin": {
-    "blast-radius": "dist/cli.js"
+    "preflight": "dist/cli.js",
+    "sf-preflight": "dist/cli.js"
   },
   "main": "./dist/core/index.js",
   "types": "./dist/core/index.d.ts",

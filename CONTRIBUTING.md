@@ -1,4 +1,4 @@
-# Contributing to sf-blast-radius
+# Contributing to sf-preflight
 
 Thanks for your interest in making Salesforce changes safer to ship! This project welcomes
 contributions of all sizes: bug reports, false-positive reports, docs, new metadata parsers
@@ -22,8 +22,8 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 Requirements: Node.js **22.12+** and git.
 
 ```bash
-git clone https://github.com/visparashar/sf-blast-radius.git
-cd sf-blast-radius
+git clone https://github.com/visparashar/sf-preflight.git
+cd sf-preflight
 npm install
 npm run check     # lint + typecheck + tests
 npm run build

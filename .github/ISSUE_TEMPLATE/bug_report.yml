@@ -32,8 +32,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: sf-blast-radius version
-      placeholder: output of `blast-radius --version`
+      label: sf-preflight version
+      placeholder: output of `preflight --version`
     validations:
       required: true
   - type: input

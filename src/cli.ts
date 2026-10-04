@@ -12,8 +12,8 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
 
 const program = new Command();
 program
-  .name("blast-radius")
-  .description("Org-aware change verifier for Salesforce: what will this change set off?")
+  .name("preflight")
+  .description("Preflight checks for Salesforce changes: what will this change set off?")
   .version(version);
 
 program
@@ -87,6 +87,6 @@ program
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
-  console.error(`blast-radius: ${(err as Error).message}`);
+  console.error(`preflight: ${(err as Error).message}`);
   process.exitCode = 1;
 });

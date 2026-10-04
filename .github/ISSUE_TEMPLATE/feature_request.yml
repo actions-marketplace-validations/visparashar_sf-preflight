@@ -13,7 +13,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What should sf-blast-radius do? Example output is welcome.
+      description: What should sf-preflight do? Example output is welcome.
     validations:
       required: true
   - type: textarea
