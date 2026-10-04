@@ -1,7 +1,7 @@
 # GitHub Action
 
-> Available from sf-preflight **0.2.0**. `@v0` always points at the latest 0.x release; pin an
-> exact tag such as `@v0.2.0` if you prefer.
+> `@v0` always points at the latest 0.x release. Pin an exact tag such as `@v0.1.0` if you
+> prefer fully reproducible runs.
 
 Run sf-preflight on every pull request. The action posts the report as a PR comment (updating
 the same comment on each push), adds it to the job summary, can upload findings to GitHub code
@@ -91,5 +91,5 @@ Example — require an extra reviewer when AI-assisted commits change high-risk 
 - **Fork PRs** get a read-only token, so the comment step is skipped with a warning; the job
   summary and the pass/fail result still work.
 - The action runs `npx sf-preflight@<version>`. Pin the action to a release tag (for example
-  `@v0.2.0`) for fully reproducible runs.
+  `@v0.1.0`) for fully reproducible runs.
 - The checkout must include the base branch history (`fetch-depth: 0`).
