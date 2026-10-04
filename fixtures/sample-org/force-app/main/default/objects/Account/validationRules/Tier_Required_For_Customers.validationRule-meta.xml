@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Tier_Required_For_Customers</fullName>
+    <active>true</active>
+    <errorConditionFormula>AND(
+    ISPICKVAL(Type, &quot;Customer - Direct&quot;),
+    ISBLANK(Customer_Tier__c)
+)</errorConditionFormula>
+    <errorDisplayField>Customer_Tier__c</errorDisplayField>
+    <errorMessage>Customers must have a tier.</errorMessage>
+</ValidationRule>
