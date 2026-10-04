@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { AnalysisResult, CascadeNode, Severity } from "../types.js";
 
 const SEVERITY_BADGE: Record<Severity, string> = {
@@ -17,7 +18,9 @@ function cascadeLines(node: CascadeNode, prefix: string, isLast: boolean, isRoot
   const rootNote = isRoot && node.via ? `   [changed: ${node.via.name}]` : "";
   out.push(`${prefix}${connector}${isRoot ? "" : via}${node.object} (${node.event})${flags}${rootNote}`);
   const childPrefix = isRoot ? "" : prefix + (isLast ? "   " : "│  ");
-  node.children.forEach((c, i) => cascadeLines(c, childPrefix, i === node.children.length - 1, false, out));
+  node.children.forEach((c, i) => {
+    cascadeLines(c, childPrefix, i === node.children.length - 1, false, out);
+  });
 }
 
 function viaLabel(kind: string): string {
@@ -62,7 +65,8 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
     out.push("_No Salesforce metadata changes detected._", "");
   } else {
     out.push("| Change | Type | Component |", "|---|---|---|");
-    for (const c of result.changes) out.push(`| ${c.changeType} | ${c.component.type} | \`${esc(c.component.name)}\` |`);
+    for (const c of result.changes)
+      out.push(`| ${c.changeType} | ${c.component.type} | \`${esc(c.component.name)}\` |`);
     out.push("");
   }
 
@@ -75,13 +79,20 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
     for (const f of result.findings.slice(0, maxFindings)) {
       out.push(`| ${SEVERITY_BADGE[f.severity]} | ${esc(f.title)} | ${esc(f.detail)} |`);
     }
-    if (result.findings.length > maxFindings) out.push("", `_…and ${result.findings.length - maxFindings} more in the JSON report._`);
+    if (result.findings.length > maxFindings)
+      out.push("", `_…and ${result.findings.length - maxFindings} more in the JSON report._`);
     out.push("");
   }
 
   // Cascade
   if (result.cascade.length) {
-    out.push("### Cascade", "", "What the change sets off, following automation writes from object to object:", "", "```");
+    out.push(
+      "### Cascade",
+      "",
+      "What the change sets off, following automation writes from object to object:",
+      "",
+      "```",
+    );
     for (const root of result.cascade) {
       cascadeLines(root, "", true, true, out);
     }
@@ -92,12 +103,19 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
   if (result.saveProcedures.length) {
     out.push("<details><summary><strong>Order of execution for impacted objects</strong></summary>", "");
     for (const p of result.saveProcedures) {
-      out.push(`#### ${p.object} — ${p.event}`, "", "| # | Phase | Automation | Writes to | Notes |", "|---|---|---|---|---|");
+      out.push(
+        `#### ${p.object} — ${p.event}`,
+        "",
+        "| # | Phase | Automation | Writes to | Notes |",
+        "|---|---|---|---|---|",
+      );
       for (const step of p.steps) {
         const writes = step.writes.length
           ? step.writes.map((w) => `${w.object} (${w.op}${w.selfUpdate ? ", self" : ""})`).join(", ")
           : "—";
-        out.push(`| ${step.order} | ${step.phaseLabel} | \`${esc(step.automation.name)}\` | ${esc(writes)} | ${esc(step.notes.join("; ")) || ""} |`);
+        out.push(
+          `| ${step.order} | ${step.phaseLabel} | \`${esc(step.automation.name)}\` | ${esc(writes)} | ${esc(step.notes.join("; ")) || ""} |`,
+        );
       }
       out.push("");
     }

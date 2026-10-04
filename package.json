@@ -2,33 +2,63 @@
   "name": "sf-blast-radius",
   "version": "0.1.0",
   "description": "Org-aware change verifier for Salesforce: computes what a change will set off (automation, permissions, cascades) before it ships.",
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "Apache-2.0",
+  "author": "sf-blast-radius contributors",
+  "homepage": "https://github.com/visparashar/sf-blast-radius#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/visparashar/sf-blast-radius.git"
+  },
+  "bugs": {
+    "url": "https://github.com/visparashar/sf-blast-radius/issues"
+  },
   "type": "module",
   "bin": {
     "blast-radius": "dist/cli.js"
   },
-  "main": "dist/core/index.js",
-  "types": "dist/core/index.d.ts",
+  "main": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=22.12"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "analyze:sample": "node dist/cli.js analyze --project fixtures/sample-org --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml"
+    "check": "npm run lint && npm run typecheck && npm test",
+    "analyze:sample": "node dist/cli.js analyze --project fixtures/sample-org --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml",
+    "prepack": "npm run clean && npm run build"
   },
   "keywords": [
     "salesforce",
-    "devops",
     "sfdx",
-    "agentforce",
+    "devops",
+    "ci",
     "impact-analysis",
+    "static-analysis",
+    "order-of-execution",
+    "flows",
+    "apex",
+    "agentforce",
     "mcp"
   ],
   "dependencies": {
@@ -36,6 +66,7 @@
     "fast-xml-parser": "^5.11.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"

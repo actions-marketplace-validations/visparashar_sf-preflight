@@ -1,5 +1,6 @@
-import type { OrgModel, Phase, SaveEvent, SaveProcedure, SaveStep, Write } from "./types.js";
+// SPDX-License-Identifier: Apache-2.0
 import { flowWrites, triggerWrites } from "./graph.js";
+import type { OrgModel, Phase, SaveEvent, SaveProcedure, SaveStep, Write } from "./types.js";
 import { key } from "./util.js";
 
 /**
@@ -96,13 +97,21 @@ export function saveProcedure(model: OrgModel, object: string, event: SaveEvent)
   for (const parent of model.objects.values()) {
     for (const field of parent.fields.values()) {
       if (!field.summary || key(field.summary.childObject) !== k) continue;
-      const write: Write = { object: parent.name, op: "update", fields: [field.name], via: "roll-up summary", confidence: "high" };
+      const write: Write = {
+        object: parent.name,
+        op: "update",
+        fields: [field.name],
+        via: "roll-up summary",
+        confidence: "high",
+      };
       steps.push({
         phase: "rollup",
         phaseLabel: PHASE_LABELS.rollup,
         automation: { kind: "RollUpSummary", name: field.fullName, file: field.file, phase: "rollup" },
         writes: [write],
-        notes: [`${field.summary.operation ?? "summary"} of ${field.summary.summarizedField ?? field.summary.childObject}`],
+        notes: [
+          `${field.summary.operation ?? "summary"} of ${field.summary.summarizedField ?? field.summary.childObject}`,
+        ],
       });
     }
   }

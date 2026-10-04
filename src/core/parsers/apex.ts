@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+import { looksLikeSObject, SYSTEM_CLASSES } from "../standardObjects.js";
 import type {
   ApexAnalysis,
   ApexClassDef,
@@ -9,7 +11,6 @@ import type {
   Write,
 } from "../types.js";
 import { lineOf, uniq, uniqBy } from "../util.js";
-import { looksLikeSObject, SYSTEM_CLASSES } from "../standardObjects.js";
 
 /**
  * Heuristic Apex analysis (v0). Good enough to find DML targets, SOQL reads, class
@@ -115,7 +116,12 @@ export function analyzeApex(source: string, ctx: Context, stripped = stripApex(s
 
   const writes: Write[] = [];
   let unresolvedDml = 0;
-  const collectDml = (regex: RegExp, text: string, offset: number, sink: (op: DmlOp, idx: number, expr: string) => void) => {
+  const collectDml = (
+    regex: RegExp,
+    text: string,
+    offset: number,
+    sink: (op: DmlOp, idx: number, expr: string) => void,
+  ) => {
     for (const m of text.matchAll(regex)) {
       sink(m[1]!.toLowerCase() as DmlOp, offset + (m.index ?? 0), m[2] ?? "");
     }
@@ -220,7 +226,8 @@ export function parseApexTrigger(
   }
   // Blank the header so its event keywords are not mistaken for DML statements.
   const headerStart = header.index ?? 0;
-  const body = stripped.slice(0, headerStart) + " ".repeat(header[0].length) + stripped.slice(headerStart + header[0].length);
+  const body =
+    stripped.slice(0, headerStart) + " ".repeat(header[0].length) + stripped.slice(headerStart + header[0].length);
   const analysis = analyzeApex(source, { projectObjects, triggerObject: object }, body);
   return { ...analysis, name: header[1] ?? fallbackName, object, events, file };
 }

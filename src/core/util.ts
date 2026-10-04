@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { XMLParser } from "fast-xml-parser";
 
 /** Case-insensitive key for Salesforce API names. */

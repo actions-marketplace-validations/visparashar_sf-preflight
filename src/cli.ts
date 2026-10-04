@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-import { writeFileSync } from "node:fs";
+// SPDX-License-Identifier: Apache-2.0
+import { readFileSync, writeFileSync } from "node:fs";
 import { Command, Option } from "commander";
-import { loadProject, run, saveProcedure, toMarkdown } from "./core/index.js";
 import type { SaveEvent } from "./core/index.js";
+import { loadProject, run, saveProcedure, toMarkdown } from "./core/index.js";
 
 const RISK_RANK = { low: 0, medium: 1, high: 2 } as const;
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
 
 const program = new Command();
 program
   .name("blast-radius")
   .description("Org-aware change verifier for Salesforce: what will this change set off?")
-  .version("0.1.0");
+  .version(version);
 
 program
   .command("analyze")
@@ -27,22 +31,46 @@ program
       .choices(["low", "medium", "high", "none"])
       .default("none"),
   )
-  .action((opts: { project: string; base?: string; head?: string; files?: string[]; format: "md" | "json"; out?: string; depth: number; failOn: string }) => {
-    const result = run({ projectDir: opts.project, base: opts.base, head: opts.head, files: opts.files, maxDepth: opts.depth });
-    const output = opts.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result);
-    if (opts.out) writeFileSync(opts.out, output + "\n");
-    else process.stdout.write(output + "\n");
-    if (opts.failOn !== "none" && RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn as keyof typeof RISK_RANK]) {
-      process.exitCode = 2;
-    }
-  });
+  .action(
+    (opts: {
+      project: string;
+      base?: string;
+      head?: string;
+      files?: string[];
+      format: "md" | "json";
+      out?: string;
+      depth: number;
+      failOn: string;
+    }) => {
+      const result = run({
+        projectDir: opts.project,
+        base: opts.base,
+        head: opts.head,
+        files: opts.files,
+        maxDepth: opts.depth,
+      });
+      const output = opts.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result);
+      if (opts.out) writeFileSync(opts.out, `${output}\n`);
+      else process.stdout.write(`${output}\n`);
+      if (
+        opts.failOn !== "none" &&
+        RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn as keyof typeof RISK_RANK]
+      ) {
+        process.exitCode = 2;
+      }
+    },
+  );
 
 program
   .command("explain")
   .description("Show what runs, in order, when records of an object are saved")
   .argument("<object>", "object API name, e.g. Opportunity")
   .option("-p, --project <dir>", "SFDX project directory", ".")
-  .addOption(new Option("-e, --event <event>", "DML event").choices(["insert", "update", "delete", "undelete"]).default("update"))
+  .addOption(
+    new Option("-e, --event <event>", "DML event")
+      .choices(["insert", "update", "delete", "undelete"])
+      .default("update"),
+  )
   .action((object: string, opts: { project: string; event: SaveEvent }) => {
     const model = loadProject(opts.project);
     const proc = saveProcedure(model, object, opts.event);

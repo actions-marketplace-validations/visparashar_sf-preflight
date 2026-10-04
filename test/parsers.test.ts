@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseFlow } from "../src/core/parsers/flows.js";
 import { analyzeApex, parseApexClass, parseApexTrigger, stripApex } from "../src/core/parsers/apex.js";
-import { formulaFieldRefs } from "../src/core/parsers/formula.js";
 import { parseField } from "../src/core/parsers/fields.js";
+import { parseFlow } from "../src/core/parsers/flows.js";
+import { formulaFieldRefs } from "../src/core/parsers/formula.js";
 import { parsePermissionContainer } from "../src/core/parsers/permissions.js";
 import { classifyPath } from "../src/core/project.js";
 
@@ -24,7 +24,9 @@ describe("classifyPath", () => {
       name: "Opportunity.X",
     });
     expect(classifyPath("force-app/main/default/objects/Foo__c/Foo__c.object-meta.xml").type).toBe("CustomObject");
-    expect(classifyPath("force-app/main/default/objects/Foo__c/listViews/All.listView-meta.xml").type).toBe("ObjectChild");
+    expect(classifyPath("force-app/main/default/objects/Foo__c/listViews/All.listView-meta.xml").type).toBe(
+      "ObjectChild",
+    );
   });
 
   it("recognises code, flows and permissions", () => {
@@ -39,7 +41,9 @@ describe("classifyPath", () => {
 
 describe("formulaFieldRefs", () => {
   it("ignores functions, strings, keywords and globals", () => {
-    const refs = formulaFieldRefs(`AND(ISPICKVAL(StageName, "Closed Won"), ISBLANK(Contract_Signed_Date__c), $User.Id <> OwnerId, TRUE)`);
+    const refs = formulaFieldRefs(
+      `AND(ISPICKVAL(StageName, "Closed Won"), ISBLANK(Contract_Signed_Date__c), $User.Id <> OwnerId, TRUE)`,
+    );
     expect(refs.sort()).toEqual(["Contract_Signed_Date__c", "OwnerId", "StageName"]);
   });
 
@@ -50,9 +54,18 @@ describe("formulaFieldRefs", () => {
 
 describe("parseFlow", () => {
   it("parses a record-triggered after-save flow and resolves writes", () => {
-    const flow = parseFlow(read("flows/Opportunity_Closed_Won_Followup.flow-meta.xml"), "Opportunity_Closed_Won_Followup", "f");
+    const flow = parseFlow(
+      read("flows/Opportunity_Closed_Won_Followup.flow-meta.xml"),
+      "Opportunity_Closed_Won_Followup",
+      "f",
+    );
     expect(flow.active).toBe(true);
-    expect(flow.trigger).toMatchObject({ object: "Opportunity", timing: "after", events: ["insert", "update"], entryFields: ["StageName"] });
+    expect(flow.trigger).toMatchObject({
+      object: "Opportunity",
+      timing: "after",
+      events: ["insert", "update"],
+      entryFields: ["StageName"],
+    });
     expect(flow.writes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ object: "Task", op: "insert" }),
@@ -67,7 +80,11 @@ describe("parseFlow", () => {
   });
 
   it("collects field references from filters, assignments and $Record", () => {
-    const flow = parseFlow(read("flows/Account_Sync_Tier_To_Contacts.flow-meta.xml"), "Account_Sync_Tier_To_Contacts", "f");
+    const flow = parseFlow(
+      read("flows/Account_Sync_Tier_To_Contacts.flow-meta.xml"),
+      "Account_Sync_Tier_To_Contacts",
+      "f",
+    );
     expect(flow.fieldRefs).toEqual(
       expect.arrayContaining(["Contact.Account_Tier__c", "Contact.AccountId", "Account.Customer_Tier__c"]),
     );
@@ -153,7 +170,12 @@ describe("apex analysis", () => {
 
 describe("fields and permissions", () => {
   it("parses roll-up summary fields", () => {
-    const f = parseField(read("objects/Account/fields/Total_Won_Amount__c.field-meta.xml"), "Account", "Total_Won_Amount__c", "f");
+    const f = parseField(
+      read("objects/Account/fields/Total_Won_Amount__c.field-meta.xml"),
+      "Account",
+      "Total_Won_Amount__c",
+      "f",
+    );
     expect(f.summary).toMatchObject({
       childObject: "Opportunity",
       relationshipField: "AccountId",
@@ -164,7 +186,12 @@ describe("fields and permissions", () => {
   });
 
   it("parses permission sets", () => {
-    const ps = parsePermissionContainer(read("permissionsets/Agent_Runtime_User.permissionset-meta.xml"), "Agent_Runtime_User", "PermissionSet", "p");
+    const ps = parsePermissionContainer(
+      read("permissionsets/Agent_Runtime_User.permissionset-meta.xml"),
+      "Agent_Runtime_User",
+      "PermissionSet",
+      "p",
+    );
     expect(ps.objects.find((o) => o.object === "Opportunity")).toMatchObject({ modifyAll: true, viewAll: true });
     expect(ps.fields).toEqual([{ field: "Opportunity.Contract_Signed_Date__c", readable: true, editable: true }]);
   });

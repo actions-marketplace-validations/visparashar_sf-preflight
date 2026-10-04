@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
+import { saveProcedure } from "./orderOfExecution.js";
+import { parsePermissionContainer } from "./parsers/permissions.js";
 import type {
   AnalysisResult,
   AutomationRef,
@@ -14,9 +18,6 @@ import type {
   Severity,
   SuggestedTest,
 } from "./types.js";
-import { saveProcedure } from "./orderOfExecution.js";
-import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
-import { parsePermissionContainer } from "./parsers/permissions.js";
 import { key, uniq, uniqBy } from "./util.js";
 
 export interface AnalyzeOptions {
@@ -40,9 +41,15 @@ interface Root {
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };
 const AUTOMATION_KINDS = new Set(["Flow", "ApexTrigger", "ApexClass", "RollUpSummary"]);
 const SENSITIVE_USER_PERMS = new Set(
-  ["ModifyAllData", "ViewAllData", "ManageUsers", "AuthorApex", "CustomizeApplication", "ModifyMetadata", "ManageProfilesPermissionsets"].map(
-    (p) => p.toLowerCase(),
-  ),
+  [
+    "ModifyAllData",
+    "ViewAllData",
+    "ManageUsers",
+    "AuthorApex",
+    "CustomizeApplication",
+    "ModifyMetadata",
+    "ManageProfilesPermissionsets",
+  ].map((p) => p.toLowerCase()),
 );
 const MAX_NODES = 400;
 
@@ -90,7 +97,10 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     switch (comp.type) {
       case "CustomField": {
         const [object, field] = [comp.object!, comp.name.split(".")[1]!];
-        roots.push({ object, event: "update", via: changeRef(change) }, { object, event: "insert", via: changeRef(change) });
+        roots.push(
+          { object, event: "update", via: changeRef(change) },
+          { object, event: "insert", via: changeRef(change) },
+        );
         const refs = fieldReferences(model, object, field);
         references.push(...refs);
         const nonPermRefs = refs.filter((r) => r.from.kind !== "PermissionSet" && r.from.kind !== "Profile");
@@ -128,14 +138,31 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
 
       case "ValidationRule": {
         const object = comp.object!;
-        roots.push({ object, event: "update", via: changeRef(change) }, { object, event: "insert", via: changeRef(change) });
+        roots.push(
+          { object, event: "update", via: changeRef(change) },
+          { object, event: "insert", via: changeRef(change) },
+        );
         const vr = model.validationRules.find((v) => key(v.fullName) === key(comp.name));
         if (deleted || !vr) {
-          addFinding({ rule: "validation-rule-removed", severity: "info", title: `Validation rule ${comp.name} removed`, detail: "Data that was previously blocked can now be saved.", object, files: [comp.file] });
+          addFinding({
+            rule: "validation-rule-removed",
+            severity: "info",
+            title: `Validation rule ${comp.name} removed`,
+            detail: "Data that was previously blocked can now be saved.",
+            object,
+            files: [comp.file],
+          });
           break;
         }
         if (!vr.active) {
-          addFinding({ rule: "validation-rule-inactive", severity: "info", title: `Validation rule ${comp.name} is inactive`, detail: "Inactive rules do not run.", object, files: [vr.file] });
+          addFinding({
+            rule: "validation-rule-inactive",
+            severity: "info",
+            title: `Validation rule ${comp.name} is inactive`,
+            detail: "Inactive rules do not run.",
+            object,
+            files: [vr.file],
+          });
           break;
         }
         const writers = writersOf(model, object);
@@ -175,7 +202,13 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           break;
         }
         if (!flow.active) {
-          addFinding({ rule: "flow-inactive", severity: "info", title: `Flow ${flow.name} is not active (${flow.status})`, detail: "It will not run until activated; analysis treats it as inactive.", files: [flow.file] });
+          addFinding({
+            rule: "flow-inactive",
+            severity: "info",
+            title: `Flow ${flow.name} is not active (${flow.status})`,
+            detail: "It will not run until activated; analysis treats it as inactive.",
+            files: [flow.file],
+          });
         }
         const via: AutomationRef = { kind: "Flow", name: flow.name, file: flow.file };
         if (flow.trigger) {
@@ -183,7 +216,13 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         } else {
           for (const w of flowWrites(model, flow)) roots.push({ object: w.object, event: opToEvent(w.op), via });
           for (const parent of callersOfFlow(model, flow.name)) {
-            if (parent.trigger) for (const event of parent.trigger.events) roots.push({ object: parent.trigger.object, event, via: { kind: "Flow", name: parent.name, file: parent.file } });
+            if (parent.trigger)
+              for (const event of parent.trigger.events)
+                roots.push({
+                  object: parent.trigger.object,
+                  event,
+                  via: { kind: "Flow", name: parent.name, file: parent.file },
+                });
           }
         }
         break;
@@ -221,10 +260,12 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         for (const ep of entryPoints) {
           if (ep.kind === "ApexTrigger") {
             const trig = model.triggers.get(key(ep.name))!;
-            for (const event of uniq(trig.events.map((e) => e.event))) roots.push({ object: trig.object, event, via: ep });
+            for (const event of uniq(trig.events.map((e) => e.event)))
+              roots.push({ object: trig.object, event, via: ep });
           } else if (ep.kind === "Flow") {
             const flow = model.flows.get(key(ep.name))!;
-            if (flow.trigger) for (const event of flow.trigger.events) roots.push({ object: flow.trigger.object, event, via: ep });
+            if (flow.trigger)
+              for (const event of flow.trigger.events) roots.push({ object: flow.trigger.object, event, via: ep });
           }
         }
         if (cls.invocable || !entryPoints.some((e) => e.kind === "ApexTrigger" || e.kind === "Flow")) {
@@ -264,13 +305,20 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           rule: "agent-metadata-changed",
           severity: "info",
           title: `Agentforce metadata changed: ${comp.name}`,
-          detail: "Agent action verification (decision + execution layer) is planned for milestone M5. Run Agentforce Testing Center for the decision layer in the meantime.",
+          detail:
+            "Agent action verification (decision + execution layer) is planned for milestone M5. Run Agentforce Testing Center for the decision layer in the meantime.",
           files: [comp.file],
         });
         break;
 
       case "WorkflowRule":
-        addFinding({ rule: "legacy-workflow", severity: "info", title: `Legacy workflow changed: ${comp.name}`, detail: "Workflow rules are not analyzed yet; consider migrating them to flows.", files: [comp.file] });
+        addFinding({
+          rule: "legacy-workflow",
+          severity: "info",
+          title: `Legacy workflow changed: ${comp.name}`,
+          detail: "Workflow rules are not analyzed yet; consider migrating them to flows.",
+          files: [comp.file],
+        });
         break;
 
       default:
@@ -313,7 +361,13 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           node.truncated = true;
           return;
         }
-        const child: CascadeNode = { object: w.object, event, via: step.automation, depth: node.depth + 1, children: [] };
+        const child: CascadeNode = {
+          object: w.object,
+          event,
+          via: step.automation,
+          depth: node.depth + 1,
+          children: [],
+        };
         node.children.push(child);
         const loopStart = path.findIndex((p) => key(p.object) === key(w.object));
         if (loopStart >= 0) {
@@ -437,7 +491,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           rule: "after-save-self-update",
           severity: "medium",
           title: `After-save flow ${s.automation.name} updates its own triggering ${p.object}`,
-          detail: "This re-runs the whole save procedure for the record. Use a before-save flow for same-record field updates.",
+          detail:
+            "This re-runs the whole save procedure for the record. Use a before-save flow for same-record field updates.",
           object: p.object,
           files: [s.automation.file!],
         });
@@ -455,7 +510,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const apexInScope = new Map<string, { name: string; file: string; issues: LoopIssue[]; changed: boolean }>();
   const addApex = (kind: "class" | "trigger", name: string) => {
     const def = kind === "class" ? model.classes.get(key(name)) : model.triggers.get(key(name));
-    if (!def || !def.loopIssues.length) return;
+    if (!def?.loopIssues.length) return;
     const k = `${kind}:${key(name)}`;
     const changed = changedAutomation.has(k) || changedFiles.has(def.file);
     const prev = apexInScope.get(k);
@@ -502,7 +557,9 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   );
   const findingsBySeverity: Record<Severity, number> = { high: 0, medium: 0, low: 0, info: 0 };
   for (const f of finalFindings) findingsBySeverity[f.severity]++;
-  const automationsInvolved = uniq(saveProcedures.flatMap((p) => p.steps.map((s) => `${s.automation.kind}:${s.automation.name}`))).length;
+  const automationsInvolved = uniq(
+    saveProcedures.flatMap((p) => p.steps.map((s) => `${s.automation.kind}:${s.automation.name}`)),
+  ).length;
   const risk = findingsBySeverity.high ? "high" : findingsBySeverity.medium ? "medium" : "low";
 
   return {
@@ -549,12 +606,14 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
     }
   }
   for (const flow of model.flows.values()) {
-    if (flow.fieldRefs.some((r) => key(r) === tk)) refs.push({ from: { kind: "Flow", name: flow.name, file: flow.file }, to: target });
+    if (flow.fieldRefs.some((r) => key(r) === tk))
+      refs.push({ from: { kind: "Flow", name: flow.name, file: flow.file }, to: target });
   }
   if (fk.endsWith("__c")) {
     const re = new RegExp(`\\b${field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
     for (const trig of model.triggers.values()) {
-      if (re.test(trig.stripped)) refs.push({ from: { kind: "ApexTrigger", name: trig.name, file: trig.file }, to: target });
+      if (re.test(trig.stripped))
+        refs.push({ from: { kind: "ApexTrigger", name: trig.name, file: trig.file }, to: target });
     }
     for (const cls of model.classes.values()) {
       if (re.test(cls.stripped)) refs.push({ from: { kind: "ApexClass", name: cls.name, file: cls.file }, to: target });
@@ -568,12 +627,14 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
       if (f.summary && key(f.summary.childObject) === key(object)) {
         const summarized = f.summary.summarizedField && key(f.summary.summarizedField) === tk;
         const filtered = f.summary.filterFields.some((ff) => key(ff) === fk || key(ff) === tk);
-        if (summarized || filtered) refs.push({ from: { kind: "RollUpSummary", name: f.fullName, file: f.file }, to: target });
+        if (summarized || filtered)
+          refs.push({ from: { kind: "RollUpSummary", name: f.fullName, file: f.file }, to: target });
       }
     }
   }
   for (const pc of model.permissionContainers.values()) {
-    if (pc.fields.some((g) => key(g.field) === tk)) refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
+    if (pc.fields.some((g) => key(g.field) === tk))
+      refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
   }
   return refs;
 }
@@ -631,7 +692,8 @@ function permissionDelta(
         rule: "permission-delete",
         severity: "medium",
         title: `${label} ${scope} delete on ${o.object}`,
-        detail: "Delete access is rarely needed by integration or agent users; deletes cascade through master-detail children.",
+        detail:
+          "Delete access is rarely needed by integration or agent users; deletes cascade through master-detail children.",
         object: o.object,
         files: [current.file],
       });

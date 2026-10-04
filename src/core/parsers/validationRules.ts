@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ValidationRuleDef } from "../types.js";
 import { bool, parseMetadataXml, text } from "../util.js";
 import { formulaFieldRefs } from "./formula.js";
@@ -10,15 +11,15 @@ export function parseValidationRule(
   file: string,
 ): ValidationRuleDef {
   const { body } = parseMetadataXml(xml);
-  const name = text(body["fullName"]) ?? fallbackName;
-  const formula = text(body["errorConditionFormula"]) ?? "";
+  const name = text(body.fullName) ?? fallbackName;
+  const formula = text(body.errorConditionFormula) ?? "";
   return {
     object,
     name,
     fullName: `${object}.${name}`,
-    active: bool(body["active"]),
+    active: bool(body.active),
     formula,
-    errorMessage: text(body["errorMessage"]),
+    errorMessage: text(body.errorMessage),
     fieldRefs: formulaFieldRefs(formula),
     file,
   };

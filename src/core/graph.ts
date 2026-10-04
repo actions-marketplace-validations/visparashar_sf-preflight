@@ -1,4 +1,5 @@
-import type { ApexClassDef, AutomationRef, FlowDef, OrgModel, ApexTriggerDef, Write } from "./types.js";
+// SPDX-License-Identifier: Apache-2.0
+import type { ApexClassDef, ApexTriggerDef, AutomationRef, FlowDef, OrgModel, Write } from "./types.js";
 import { key, uniqBy } from "./util.js";
 
 const MAX_DEPTH = 4;
@@ -81,7 +82,8 @@ export function callersOfClass(model: OrgModel, className: string): AutomationRe
   const k = key(className);
   const callers: AutomationRef[] = [];
   for (const trig of model.triggers.values()) {
-    if (trig.classRefs.some((r) => key(r) === k)) callers.push({ kind: "ApexTrigger", name: trig.name, file: trig.file });
+    if (trig.classRefs.some((r) => key(r) === k))
+      callers.push({ kind: "ApexTrigger", name: trig.name, file: trig.file });
   }
   for (const flow of model.flows.values()) {
     if (flow.apexActions.some((a) => key(a) === k)) callers.push({ kind: "Flow", name: flow.name, file: flow.file });

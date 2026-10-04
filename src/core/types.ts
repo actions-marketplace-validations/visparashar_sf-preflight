@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Core data model for the org graph and analysis results.
  *
@@ -192,13 +193,7 @@ export interface Change {
   previousFile?: string;
 }
 
-export type AutomationKind =
-  | "Flow"
-  | "ApexTrigger"
-  | "ApexClass"
-  | "ValidationRule"
-  | "RollUpSummary"
-  | "Change";
+export type AutomationKind = "Flow" | "ApexTrigger" | "ApexClass" | "ValidationRule" | "RollUpSummary" | "Change";
 
 export interface AutomationRef {
   kind: AutomationKind;
@@ -207,13 +202,7 @@ export interface AutomationRef {
   phase?: Phase;
 }
 
-export type Phase =
-  | "before-flow"
-  | "before-trigger"
-  | "validation"
-  | "after-trigger"
-  | "after-flow"
-  | "rollup";
+export type Phase = "before-flow" | "before-trigger" | "validation" | "after-trigger" | "after-flow" | "rollup";
 
 export interface SaveStep {
   order: number;

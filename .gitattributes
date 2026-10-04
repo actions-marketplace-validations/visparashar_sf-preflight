@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+*.cls linguist-language=Apex
+*.trigger linguist-language=Apex
+fixtures/** linguist-vendored
+package-lock.json linguist-generated=true -diff

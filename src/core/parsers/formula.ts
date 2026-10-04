@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Extract field references from a Salesforce formula (validation rules, formula fields).
  *
@@ -15,11 +16,11 @@ export function formulaFieldRefs(formula: string): string[] {
 
   const refs = new Set<string>();
   const re = /\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(cleaned))) {
+  for (const m of cleaned.matchAll(re)) {
     const token = m[0];
+    const end = (m.index ?? 0) + token.length;
     if (token.startsWith("$")) continue; // $User, $Profile, $Setup ...
-    const after = cleaned.slice(re.lastIndex).match(/^\s*\(/);
+    const after = cleaned.slice(end).match(/^\s*\(/);
     if (after) continue; // function call
     if (KEYWORDS.has(token.toLowerCase())) continue;
     if (/^\d/.test(token)) continue;

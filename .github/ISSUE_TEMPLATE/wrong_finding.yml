@@ -1,0 +1,46 @@
+name: Wrong or missing finding
+description: The analyzer reported something that isn't true (false positive) or missed a real risk (false negative)
+labels: ["analysis-accuracy", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Accuracy reports are the most valuable feedback this project gets. A small, anonymised
+        metadata snippet that reproduces the problem lets us turn it into a regression test.
+        **Do not include confidential metadata or customer data.**
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of problem
+      options:
+        - False positive (reported a risk that isn't real)
+        - False negative (missed a real risk)
+        - Wrong cascade / order of execution
+        - Wrong severity
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: The finding (or the missing finding)
+      description: Paste the relevant part of the report and explain what is wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: metadata
+    attributes:
+      label: Minimal metadata to reproduce
+      description: Flow/Apex/validation rule snippets (anonymised) and the change you analyzed.
+      render: xml
+  - type: textarea
+    id: actual-behaviour
+    attributes:
+      label: What actually happens in Salesforce?
+      description: If you observed the real behaviour in an org, describe it here.
+  - type: input
+    id: version
+    attributes:
+      label: sf-blast-radius version
+      placeholder: output of `blast-radius --version`
+    validations:
+      required: true

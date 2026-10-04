@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import type { Change, ChangeType } from "./types.js";
 import { classifyPath } from "./project.js";
+import type { Change, ChangeType } from "./types.js";
 import { toPosix, uniqBy } from "./util.js";
 
 function git(cwd: string, args: string[]): string {
@@ -15,10 +16,19 @@ export interface GitDiffOptions {
   head?: string;
 }
 
-const STATUS: Record<string, ChangeType> = { A: "added", M: "modified", D: "deleted", R: "renamed", C: "added", T: "modified" };
+const STATUS: Record<string, ChangeType> = {
+  A: "added",
+  M: "modified",
+  D: "deleted",
+  R: "renamed",
+  C: "added",
+  T: "modified",
+};
 
 /** Changed files between two refs, restricted to the project directory, as project-relative paths. */
-export function gitChangedFiles(opts: GitDiffOptions): { file: string; changeType: ChangeType; previousFile?: string }[] {
+export function gitChangedFiles(
+  opts: GitDiffOptions,
+): { file: string; changeType: ChangeType; previousFile?: string }[] {
   const projectDir = path.resolve(opts.projectDir);
   const repoRoot = git(projectDir, ["rev-parse", "--show-toplevel"]).trim();
   const range = opts.head ? [`${opts.base}...${opts.head}`] : [opts.base];

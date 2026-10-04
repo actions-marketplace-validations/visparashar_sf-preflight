@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { DmlOp, FlowDef, FlowTrigger, SaveEvent, Timing, Write } from "../types.js";
 import { nodes, parseMetadataXml, text, uniq, uniqBy, type XmlNode } from "../util.js";
 
@@ -22,27 +23,27 @@ const TRIGGER_TIMING: Record<string, Timing> = {
  */
 export function parseFlow(xml: string, fallbackName: string, file: string): FlowDef {
   const { body } = parseMetadataXml(xml);
-  const status = text(body["status"]) ?? "Active";
-  const processType = text(body["processType"]);
+  const status = text(body.status) ?? "Active";
+  const processType = text(body.processType);
 
-  const trigger = parseTrigger(body["start"] as XmlNode | undefined);
+  const trigger = parseTrigger(body.start as XmlNode | undefined);
 
   // --- symbol table: name -> SObject type -----------------------------------------
   const symbols = new Map<string, string>();
-  for (const v of nodes(body["variables"])) {
-    const name = text(v["name"]);
-    const objectType = text(v["objectType"]);
-    if (name && objectType && text(v["dataType"]) === "SObject") symbols.set(name.toLowerCase(), objectType);
+  for (const v of nodes(body.variables)) {
+    const name = text(v.name);
+    const objectType = text(v.objectType);
+    if (name && objectType && text(v.dataType) === "SObject") symbols.set(name.toLowerCase(), objectType);
   }
-  for (const lookup of nodes(body["recordLookups"])) {
-    const name = text(lookup["name"]);
-    const object = text(lookup["object"]);
+  for (const lookup of nodes(body.recordLookups)) {
+    const name = text(lookup.name);
+    const object = text(lookup.object);
     if (name && object) symbols.set(name.toLowerCase(), object);
   }
   const loopSources = new Map<string, string>();
-  for (const loop of nodes(body["loops"])) {
-    const name = text(loop["name"]);
-    const source = text(loop["collectionReference"]);
+  for (const loop of nodes(body.loops)) {
+    const name = text(loop.name);
+    const source = text(loop.collectionReference);
     if (name && source) loopSources.set(name.toLowerCase(), source);
   }
 
@@ -61,54 +62,54 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
   const writes: Write[] = [];
   const fieldRefs: string[] = [];
   const addWrite = (el: XmlNode, op: DmlOp) => {
-    const elementName = text(el["name"]);
-    let object = text(el["object"]);
+    const elementName = text(el.name);
+    let object = text(el.object);
     let self = false;
     let confidence: Write["confidence"] = "high";
     if (!object) {
-      const resolved = resolve(text(el["inputReference"]));
+      const resolved = resolve(text(el.inputReference));
       object = resolved.object;
       self = resolved.self;
       if (!object) return;
       if (!self) confidence = "medium";
     }
     const fields = uniq(
-      nodes(el["inputAssignments"])
-        .map((a) => text(a["field"]))
+      nodes(el.inputAssignments)
+        .map((a) => text(a.field))
         .filter((f): f is string => !!f),
     );
     for (const f of fields) fieldRefs.push(`${object}.${f}`);
-    for (const filter of nodes(el["filters"])) {
-      const f = text(filter["field"]);
+    for (const filter of nodes(el.filters)) {
+      const f = text(filter.field);
       if (f) fieldRefs.push(`${object}.${f}`);
     }
     writes.push({ object, op, fields, selfUpdate: self || undefined, via: elementName, confidence });
   };
 
-  for (const el of nodes(body["recordUpdates"])) addWrite(el, "update");
-  for (const el of nodes(body["recordCreates"])) addWrite(el, "insert");
-  for (const el of nodes(body["recordDeletes"])) addWrite(el, "delete");
+  for (const el of nodes(body.recordUpdates)) addWrite(el, "update");
+  for (const el of nodes(body.recordCreates)) addWrite(el, "insert");
+  for (const el of nodes(body.recordDeletes)) addWrite(el, "delete");
 
   const reads: string[] = [];
-  for (const el of nodes(body["recordLookups"])) {
-    const object = text(el["object"]);
+  for (const el of nodes(body.recordLookups)) {
+    const object = text(el.object);
     if (!object) continue;
     reads.push(object);
-    for (const filter of nodes(el["filters"])) {
-      const f = text(filter["field"]);
+    for (const filter of nodes(el.filters)) {
+      const f = text(filter.field);
       if (f) fieldRefs.push(`${object}.${f}`);
     }
   }
 
   const apexActions = uniq(
-    nodes(body["actionCalls"])
-      .filter((a) => text(a["actionType"])?.toLowerCase() === "apex")
-      .map((a) => text(a["actionName"]))
+    nodes(body.actionCalls)
+      .filter((a) => text(a.actionType)?.toLowerCase() === "apex")
+      .map((a) => text(a.actionName))
       .filter((a): a is string => !!a),
   );
   const subflows = uniq(
-    nodes(body["subflows"])
-      .map((s) => text(s["flowName"]))
+    nodes(body.subflows)
+      .map((s) => text(s.flowName))
       .filter((s): s is string => !!s),
   );
 
@@ -122,7 +123,7 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
 
   return {
     name: fallbackName,
-    label: text(body["label"]),
+    label: text(body.label),
     status,
     active: status === "Active",
     processType,
@@ -138,20 +139,20 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
 
 function parseTrigger(start: XmlNode | undefined): FlowTrigger | undefined {
   if (!start) return undefined;
-  const object = text(start["object"]);
-  const triggerType = text(start["triggerType"]);
-  const recordTriggerType = text(start["recordTriggerType"]);
+  const object = text(start.object);
+  const triggerType = text(start.triggerType);
+  const recordTriggerType = text(start.recordTriggerType);
   if (!object || !triggerType || !(triggerType in TRIGGER_TIMING)) return undefined;
   const events =
     triggerType === "RecordBeforeDelete"
       ? (["delete"] as SaveEvent[])
       : (RECORD_TRIGGER_EVENTS[recordTriggerType ?? ""] ?? ["insert", "update"]);
   const entryFields = uniq(
-    nodes(start["filters"])
-      .map((f) => text(f["field"]))
+    nodes(start.filters)
+      .map((f) => text(f.field))
       .filter((f): f is string => !!f),
   );
-  const filterFormula = text(start["filterFormula"]);
+  const filterFormula = text(start.filterFormula);
   if (filterFormula) {
     for (const m of filterFormula.matchAll(/\$Record(?:__Prior)?\.([A-Za-z_][A-Za-z0-9_]*)/g)) {
       if (m[1]) entryFields.push(m[1]);
@@ -162,6 +163,6 @@ function parseTrigger(start: XmlNode | undefined): FlowTrigger | undefined {
     timing: TRIGGER_TIMING[triggerType]!,
     events,
     entryFields: uniq(entryFields),
-    hasScheduledPaths: nodes(start["scheduledPaths"]).length > 0,
+    hasScheduledPaths: nodes(start.scheduledPaths).length > 0,
   };
 }

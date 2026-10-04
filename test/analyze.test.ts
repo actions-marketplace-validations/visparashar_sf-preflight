@@ -3,8 +3,8 @@ import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { analyze, loadProject, run, saveProcedure, toChanges, toMarkdown } from "../src/core/index.js";
 import type { AnalysisResult, ChangeType, OrgModel } from "../src/core/index.js";
+import { analyze, loadProject, run, saveProcedure, toChanges, toMarkdown } from "../src/core/index.js";
 
 const FIXTURE = path.resolve(__dirname, "../fixtures/sample-org");
 const SRC = "force-app/main/default";
@@ -64,7 +64,10 @@ describe("analyze: field change", () => {
     expect(r.impactedObjects).toEqual(["Account", "Contact", "Opportunity", "Task"]);
     expect(r.cycles).toHaveLength(2);
     expect(r.findings.filter((f) => f.rule === "recursion-cycle").map((f) => f.title)).toEqual(
-      expect.arrayContaining(["Automation cycle: Account → Contact → Account", "Automation cycle: Opportunity → Opportunity"]),
+      expect.arrayContaining([
+        "Automation cycle: Account → Contact → Account",
+        "Automation cycle: Opportunity → Opportunity",
+      ]),
     );
     expect(r.summary.risk).toBe("high");
   });
@@ -91,7 +94,8 @@ describe("analyze: field change", () => {
 
   it("suggests bulk, recursion, boundary and validation-collision tests", () => {
     const kinds = new Set(analyzeFiles([file]).suggestedTests.map((t) => t.kind));
-    for (const k of ["bulk", "recursion", "boundary", "validation-collision", "idempotency"]) expect(kinds).toContain(k);
+    for (const k of ["bulk", "recursion", "boundary", "validation-collision", "idempotency"])
+      expect(kinds).toContain(k);
   });
 });
 
@@ -99,7 +103,9 @@ describe("analyze: invocable Apex used by an agent", () => {
   it("surfaces the validation rule the action will collide with", () => {
     const r = analyzeFiles([`${SRC}/classes/OpportunityCloser.cls`, `${SRC}/classes/OpportunityCloser.cls-meta.xml`]);
     expect(r.changes).toHaveLength(1);
-    const collision = r.findings.find((f) => f.rule === "automated-write-vs-validation-rule" && f.object === "Opportunity");
+    const collision = r.findings.find(
+      (f) => f.rule === "automated-write-vs-validation-rule" && f.object === "Opportunity",
+    );
     expect(collision?.detail).toContain("class OpportunityCloser");
     expect(collision?.detail).toContain("Require_Contract_Signed_Date");
   });
@@ -174,7 +180,11 @@ describe("git integration", () => {
   it("diffs permission sets against the base ref", () => {
     const ps = path.join(repo, SRC, "permissionsets/Agent_Runtime_User.permissionset-meta.xml");
     execFileSync("git", ["checkout", "-q", "--", "."], { cwd: repo });
-    execFileSync("sed", ["-i", "s#<userPermissions/>##; s#</PermissionSet>#<userPermissions><enabled>true</enabled><name>ModifyAllData</name></userPermissions></PermissionSet>#", ps]);
+    execFileSync("sed", [
+      "-i",
+      "s#<userPermissions/>##; s#</PermissionSet>#<userPermissions><enabled>true</enabled><name>ModifyAllData</name></userPermissions></PermissionSet>#",
+      ps,
+    ]);
     const r = run({ projectDir: repo, base: "HEAD" });
     const perm = r.findings.filter((f) => f.rule.startsWith("permission"));
     // Only the delta is reported: Modify All on Opportunity existed in the base.

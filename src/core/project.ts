@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { parseApexClass, parseApexTrigger } from "./parsers/apex.js";
+import { parseField } from "./parsers/fields.js";
+import { parseFlow } from "./parsers/flows.js";
+import { parsePermissionContainer } from "./parsers/permissions.js";
+import { parseValidationRule } from "./parsers/validationRules.js";
 import type { ComponentRef, ObjectDef, OrgModel } from "./types.js";
 import { key, toPosix } from "./util.js";
-import { parseField } from "./parsers/fields.js";
-import { parseValidationRule } from "./parsers/validationRules.js";
-import { parseFlow } from "./parsers/flows.js";
-import { parseApexClass, parseApexTrigger } from "./parsers/apex.js";
-import { parsePermissionContainer } from "./parsers/permissions.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".sfdx", ".sf", ".vscode", ".idea", "dist"]);
 
@@ -60,7 +61,8 @@ export function classifyPath(relPath: string): ComponentRef {
     return { type: "PermissionSet", name: strip(base, ".permissionset-meta.xml"), file };
   }
   if (base.endsWith(".profile-meta.xml")) return { type: "Profile", name: strip(base, ".profile-meta.xml"), file };
-  if (base.endsWith(".workflow-meta.xml")) return { type: "WorkflowRule", name: strip(base, ".workflow-meta.xml"), file };
+  if (base.endsWith(".workflow-meta.xml"))
+    return { type: "WorkflowRule", name: strip(base, ".workflow-meta.xml"), file };
   const agentSuffix = AGENT_SUFFIXES.find((s) => base.endsWith(s) || parent?.endsWith(s.replace("-meta.xml", "")));
   if (agentSuffix) return { type: "AgentMetadata", name: base.replace(/\..*$/, ""), file };
   return { type: "Other", name: base, file };
@@ -72,7 +74,9 @@ export function sourceRoots(projectDir: string): string[] {
   if (existsSync(projectJson)) {
     try {
       const json = JSON.parse(readFileSync(projectJson, "utf8")) as { packageDirectories?: { path: string }[] };
-      const dirs = (json.packageDirectories ?? []).map((d) => d.path).filter((p) => existsSync(path.join(projectDir, p)));
+      const dirs = (json.packageDirectories ?? [])
+        .map((d) => d.path)
+        .filter((p) => existsSync(path.join(projectDir, p)));
       if (dirs.length) return dirs.map(toPosix);
     } catch {
       // fall through
@@ -156,7 +160,9 @@ export function loadProject(projectDirInput: string): OrgModel {
         break;
       case "ValidationRule":
         safely(ref, () => {
-          model.validationRules.push(parseValidationRule(read(ref.file), ref.object!, ref.name.split(".")[1]!, ref.file));
+          model.validationRules.push(
+            parseValidationRule(read(ref.file), ref.object!, ref.name.split(".")[1]!, ref.file),
+          );
         });
         break;
       case "Flow":
@@ -184,7 +190,12 @@ export function loadProject(projectDirInput: string): OrgModel {
       case "PermissionSet":
       case "Profile":
         safely(ref, () => {
-          const pc = parsePermissionContainer(read(ref.file), ref.name, ref.type as "PermissionSet" | "Profile", ref.file);
+          const pc = parsePermissionContainer(
+            read(ref.file),
+            ref.name,
+            ref.type as "PermissionSet" | "Profile",
+            ref.file,
+          );
           model.permissionContainers.set(key(`${ref.type}:${pc.name}`), pc);
         });
         break;

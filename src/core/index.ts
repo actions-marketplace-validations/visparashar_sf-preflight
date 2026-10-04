@@ -1,15 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
 import path from "node:path";
 import { analyze } from "./analyze.js";
 import { filesFromArgs, gitChangedFiles, gitShow, toChanges } from "./changes.js";
 import { loadProject } from "./project.js";
-import type { AnalysisResult } from "./types.js";
+import type { AnalysisResult, ChangeType } from "./types.js";
 
-export * from "./types.js";
-export { loadProject, classifyPath, sourceRoots } from "./project.js";
 export { analyze, fieldReferences } from "./analyze.js";
+export { filesFromArgs, gitChangedFiles, toChanges } from "./changes.js";
 export { saveProcedure } from "./orderOfExecution.js";
-export { gitChangedFiles, toChanges, filesFromArgs } from "./changes.js";
+export { classifyPath, loadProject, sourceRoots } from "./project.js";
 export { toMarkdown } from "./report/markdown.js";
+export * from "./types.js";
 
 export interface RunOptions {
   projectDir: string;
@@ -26,7 +27,7 @@ export interface RunOptions {
 export function run(opts: RunOptions): AnalysisResult {
   const projectDir = path.resolve(opts.projectDir);
   const model = loadProject(projectDir);
-  let changedFiles;
+  let changedFiles: { file: string; changeType: ChangeType; previousFile?: string }[];
   if (opts.files?.length) {
     changedFiles = filesFromArgs(projectDir, opts.files);
   } else if (opts.base) {
