@@ -137,7 +137,7 @@ describe("analyze: permission set change", () => {
 describe("markdown report", () => {
   it("renders the key sections", () => {
     const md = toMarkdown(analyzeFiles([`${SRC}/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml`]));
-    expect(md).toContain("## Blast radius: 🔴 HIGH risk");
+    expect(md).toContain("## Preflight: 🔴 HIGH risk");
     expect(md).toContain("### Cascade");
     expect(md).toContain("⟲ cycle");
     expect(md).toContain("### Suggested tests");
@@ -148,7 +148,7 @@ describe("markdown report", () => {
 describe("git integration", () => {
   let repo: string;
   beforeAll(() => {
-    repo = mkdtempSync(path.join(tmpdir(), "blast-radius-"));
+    repo = mkdtempSync(path.join(tmpdir(), "sf-preflight-"));
     cpSync(FIXTURE, repo, { recursive: true });
     const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "ignore" });
     git("init", "-q", "-b", "main");

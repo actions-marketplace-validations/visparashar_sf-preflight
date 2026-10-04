@@ -5,4 +5,4 @@ coverage/
 .DS_Store
 .sf/
 .sfdx/
-.blast-radius/
+.preflight/

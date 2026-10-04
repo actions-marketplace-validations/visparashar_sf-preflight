@@ -1,6 +1,6 @@
 # Roadmap
 
-sf-blast-radius aims to answer one question for every Salesforce change — human- or
+sf-preflight aims to answer one question for every Salesforce change — human- or
 AI-authored — before it ships:
 
 > **If this change ships, what will it set off in this org, and how do we prove it's safe?**
@@ -22,7 +22,7 @@ AI-authored — before it ships:
 | | Milestone | Outcome | Status |
 |---|---|---|---|
 | **M0** | Foundation | TypeScript project, tests, CI, open-source governance | ✅ done |
-| **M1** | Offline blast-radius analyzer | `blast-radius analyze` on any SFDX repo → Markdown/JSON report with changed components, cascade, order of execution, findings and suggested tests | 🚧 in progress |
+| **M1** | Offline preflight analyzer | `preflight analyze` on any SFDX repo → Markdown/JSON report with changed components, cascade, order of execution, findings and suggested tests | 🚧 in progress |
 | **M2** | Agent & PR surfaces | MCP server (`analyze_change`, `explain_object`) for Claude Code, Cursor, Agentforce Vibes and other MCP clients; GitHub Action that comments on PRs; SARIF output for code scanning | planned |
 | **M3** | Live-org enrichment | Optional `sf` CLI auth; Tooling API `MetadataComponentDependency`; real permission assignments and record volumes; full Apex parser; managed-package awareness | planned |
 | **M4** | Test generation | Generate Apex tests from the blast radius — bulk, validation-rule collision, negative permission (`System.runAs`), recursion and idempotency — and run them in a sandbox | planned |
@@ -37,7 +37,7 @@ AI-authored — before it ships:
 - [ ] Before-save flow field assignments as field-level writes
 - [ ] Apex: `Trigger.newMap` handlers, `Database.SaveResult` handling detection, platform events
 - [ ] Master-detail cascade delete edges
-- [ ] Configurable rule severities and ignores (`.blast-radius.json`)
+- [ ] Configurable rule severities and ignores (`.preflight.json`)
 - [ ] Performance pass on large orgs (streaming profile parsing, caching)
 
 ## Out of scope (for now)
@@ -46,4 +46,4 @@ AI-authored — before it ships:
 - UI test automation
 - Data backup and restore
 
-Have an idea? Open a [feature request](https://github.com/visparashar/sf-blast-radius/issues/new/choose).
+Have an idea? Open a [feature request](https://github.com/visparashar/sf-preflight/issues/new/choose).
