@@ -1,0 +1,43 @@
+{
+  "name": "sf-blast-radius",
+  "version": "0.1.0",
+  "description": "Org-aware change verifier for Salesforce: computes what a change will set off (automation, permissions, cascades) before it ships.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "blast-radius": "dist/cli.js"
+  },
+  "main": "dist/core/index.js",
+  "types": "dist/core/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "analyze:sample": "node dist/cli.js analyze --project fixtures/sample-org --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml"
+  },
+  "keywords": [
+    "salesforce",
+    "devops",
+    "sfdx",
+    "agentforce",
+    "impact-analysis",
+    "mcp"
+  ],
+  "dependencies": {
+    "commander": "^15.0.0",
+    "fast-xml-parser": "^5.11.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
