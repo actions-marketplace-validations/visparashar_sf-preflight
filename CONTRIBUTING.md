@@ -48,6 +48,8 @@ src/core/orderOfExecution.ts   the simplified Salesforce save procedure
 src/core/analyze.ts   roots → cascade → findings → suggested tests
 src/core/report/      Markdown and JSON output
 src/cli.ts            command-line entry point
+src/mcp.ts            MCP server (stdio) for coding agents
+action.yml            GitHub Action (composite)
 fixtures/sample-org/  SFDX project with deliberate failure modes
 test/                 vitest tests
 ```

@@ -3,9 +3,15 @@ name: Release
 on:
   push:
     tags: ["v*.*.*"]
+  # Re-run a release by choosing the tag under "Use workflow from".
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -16,6 +22,11 @@ jobs:
       contents: write # create the GitHub release
       id-token: write # npm provenance / trusted publishing
     steps:
+      - name: Require a version tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Run the release workflow from a vX.Y.Z tag (Use workflow from → Tags)."
+          exit 1
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -29,18 +40,34 @@ jobs:
       - run: npm ci
       - run: npm run check
       - name: Verify tag matches package.json version
+        id: version
         run: |
-          PKG_VERSION="v$(node -p "require('./package.json').version")"
-          if [ "$PKG_VERSION" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION" >&2
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version v$VERSION"
             exit 1
           fi
+          NAME="$(node -p "require('./package.json').name")"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish
+        if: steps.version.outputs.already_published != 'true'
         run: npm publish --provenance --access public
         env:
           # Leave unset when using npm trusted publishing (OIDC); set it for token-based publishing.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists."
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Move the major version tag for the GitHub Action (e.g. v0)
+        run: |
+          MAJOR="${GITHUB_REF_NAME%%.*}"
+          git tag -f "$MAJOR" "$GITHUB_REF_NAME^{commit}"
+          git push -f origin "refs/tags/$MAJOR"

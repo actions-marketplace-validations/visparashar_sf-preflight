@@ -22,15 +22,15 @@ AI-authored — before it ships:
 | | Milestone | Outcome | Status |
 |---|---|---|---|
 | **M0** | Foundation | TypeScript project, tests, CI, open-source governance | ✅ done |
-| **M1** | Offline preflight analyzer | `preflight analyze` on any SFDX repo → Markdown/JSON report with changed components, cascade, order of execution, findings and suggested tests | 🚧 in progress |
-| **M2** | Agent & PR surfaces | MCP server (`analyze_change`, `explain_object`) for Claude Code, Cursor, Agentforce Vibes and other MCP clients; GitHub Action that comments on PRs; SARIF output for code scanning | planned |
+| **M1** | Offline preflight analyzer | `preflight analyze` on any SFDX repo → Markdown/JSON report with changed components, cascade, order of execution, findings and suggested tests | ✅ 0.1.0 |
+| **M2** | Agent & PR surfaces | MCP server (`analyze_change`, `explain_save_order`, `find_field_references`) for Claude Code, Cursor, VS Code agents and other MCP clients; GitHub Action that comments on PRs; SARIF output for code scanning; AI-assisted commit detection | 🚧 0.2.0 |
 | **M3** | Live-org enrichment | Optional `sf` CLI auth; Tooling API `MetadataComponentDependency`; real permission assignments and record volumes; full Apex parser; managed-package awareness | planned |
 | **M4** | Test generation | Generate Apex tests from the blast radius — bulk, validation-rule collision, negative permission (`System.runAs`), recursion and idempotency — and run them in a sandbox | planned |
 | **M5** | Agentforce action verification | Parse agent metadata (topics, actions, invocation targets); blast radius per agent action; runtime-user effective-access audit; combine with Agentforce Testing Center results | planned |
 | **M6** | Evidence & pipeline integration | Evidence pack per change (author human/AI, findings, tests, approvals); DevOps Center Testing provider with quality-gate severities | planned |
 | **M7** | Production feedback loop | Map production Flow/Apex errors and agent session traces back to the change that introduced them; suggest partial rollback | exploring |
 
-## M1 — remaining work
+## Next up (M1 follow-ups)
 
 - [ ] Process Builder and legacy workflow rule parsing
 - [ ] Record-triggered flow trigger order (`triggerOrder`) within a phase
