@@ -101,7 +101,22 @@ git commit -s -m "fix(apex): …"
 
 ## Releasing (maintainers)
 
-1. Move the **Unreleased** changelog entries under a new version heading.
-2. `npm version <patch|minor|major>` — this updates `package.json` and creates a `vX.Y.Z` tag.
-3. `git push --follow-tags`. The release workflow builds, tests, publishes to npm with
-   provenance and creates the GitHub release.
+`main` is protected, so a release is a small pull request followed by a tag.
+
+1. Create a branch `release/X.Y.Z` from `main`.
+2. Move the **Unreleased** changelog entries under `## [X.Y.Z] - YYYY-MM-DD` and update the
+   compare links at the bottom.
+3. `npm version X.Y.Z --no-git-tag-version` to bump `package.json` and `package-lock.json`.
+4. Open a pull request, wait for CI and CodeQL, and merge it.
+5. Tag the merge commit and push the tag:
+
+   ```bash
+   git fetch origin
+   git tag -a vX.Y.Z origin/main -m "sf-preflight X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+The **Release** workflow then runs the checks, publishes to npm with provenance, creates the
+GitHub release and moves the major tag (`v0`) that the GitHub Action uses. If a run fails
+part-way, re-run it from the tag (Actions → Release → Run workflow → choose the tag); it skips
+steps that already succeeded.
