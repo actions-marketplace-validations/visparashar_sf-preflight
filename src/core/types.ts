@@ -179,6 +179,24 @@ export interface OrgModel {
   /** Every metadata file found, keyed by relative path. */
   components: Map<string, ComponentRef>;
   warnings: string[];
+  /** Present when the change was read from a git range. */
+  provenance?: Provenance;
+}
+
+export interface CommitProvenance {
+  sha: string;
+  subject: string;
+  author: string;
+  /** AI tools detected from trailers, markers or bot authors; empty for human-only commits. */
+  aiTools: string[];
+}
+
+export interface Provenance {
+  range: string;
+  commits: number;
+  aiAssistedCommits: number;
+  tools: string[];
+  details: CommitProvenance[];
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +256,10 @@ export interface Finding {
   title: string;
   detail: string;
   object?: string;
+  /** Project-relative files involved; the first is the primary location. */
   files: string[];
+  /** 1-based line in the primary file, when known. */
+  line?: number;
 }
 
 export type TestKind =
@@ -265,6 +286,8 @@ export interface AnalysisResult {
   schemaVersion: 1;
   generatedAt: string;
   projectDir: string;
+  /** Project directory relative to the git root (posix, "" for the root); set when in a git repo. */
+  projectPathInRepo?: string;
   base?: string;
   head?: string;
   changes: Change[];
@@ -285,4 +308,22 @@ export interface AnalysisResult {
     findingsBySeverity: Record<Severity, number>;
   };
   warnings: string[];
+  /** Present when the change was read from a git range. */
+  provenance?: Provenance;
+}
+
+export interface CommitProvenance {
+  sha: string;
+  subject: string;
+  author: string;
+  /** AI tools detected from trailers, markers or bot authors; empty for human-only commits. */
+  aiTools: string[];
+}
+
+export interface Provenance {
+  range: string;
+  commits: number;
+  aiAssistedCommits: number;
+  tools: string[];
+  details: CommitProvenance[];
 }

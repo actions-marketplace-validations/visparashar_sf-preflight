@@ -1,0 +1,190 @@
+name: "sf-preflight"
+description: "Preflight checks for Salesforce changes: what a PR sets off through flows, triggers, validation rules, roll-ups and permissions."
+author: "sf-preflight contributors"
+branding:
+  icon: "crosshair"
+  color: "blue"
+
+inputs:
+  project:
+    description: "SFDX project directory, relative to the repository root."
+    default: "."
+  base:
+    description: "Git base ref. Defaults to the pull request's base branch, or HEAD~1 on push events."
+    default: ""
+  fail-on:
+    description: "Fail the step when risk is at or above this level: low, medium, high or none."
+    default: "high"
+  comment:
+    description: "Post (and keep updated) a pull request comment with the report. Needs `pull-requests: write`."
+    default: "true"
+  sarif:
+    description: "Upload findings to GitHub code scanning. Needs `security-events: write`."
+    default: "false"
+  depth:
+    description: "Maximum cascade depth."
+    default: "4"
+  version:
+    description: "sf-preflight npm version to run. Defaults to the version matching this action's ref. Use `local` to build from the action's source."
+    default: ""
+  node-version:
+    description: "Node.js version to set up (22.12 or newer). Set to an empty string to use the runner's Node."
+    default: "22"
+  github-token:
+    description: "Token used to post the PR comment."
+    default: ${{ github.token }}
+
+outputs:
+  risk:
+    description: "Overall risk: low, medium or high."
+    value: ${{ steps.results.outputs.risk }}
+  high:
+    description: "Number of high-severity findings."
+    value: ${{ steps.results.outputs.high }}
+  medium:
+    description: "Number of medium-severity findings."
+    value: ${{ steps.results.outputs.medium }}
+  ai-assisted-commits:
+    description: "Number of AI-assisted commits detected in the analyzed range."
+    value: ${{ steps.results.outputs.ai_assisted_commits }}
+  report-markdown:
+    description: "Path to the Markdown report."
+    value: ${{ steps.analyze.outputs.md }}
+  report-json:
+    description: "Path to the JSON report."
+    value: ${{ steps.analyze.outputs.json }}
+  report-sarif:
+    description: "Path to the SARIF report."
+    value: ${{ steps.analyze.outputs.sarif }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      if: inputs.node-version != ''
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Resolve preflight command
+      id: cmd
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        if [ "$INPUT_VERSION" = "local" ]; then
+          (cd "$ACTION_PATH" && npm ci --no-audit --no-fund --loglevel=error && npm run build --silent)
+          echo "run=node $ACTION_PATH/dist/cli.js" >> "$GITHUB_OUTPUT"
+        else
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(node -p "require('$ACTION_PATH/package.json').version")"
+          fi
+          echo "run=npx --yes sf-preflight@$VERSION" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Resolve base ref
+      id: base
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+      run: |
+        set -euo pipefail
+        BASE="$INPUT_BASE"
+        if [ -z "$BASE" ]; then
+          if [ -n "${GITHUB_BASE_REF:-}" ]; then
+            git fetch --no-tags --quiet origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            BASE="origin/${GITHUB_BASE_REF}"
+          else
+            BASE="HEAD~1"
+          fi
+        fi
+        echo "ref=$BASE" >> "$GITHUB_OUTPUT"
+
+    - name: Analyze
+      id: analyze
+      shell: bash
+      env:
+        RUN: ${{ steps.cmd.outputs.run }}
+        PROJECT: ${{ inputs.project }}
+        BASE: ${{ steps.base.outputs.ref }}
+        DEPTH: ${{ inputs.depth }}
+      run: |
+        set -euo pipefail
+        OUT="$RUNNER_TEMP/sf-preflight"
+        mkdir -p "$OUT"
+        $RUN analyze --project "$PROJECT" --base "$BASE" --depth "$DEPTH" \
+          --format md --out "$OUT/report.md" --json-out "$OUT/report.json" --sarif-out "$OUT/report.sarif"
+        {
+          echo "md=$OUT/report.md"
+          echo "json=$OUT/report.json"
+          echo "sarif=$OUT/report.sarif"
+        } >> "$GITHUB_OUTPUT"
+        cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Read results
+      id: results
+      shell: bash
+      env:
+        REPORT: ${{ steps.analyze.outputs.json }}
+      run: |
+        set -euo pipefail
+        node -e '
+          const r = require(process.env.REPORT);
+          const out = [
+            `risk=${r.summary.risk}`,
+            `high=${r.summary.findingsBySeverity.high}`,
+            `medium=${r.summary.findingsBySeverity.medium}`,
+            `ai_assisted_commits=${r.provenance ? r.provenance.aiAssistedCommits : 0}`,
+          ];
+          require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, out.join("\n") + "\n");
+        '
+
+    - name: Comment on pull request
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      # Fork PRs get a read-only token; don't fail the check just because commenting isn't allowed.
+      continue-on-error: true
+      uses: actions/github-script@v7
+      env:
+        REPORT: ${{ steps.analyze.outputs.md }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require("node:fs");
+          const marker = "<!-- sf-preflight -->";
+          let body = fs.readFileSync(process.env.REPORT, "utf8");
+          const limit = 60000;
+          if (body.length > limit) body = body.slice(0, limit) + "\n\n_…truncated; see the job summary for the full report._";
+          body = `${marker}\n${body}`;
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+          const existing = comments.find((c) => c.body && c.body.startsWith(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }
+
+    - name: Upload SARIF to code scanning
+      if: inputs.sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.analyze.outputs.sarif }}
+        category: sf-preflight
+
+    - name: Apply fail-on threshold
+      shell: bash
+      env:
+        RISK: ${{ steps.results.outputs.risk }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -euo pipefail
+        rank() { case "$1" in low) echo 0;; medium) echo 1;; high) echo 2;; *) echo 99;; esac; }
+        if [ "$FAIL_ON" != "none" ] && [ "$(rank "$RISK")" -ge "$(rank "$FAIL_ON")" ]; then
+          echo "::error title=sf-preflight::Risk is $RISK (fail-on: $FAIL_ON). See the job summary for the report."
+          exit 1
+        fi
+        echo "sf-preflight risk: $RISK (fail-on: $FAIL_ON)"

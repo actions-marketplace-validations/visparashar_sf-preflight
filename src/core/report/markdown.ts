@@ -57,6 +57,14 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
       `findings: ${s.findingsBySeverity.high} high, ${s.findingsBySeverity.medium} medium, ${s.findingsBySeverity.low} low`,
   );
   if (result.base) out.push("", `_Compared \`${result.base}\` → \`${result.head ?? "working tree"}\`_`);
+  const p = result.provenance;
+  if (p?.aiAssistedCommits) {
+    out.push(
+      "",
+      `> 🤖 **${p.aiAssistedCommits} of ${p.commits} commit(s) are AI-assisted** (${p.tools.join(", ")}). ` +
+        "The analysis is the same either way — but AI-generated changes deserve a deliberate look at the findings below.",
+    );
+  }
   out.push("");
 
   // Changed components

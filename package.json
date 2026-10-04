@@ -47,7 +47,8 @@
     "test:watch": "vitest",
     "check": "npm run lint && npm run typecheck && npm test",
     "analyze:sample": "node dist/cli.js analyze --project fixtures/sample-org --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml",
-    "prepack": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build",
+    "docs:rules": "npm run build && node -e \"import('./dist/core/rules.js').then((m) => require('node:fs').writeFileSync('docs/RULES.md', m.renderRulesMarkdown()))\""
   },
   "keywords": [
     "salesforce",
@@ -63,8 +64,10 @@
     "mcp"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "commander": "^15.0.0",
-    "fast-xml-parser": "^5.11.2"
+    "fast-xml-parser": "^5.11.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

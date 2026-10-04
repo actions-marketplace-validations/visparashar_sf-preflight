@@ -2,13 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command, Option } from "commander";
-import type { SaveEvent } from "./core/index.js";
-import { loadProject, run, saveProcedure, toMarkdown } from "./core/index.js";
+import type { AnalysisResult, SaveEvent } from "./core/index.js";
+import { loadProject, run, saveProcedure, toMarkdown, toSarif } from "./core/index.js";
 
 const RISK_RANK = { low: 0, medium: 1, high: 2 } as const;
 const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   version: string;
 };
+
+type Format = "md" | "json" | "sarif";
+
+function render(result: AnalysisResult, format: Format): string {
+  if (format === "json") return JSON.stringify(result, null, 2);
+  if (format === "sarif") return JSON.stringify(toSarif(result, { toolVersion: version }), null, 2);
+  return toMarkdown(result);
+}
 
 const program = new Command();
 program
@@ -23,9 +31,12 @@ program
   .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
   .option("--head <ref>", "git head ref (default: working tree)")
   .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
-  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json", "sarif"]).default("md"))
   .option("-o, --out <file>", "write the report to a file instead of stdout")
-  .option("--depth <n>", "max cascade depth", (v) => parseInt(v, 10), 4)
+  .option("--md-out <file>", "also write a Markdown report to this file")
+  .option("--json-out <file>", "also write a JSON report to this file")
+  .option("--sarif-out <file>", "also write a SARIF report to this file")
+  .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
   .addOption(
     new Option("--fail-on <level>", "exit with code 2 when risk is at or above this level")
       .choices(["low", "medium", "high", "none"])
@@ -37,8 +48,11 @@ program
       base?: string;
       head?: string;
       files?: string[];
-      format: "md" | "json";
+      format: Format;
       out?: string;
+      mdOut?: string;
+      jsonOut?: string;
+      sarifOut?: string;
       depth: number;
       failOn: string;
     }) => {
@@ -49,9 +63,12 @@ program
         files: opts.files,
         maxDepth: opts.depth,
       });
-      const output = opts.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result);
+      const output = render(result, opts.format);
       if (opts.out) writeFileSync(opts.out, `${output}\n`);
       else process.stdout.write(`${output}\n`);
+      if (opts.mdOut) writeFileSync(opts.mdOut, `${render(result, "md")}\n`);
+      if (opts.jsonOut) writeFileSync(opts.jsonOut, `${render(result, "json")}\n`);
+      if (opts.sarifOut) writeFileSync(opts.sarifOut, `${render(result, "sarif")}\n`);
       if (
         opts.failOn !== "none" &&
         RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn as keyof typeof RISK_RANK]
@@ -84,6 +101,15 @@ program
       const notes = s.notes.length ? `  [${s.notes.join("; ")}]` : "";
       console.log(`  ${s.order}. ${s.phaseLabel.padEnd(18)} ${s.automation.name}${writes}${notes}`);
     }
+  });
+
+program
+  .command("mcp")
+  .description("Run an MCP server over stdio so coding agents can call preflight")
+  .option("--root <dir>", "directory the server may analyze (tool calls cannot reach outside it)", ".")
+  .action(async (opts: { root: string }) => {
+    const { startMcpServer } = await import("./mcp.js");
+    await startMcpServer({ root: opts.root, version });
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {

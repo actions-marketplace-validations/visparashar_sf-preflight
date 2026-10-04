@@ -1,0 +1,151 @@
+// SPDX-License-Identifier: Apache-2.0
+import path from "node:path";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { fieldReferences, loadProject, run, type SaveEvent, saveProcedure, toMarkdown } from "./core/index.js";
+
+const INSTRUCTIONS = `sf-preflight analyzes Salesforce DX metadata changes before they ship.
+
+Use it whenever you create or edit Salesforce metadata (flows, Apex, validation rules, fields,
+permission sets):
+1. After editing, call analyze_change (no arguments compares the working tree with HEAD).
+2. Treat high findings as blockers: fix them or explain to the user why they are acceptable.
+3. Add the suggested tests that cover what you changed.
+Use explain_save_order to understand what already runs on an object before adding automation,
+and find_field_references before renaming, retyping or deleting a field.`;
+
+export interface McpServerOptions {
+  /** Directory the server may analyze; tool calls cannot reach outside it. */
+  root: string;
+  version: string;
+}
+
+const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+const failure = (err: unknown) => ({
+  isError: true,
+  content: [{ type: "text" as const, text: `preflight: ${(err as Error).message}` }],
+});
+
+export function createMcpServer(opts: McpServerOptions): McpServer {
+  const root = path.resolve(opts.root);
+  const projectDir = (dir?: string) => {
+    const abs = path.resolve(root, dir ?? ".");
+    const rel = path.relative(root, abs);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
+      throw new Error(`project_dir must be inside ${root}`);
+    }
+    return abs;
+  };
+  const projectDirSchema = z
+    .string()
+    .optional()
+    .describe("SFDX project directory, relative to the server root (default: the root itself)");
+
+  const server = new McpServer({ name: "sf-preflight", version: opts.version }, { instructions: INSTRUCTIONS });
+
+  server.registerTool(
+    "analyze_change",
+    {
+      title: "Analyze a Salesforce change",
+      description:
+        "Compute the blast radius of a Salesforce metadata change: what it sets off through flows, triggers, " +
+        "validation rules, roll-ups and permissions; recursion cycles, validation-rule collisions, risky " +
+        "permission grants; and suggested tests. With no base or files, compares the working tree to HEAD.",
+      inputSchema: {
+        project_dir: projectDirSchema,
+        base: z.string().optional().describe("Git base ref, e.g. origin/main (default: HEAD)"),
+        head: z.string().optional().describe("Git head ref (default: the working tree)"),
+        files: z
+          .array(z.string())
+          .optional()
+          .describe("Analyze these metadata files instead of a git diff (project-relative or absolute)"),
+        format: z.enum(["markdown", "json"]).optional().describe("Report format (default: markdown)"),
+        max_depth: z.number().int().min(1).max(8).optional().describe("Maximum cascade depth (default: 4)"),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const result = run({
+          projectDir: projectDir(args.project_dir),
+          base: args.files?.length ? undefined : (args.base ?? "HEAD"),
+          head: args.head,
+          files: args.files,
+          maxDepth: args.max_depth,
+        });
+        return text(args.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result));
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "explain_save_order",
+    {
+      title: "Explain what runs when an object is saved",
+      description:
+        "List the automations that run, in Salesforce order of execution, when records of an object are " +
+        "inserted, updated, deleted or undeleted — and which other objects each one writes to.",
+      inputSchema: {
+        object: z.string().describe("Object API name, e.g. Opportunity or Invoice__c"),
+        event: z.enum(["insert", "update", "delete", "undelete"]).optional().describe("DML event (default: update)"),
+        project_dir: projectDirSchema,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const event: SaveEvent = args.event ?? "update";
+        const proc = saveProcedure(loadProject(projectDir(args.project_dir)), args.object, event);
+        if (!proc.steps.length) return text(`No modelled automation runs on ${args.object} ${event}.`);
+        const lines = proc.steps.map((s) => {
+          const writes = s.writes.length ? ` → writes ${s.writes.map((w) => `${w.object} (${w.op})`).join(", ")}` : "";
+          const notes = s.notes.length ? ` [${s.notes.join("; ")}]` : "";
+          return `${s.order}. ${s.phaseLabel}: ${s.automation.name}${writes}${notes}`;
+        });
+        return text([`${args.object} — ${event}`, ...lines].join("\n"));
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "find_field_references",
+    {
+      title: "Find references to a field",
+      description:
+        "List validation rules, flows, Apex, formula fields, roll-up summaries and permission sets that " +
+        "reference a field. Use before renaming, retyping or deleting it.",
+      inputSchema: {
+        object: z.string().describe("Object API name, e.g. Opportunity"),
+        field: z.string().describe("Field API name, e.g. Contract_Signed_Date__c"),
+        project_dir: projectDirSchema,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const refs = fieldReferences(loadProject(projectDir(args.project_dir)), args.object, args.field);
+        if (!refs.length) return text(`No references to ${args.object}.${args.field} found.`);
+        return text(
+          [
+            `${refs.length} reference(s) to ${args.object}.${args.field}:`,
+            ...refs.map((r) => `- ${r.from.kind} ${r.from.name}${r.from.file ? ` (${r.from.file})` : ""}`),
+          ].join("\n"),
+        );
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  return server;
+}
+
+export async function startMcpServer(opts: McpServerOptions): Promise<void> {
+  const server = createMcpServer(opts);
+  await server.connect(new StdioServerTransport());
+}

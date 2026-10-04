@@ -15,9 +15,9 @@ permissions — and reports the blast radius, the risks and the tests that matte
 
 It is open source, runs offline on your source code, and needs no org credentials.
 
-> **Status:** early (v0.1, milestone M1). The CLI and core analysis work today; the MCP server,
-> GitHub Action, live-org enrichment, test generation and Agentforce action verification are on
-> the [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
+> **Status:** early (0.x). The CLI, MCP server and GitHub Action work today; live-org
+> enrichment, test generation and Agentforce action verification are on the
+> [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
 
 ## What it finds
 
@@ -77,7 +77,8 @@ preflight explain Opportunity --event update
 | `-b, --base <ref>` | — | Git base ref |
 | `--head <ref>` | working tree | Git head ref |
 | `-f, --files <paths...>` | — | Analyze these files instead of a git diff |
-| `--format <md\|json>` | `md` | Output format |
+| `--format <md\|json\|sarif>` | `md` | Output format |
+| `--md-out`, `--json-out`, `--sarif-out <file>` | — | Also write the report in another format |
 | `-o, --out <file>` | stdout | Write the report to a file |
 | `--depth <n>` | `4` | Maximum cascade depth |
 | `--fail-on <level>` | `none` | Exit with code 2 when risk ≥ `low`, `medium` or `high` |
@@ -98,21 +99,42 @@ Opportunity (update)   [changed: Opportunity.Contract_Signed_Date__c]
 The full Markdown report adds a findings table, the order of execution for each impacted
 object, references to the changed field and a test checklist — ready to paste into a PR.
 
-### In CI (GitHub Actions)
+### On pull requests (GitHub Action)
 
 ```yaml
-- uses: actions/checkout@v4
-  with:
-    fetch-depth: 0
-- uses: actions/setup-node@v4
-  with:
-    node-version: 22
-- run: npx sf-preflight analyze --base origin/${{ github.base_ref }} --out preflight.md --fail-on high
-- run: cat preflight.md >> "$GITHUB_STEP_SUMMARY"
-  if: always()
+permissions:
+  contents: read
+  pull-requests: write
+
+steps:
+  - uses: actions/checkout@v7
+    with:
+      fetch-depth: 0
+  - uses: visparashar/sf-preflight@v0
+    with:
+      fail-on: high
 ```
 
-A dedicated GitHub Action that comments on pull requests is planned for milestone M2.
+The action comments the report on the PR (and keeps that comment updated), writes it to the job
+summary, can upload findings to code scanning as SARIF, and exposes `risk` and
+`ai-assisted-commits` outputs. See [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md).
+
+### From coding agents (MCP)
+
+```bash
+claude mcp add sf-preflight -- npx -y sf-preflight mcp
+```
+
+`preflight mcp` is a read-only MCP server with three tools — `analyze_change`,
+`explain_save_order` and `find_field_references` — so Claude Code, Cursor, VS Code agents and
+other MCP clients can check their own Salesforce changes before committing. Setup for each
+client is in [docs/MCP.md](docs/MCP.md).
+
+### AI-assisted changes
+
+When analyzing a git range, preflight reads commit trailers and tool markers (Claude, Copilot,
+Cursor, Codex, Gemini, Devin and others) and reports how many commits were AI-assisted, so
+reviewers know where to look harder. The analysis itself is identical for human and AI changes.
 
 ### As a library
 
@@ -130,7 +152,8 @@ console.log(toMarkdown(result));
 SFDX source ─► parsers ─► org model ─► change mapper ─► order of execution ─► cascade ─► findings ─► Markdown / JSON
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details and known limitations. In short:
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details and known limitations, and
+[docs/RULES.md](docs/RULES.md) for every rule. In short:
 Apex analysis is heuristic in v0.1, and Process Builder, legacy workflow, duplicate and
 assignment rules are not modelled yet.
 

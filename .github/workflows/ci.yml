@@ -37,3 +37,29 @@ jobs:
         run: npm run analyze:sample
       - name: Check the npm package contents
         run: npm pack --dry-run
+
+  action:
+    name: Action self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run the action from source on the sample org
+        id: preflight
+        uses: ./
+        with:
+          version: local
+          project: fixtures/sample-org
+          # Empty tree: treat every file in the fixture as added.
+          base: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+          fail-on: none
+          comment: "false"
+      - name: Check outputs
+        env:
+          RISK: ${{ steps.preflight.outputs.risk }}
+          HIGH: ${{ steps.preflight.outputs.high }}
+        run: |
+          echo "risk=$RISK high=$HIGH"
+          test "$RISK" = "high"
+          test "$HIGH" -gt 0
