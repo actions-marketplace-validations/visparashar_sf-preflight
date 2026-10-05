@@ -2,6 +2,8 @@
 import path from "node:path";
 import { analyze } from "./analyze.js";
 import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./changes.js";
+import { enrichWithOrg } from "./org/enrich.js";
+import type { SfRunner } from "./org/sf.js";
 import { loadProject } from "./project.js";
 import { gitProvenance } from "./provenance.js";
 import type { AnalysisResult, ChangeType } from "./types.js";
@@ -10,6 +12,8 @@ import { toPosix } from "./util.js";
 export { analyze, fieldReferences } from "./analyze.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
 export { saveProcedure } from "./orderOfExecution.js";
+export { applyOrgContext, collectOrgContext, enrichWithOrg } from "./org/enrich.js";
+export { assertSafeOrg, createSfRunner, type SfRunner } from "./org/sf.js";
 export { classifyPath, loadProject, sourceRoots } from "./project.js";
 export { detectAiTools, gitProvenance } from "./provenance.js";
 export { toMarkdown } from "./report/markdown.js";
@@ -26,6 +30,10 @@ export interface RunOptions {
   /** Explicit changed files (absolute, cwd-relative or project-relative). */
   files?: string[];
   maxDepth?: number;
+  /** Org alias or username already authorized with `sf org login`: adds read-only org context. */
+  org?: string;
+  /** Override how `sf` is invoked (tests). */
+  sfRunner?: SfRunner;
 }
 
 /** Load the project, work out what changed, and analyze it. */
@@ -53,5 +61,6 @@ export function run(opts: RunOptions): AnalysisResult {
     provenance: opts.base && !opts.files?.length ? gitProvenance(projectDir, opts.base, opts.head) : undefined,
   });
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
+  if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
   return result;
 }

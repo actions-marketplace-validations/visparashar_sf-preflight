@@ -216,6 +216,34 @@ export interface OrgModel {
   warnings: string[];
   /** Present when the change was read from a git range. */
   provenance?: Provenance;
+  /** Present when analyzed with `--org`: read-only context from a Salesforce org. */
+  org?: OrgContext;
+}
+
+export interface OrgAutomation {
+  kind: "Flow" | "ApexTrigger" | "ValidationRule";
+  name: string;
+  object: string;
+  /** e.g. "after update", "before insert", "validation". */
+  when: string[];
+  namespace?: string;
+  /** Installed package that owns it, when known. */
+  packageName?: string;
+}
+
+export interface OrgContext {
+  /** Org alias or username passed to `--org`. */
+  org: string;
+  queriedAt: string;
+  /** Record counts for impacted objects. */
+  recordCounts: Record<string, number>;
+  /** Active users holding each changed permission set or profile. */
+  assignments: { kind: "PermissionSet" | "Profile"; name: string; activeUsers: number }[];
+  /** Active automation on impacted objects that exists in the org but not in the project. */
+  orgOnlyAutomation: OrgAutomation[];
+  packages: { namespace?: string; name: string; version: string }[];
+  /** Queries that failed; the rest of the context is still usable. */
+  errors: string[];
 }
 
 export interface CommitProvenance {
@@ -345,6 +373,34 @@ export interface AnalysisResult {
   warnings: string[];
   /** Present when the change was read from a git range. */
   provenance?: Provenance;
+  /** Present when analyzed with `--org`: read-only context from a Salesforce org. */
+  org?: OrgContext;
+}
+
+export interface OrgAutomation {
+  kind: "Flow" | "ApexTrigger" | "ValidationRule";
+  name: string;
+  object: string;
+  /** e.g. "after update", "before insert", "validation". */
+  when: string[];
+  namespace?: string;
+  /** Installed package that owns it, when known. */
+  packageName?: string;
+}
+
+export interface OrgContext {
+  /** Org alias or username passed to `--org`. */
+  org: string;
+  queriedAt: string;
+  /** Record counts for impacted objects. */
+  recordCounts: Record<string, number>;
+  /** Active users holding each changed permission set or profile. */
+  assignments: { kind: "PermissionSet" | "Profile"; name: string; activeUsers: number }[];
+  /** Active automation on impacted objects that exists in the org but not in the project. */
+  orgOnlyAutomation: OrgAutomation[];
+  packages: { namespace?: string; name: string; version: string }[];
+  /** Queries that failed; the rest of the context is still usable. */
+  errors: string[];
 }
 
 export interface CommitProvenance {

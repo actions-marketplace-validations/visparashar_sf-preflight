@@ -62,6 +62,12 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
           .describe("Analyze these metadata files instead of a git diff (project-relative or absolute)"),
         format: z.enum(["markdown", "json"]).optional().describe("Report format (default: markdown)"),
         max_depth: z.number().int().min(1).max(8).optional().describe("Maximum cascade depth (default: 4)"),
+        org: z
+          .string()
+          .optional()
+          .describe(
+            "Alias or username of an org already authorized with `sf org login`. Adds read-only org context: record counts, automation that exists only in the org, permission set assignments.",
+          ),
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
@@ -73,6 +79,7 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
           head: args.head,
           files: args.files,
           maxDepth: args.max_depth,
+          org: args.org,
         });
         return text(args.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result));
       } catch (err) {

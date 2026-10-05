@@ -62,6 +62,8 @@ steps:
 | `comment` | `true` | Post and update a PR comment (needs `pull-requests: write`) |
 | `sarif` | `false` | Upload findings to code scanning (needs `security-events: write`) |
 | `depth` | `4` | Maximum cascade depth |
+| `sfdx-auth-url` | — | Beta: SFDX auth URL (from a secret) of a read-only integration user; adds org context |
+| `org` | — | Beta: alias of an org already authorized earlier in the job; adds org context |
 | `version` | matches the action ref | sf-preflight npm version to run; `local` builds from the action's source |
 | `node-version` | `22` | Node.js version to set up; empty string uses the runner's Node |
 | `github-token` | `github.token` | Token for the PR comment |
@@ -85,6 +87,29 @@ Example — require an extra reviewer when AI-assisted commits change high-risk 
 - if: steps.preflight.outputs.risk == 'high' && steps.preflight.outputs.ai-assisted-commits != '0'
   run: echo "::warning::High-risk change with AI-assisted commits — request a platform owner review."
 ```
+
+## Org context (beta)
+
+With org access, the report also shows record volumes for the impacted objects, automation
+that runs in the org but isn't in the repo, and how many users hold changed permission sets.
+See [ORG_CONTEXT.md](ORG_CONTEXT.md) for exactly what is queried.
+
+1. Create a read-only integration user (ideally in a sandbox that mirrors production) and log
+   in as it with the Salesforce CLI.
+2. Get its auth URL: `sf org display --target-org <alias> --verbose --json` and copy
+   `result.sfdxAuthUrl`. **It grants API access as that user, so treat it like a password.**
+3. Save it as a repository secret, for example `PREFLIGHT_SFDX_AUTH_URL`.
+4. Pass it to the action:
+
+```yaml
+- uses: visparashar/sf-preflight@v0
+  with:
+    sfdx-auth-url: ${{ secrets.PREFLIGHT_SFDX_AUTH_URL }}
+```
+
+The action installs the Salesforce CLI if needed, reads the URL from stdin (never from the
+command line), and logs out at the end of the job. Pull requests from forks don't receive
+secrets, so they get the offline analysis only.
 
 ## Notes
 

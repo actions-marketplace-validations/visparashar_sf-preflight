@@ -24,7 +24,7 @@ AI-authored — before it ships:
 | **M0** | Foundation | TypeScript project, tests, CI, open-source governance | ✅ done |
 | **M1** | Offline preflight analyzer | `preflight analyze` on any SFDX repo → Markdown/JSON report with changed components, cascade, order of execution, findings and suggested tests | ✅ 0.1.0 |
 | **M2** | Agent & PR surfaces | MCP server (`analyze_change`, `explain_save_order`, `find_field_references`) for Claude Code, Cursor, VS Code agents and other MCP clients; GitHub Action that comments on PRs; SARIF output for code scanning; AI-assisted commit detection | ✅ 0.1.0 |
-| **M3** | Accuracy & live-org enrichment | Full Apex parser with cross-class call graph (🚧 next release); optional `--org` enrichment via the `sf` CLI: permission assignments, record volumes, org-only automation, managed packages | 🚧 in progress |
+| **M3** | Accuracy & live-org enrichment | Full Apex parser with cross-class call graph; optional `--org` enrichment via the `sf` CLI: permission assignments, record volumes, org-only automation, managed packages (beta) | 🚧 next release |
 | **M4** | Test generation | Generate Apex tests from the blast radius — bulk, validation-rule collision, negative permission (`System.runAs`), recursion and idempotency — and run them in a sandbox | planned |
 | **M5** | Agentforce action verification | Parse agent metadata (topics, actions, invocation targets); blast radius per agent action; runtime-user effective-access audit; combine with Agentforce Testing Center results | planned |
 | **M6** | Evidence & pipeline integration | Evidence pack per change (author human/AI, findings, tests, approvals); DevOps Center Testing provider with quality-gate severities | planned |

@@ -43,6 +43,7 @@ program
   .option("--json-out <file>", "also write a JSON report to this file")
   .option("--sarif-out <file>", "also write a SARIF report to this file")
   .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
+  .option("--org <alias>", "add read-only context from an org authorized with `sf org login` (beta)")
   .addOption(
     new Option("--fail-on <level>", "exit with code 2 when risk is at or above this level")
       .choices(["low", "medium", "high", "none"])
@@ -60,6 +61,7 @@ program
       jsonOut?: string;
       sarifOut?: string;
       depth: number;
+      org?: string;
       failOn: string;
     }) => {
       const result = run({
@@ -68,6 +70,7 @@ program
         head: opts.head,
         files: opts.files,
         maxDepth: opts.depth,
+        org: opts.org,
       });
       const output = render(result, opts.format);
       if (opts.out) writeFileSync(opts.out, `${output}\n`);

@@ -24,6 +24,7 @@ that is only inside the blast radius).
 | [`validation-rule-removed`](#validation-rule-removed) | Info | A validation rule was removed. |
 | [`validation-rule-inactive`](#validation-rule-inactive) | Info | A changed validation rule is inactive. |
 | [`flow-inactive`](#flow-inactive) | Info | A changed flow is not active. |
+| [`org-only-automation`](#org-only-automation) | Medium | Active automation on an impacted object exists in the org (`--org`) but not in the project. |
 | [`agent-metadata-changed`](#agent-metadata-changed) | Info | Agentforce metadata changed. |
 | [`legacy-workflow`](#legacy-workflow) | Info | A legacy workflow rule changed. |
 
@@ -154,6 +155,14 @@ Inactive rules do not run.
 A changed flow is not active.
 
 It will not run until activated.
+
+## org-only-automation
+
+**OrgOnlyAutomation** · default severity: Medium
+
+Active automation on an impacted object exists in the org (`--org`) but not in the project.
+
+Preflight can only follow automation it can read, so the cascade may be incomplete. Retrieve the components into the project; managed-package automation can't be retrieved but still runs, so keep it enabled when testing.
 
 ## agent-metadata-changed
 

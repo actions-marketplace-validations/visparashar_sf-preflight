@@ -29,11 +29,14 @@ otherwise.
 
 ## Scope
 
-sf-preflight reads Salesforce metadata from a local SFDX project and runs `git` locally. It
-does not contact Salesforce orgs or external services in the current release. Issues of
-particular interest include:
+sf-preflight reads Salesforce metadata from a local SFDX project and runs `git` locally. Only
+when you pass `--org` (or the action's `sfdx-auth-url`/`org` inputs) does it contact a
+Salesforce org, through the Salesforce CLI and read-only queries listed in
+[docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md). It never contacts any other external service.
+Issues of particular interest include:
 
 - code execution or command injection via crafted metadata files, paths or git refs,
 - path traversal outside the project directory,
 - denial of service from crafted metadata (e.g. pathological XML or Apex input),
-- leaking sensitive metadata into reports in unexpected ways.
+- leaking sensitive metadata, record data or credentials into reports or logs,
+- any way to make `--org` write to an org or run commands other than the documented queries.

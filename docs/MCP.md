@@ -11,7 +11,7 @@ deploys, writes files or contacts a Salesforce org.
 
 | Tool | What it does | Key arguments |
 |---|---|---|
-| `analyze_change` | Full preflight report for a change: cascade, findings, suggested tests | `base` (default `HEAD`), `head`, `files`, `format` (`markdown`/`json`), `project_dir`, `max_depth` |
+| `analyze_change` | Full preflight report for a change: cascade, findings, suggested tests | `base` (default `HEAD`), `head`, `files`, `format` (`markdown`/`json`), `project_dir`, `max_depth`, `org` (beta, see [ORG_CONTEXT.md](ORG_CONTEXT.md)) |
 | `explain_save_order` | What runs, in order, when an object is saved | `object`, `event` (`insert`/`update`/`delete`/`undelete`), `project_dir` |
 | `find_field_references` | Validation rules, flows, Apex, formulas, roll-ups and permission sets that use a field | `object`, `field`, `project_dir` |
 

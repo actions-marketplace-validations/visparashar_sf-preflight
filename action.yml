@@ -24,6 +24,12 @@ inputs:
   depth:
     description: "Maximum cascade depth."
     default: "4"
+  sfdx-auth-url:
+    description: "Optional (beta): SFDX auth URL of a read-only integration user, passed from a secret. Installs the Salesforce CLI if needed, logs in, and adds org context (record counts, automation only in the org, permission set assignments)."
+    default: ""
+  org:
+    description: "Optional (beta): alias of an org already authorized earlier in the job. Ignored when sfdx-auth-url is set."
+    default: ""
   version:
     description: "sf-preflight npm version to run. Defaults to the version matching this action's ref. Use `local` to build from the action's source."
     default: ""
@@ -103,6 +109,31 @@ runs:
         fi
         echo "ref=$BASE" >> "$GITHUB_OUTPUT"
 
+    - name: Log in to Salesforce org
+      id: org
+      if: inputs.sfdx-auth-url != '' || inputs.org != ''
+      shell: bash
+      env:
+        SFDX_AUTH_URL: ${{ inputs.sfdx-auth-url }}
+        INPUT_ORG: ${{ inputs.org }}
+      run: |
+        set -euo pipefail
+        if [ -z "$SFDX_AUTH_URL" ]; then
+          echo "alias=$INPUT_ORG" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if ! command -v sf >/dev/null 2>&1; then
+          npm install --global @salesforce/cli --no-audit --no-fund --loglevel=error
+        fi
+        export SF_SKIP_NEW_VERSION_CHECK=true SF_DISABLE_TELEMETRY=true
+        # The auth URL is read from stdin so it never reaches the command line or disk.
+        if ! out=$(printf '%s' "$SFDX_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin - --alias sf-preflight-org --json 2>/dev/null); then
+          msg=$(printf '%s' "$out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).message)}catch{console.log("unknown error")}})')
+          echo "::error title=sf-preflight::Salesforce login failed: $msg"
+          exit 1
+        fi
+        echo "alias=sf-preflight-org" >> "$GITHUB_OUTPUT"
+
     - name: Analyze
       id: analyze
       shell: bash
@@ -111,11 +142,12 @@ runs:
         PROJECT: ${{ inputs.project }}
         BASE: ${{ steps.base.outputs.ref }}
         DEPTH: ${{ inputs.depth }}
+        ORG: ${{ steps.org.outputs.alias }}
       run: |
         set -euo pipefail
         OUT="$RUNNER_TEMP/sf-preflight"
         mkdir -p "$OUT"
-        $RUN analyze --project "$PROJECT" --base "$BASE" --depth "$DEPTH" \
+        $RUN analyze --project "$PROJECT" --base "$BASE" --depth "$DEPTH" ${ORG:+--org "$ORG"} \
           --format md --out "$OUT/report.md" --json-out "$OUT/report.json" --sarif-out "$OUT/report.sarif"
         {
           echo "md=$OUT/report.md"
@@ -174,6 +206,11 @@ runs:
       with:
         sarif_file: ${{ steps.analyze.outputs.sarif }}
         category: sf-preflight
+
+    - name: Log out of Salesforce org
+      if: always() && inputs.sfdx-auth-url != ''
+      shell: bash
+      run: sf org logout --target-org sf-preflight-org --no-prompt --json >/dev/null 2>&1 || true
 
     - name: Apply fail-on threshold
       shell: bash

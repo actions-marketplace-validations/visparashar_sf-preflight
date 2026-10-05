@@ -134,6 +134,13 @@ export const RULES: RuleInfo[] = [
     help: "It will not run until activated.",
   },
   {
+    id: "org-only-automation",
+    name: "OrgOnlyAutomation",
+    defaultSeverity: "medium",
+    summary: "Active automation on an impacted object exists in the org (`--org`) but not in the project.",
+    help: "Preflight can only follow automation it can read, so the cascade may be incomplete. Retrieve the components into the project; managed-package automation can't be retrieved but still runs, so keep it enabled when testing.",
+  },
+  {
     id: "agent-metadata-changed",
     name: "AgentMetadataChanged",
     defaultSeverity: "info",

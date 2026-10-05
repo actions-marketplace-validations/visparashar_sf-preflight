@@ -9,6 +9,7 @@ const SEVERITY_BADGE: Record<Severity, string> = {
 };
 const RISK_BADGE = { high: "🔴 HIGH", medium: "🟠 MEDIUM", low: "🟢 LOW" } as const;
 
+const uniqueSorted = (xs: string[]) => [...new Set(xs)].sort();
 const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 function cascadeLines(node: CascadeNode, prefix: string, isLast: boolean, isRoot: boolean, out: string[]): void {
@@ -90,6 +91,41 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
     if (result.findings.length > maxFindings)
       out.push("", `_…and ${result.findings.length - maxFindings} more in the JSON report._`);
     out.push("");
+  }
+
+  // Org context
+  const org = result.org;
+  if (org) {
+    out.push(`### Org context: \`${org.org}\``, "");
+    const objects = uniqueSorted([...Object.keys(org.recordCounts), ...org.orgOnlyAutomation.map((a) => a.object)]);
+    if (objects.length) {
+      out.push("| Object | Records | Automation only in the org |", "|---|---:|---|");
+      for (const o of objects) {
+        const count = org.recordCounts[o];
+        const extra = org.orgOnlyAutomation
+          .filter((a) => a.object === o)
+          .map(
+            (a) =>
+              `${a.kind === "ApexTrigger" ? "trigger" : a.kind === "Flow" ? "flow" : "VR"} \`${esc(a.namespace ? `${a.namespace}__${a.name}` : a.name)}\``,
+          )
+          .join(", ");
+        out.push(`| ${o} | ${count === undefined ? "—" : count.toLocaleString("en-US")} | ${extra || "—"} |`);
+      }
+      out.push("");
+    }
+    for (const a of org.assignments) {
+      out.push(
+        `- ${a.kind === "Profile" ? "Profile" : "Permission set"} \`${esc(a.name)}\` is assigned to **${a.activeUsers.toLocaleString("en-US")}** active user(s).`,
+      );
+    }
+    if (org.packages.length)
+      out.push(`- ${org.packages.length} installed package(s): ${org.packages.map((p) => esc(p.name)).join(", ")}.`);
+    if (org.assignments.length || org.packages.length) out.push("");
+    if (org.errors.length) {
+      out.push("<details><summary>Org queries that failed</summary>", "");
+      for (const e of org.errors) out.push(`- ${esc(e)}`);
+      out.push("", "</details>", "");
+    }
   }
 
   // Cascade
