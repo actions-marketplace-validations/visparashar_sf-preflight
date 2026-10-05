@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
+Agentforce action verification: which agent actions a change reaches, whether Testing Center
+covers them, and whether the agent's user can run them.
+
 ### Added
 
 - **Agentforce action verification:** preflight reads agents from source, both Agent Builder
@@ -146,7 +151,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/visparashar/sf-preflight/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/visparashar/sf-preflight/releases/tag/v0.1.0
