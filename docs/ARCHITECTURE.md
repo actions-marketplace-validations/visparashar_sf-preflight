@@ -30,6 +30,9 @@ git diff / --files
 | `changes.ts` | `git diff` → changed files → component changes; reading files at the base ref. |
 | `analyze.ts` | Seeds roots from changes, expands the cascade, detects cycles, produces findings and suggested tests. |
 | `report/markdown.ts` | GitHub-flavoured Markdown for PR comments. JSON is the `AnalysisResult` object itself. |
+| `report/sarif.ts` | SARIF 2.1.0 for code scanning. |
+| `org/sf.ts` | Read-only wrapper around the Salesforce CLI (`sf ... --json`), with input validation. |
+| `org/enrich.ts` | Optional `--org` context: record counts, org-only automation, assignments, packages; turns it into findings and annotations. |
 
 ## Key concepts
 

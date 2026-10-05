@@ -81,6 +81,7 @@ preflight explain Opportunity --event update
 | `--md-out`, `--json-out`, `--sarif-out <file>` | — | Also write the report in another format |
 | `-o, --out <file>` | stdout | Write the report to a file |
 | `--depth <n>` | `4` | Maximum cascade depth |
+| `--org <alias>` | — | Beta: add read-only context from an org authorized with `sf org login` ([details](docs/ORG_CONTEXT.md)) |
 | `--fail-on <level>` | `none` | Exit with code 2 when risk ≥ `low`, `medium` or `high` |
 
 ### Example
@@ -129,6 +130,19 @@ claude mcp add sf-preflight -- npx -y sf-preflight mcp
 `explain_save_order` and `find_field_references` — so Claude Code, Cursor, VS Code agents and
 other MCP clients can check their own Salesforce changes before committing. Setup for each
 client is in [docs/MCP.md](docs/MCP.md).
+
+### With org context (beta)
+
+```bash
+preflight analyze --base origin/main --org my-sandbox
+```
+
+Your SFDX source isn't the whole truth: orgs collect automation that never made it into the
+repo. With `--org`, preflight asks the org (read-only, through your existing `sf` CLI login)
+for record volumes of the impacted objects, active flows, triggers and validation rules that
+exist only in the org, how many users hold the permission sets you changed, and installed
+packages. The report contains only counts and metadata names. See
+[docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md).
 
 ### AI-assisted changes
 

@@ -26,6 +26,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   names the method that does the work.
 - `EventBus.publish` is treated as an insert of the platform event, so event-triggered
   automation joins the cascade.
+- **Org context (beta):** `preflight analyze --org <alias>` adds read-only context from an
+  org authorized with the Salesforce CLI. It reports record volumes for impacted objects
+  (used in bulk test suggestions), active flows/triggers/validation rules that exist in the
+  org but not in the project (new `org-only-automation` rule), how many active users hold
+  changed permission sets and profiles, and installed packages. Reports contain only counts
+  and metadata names. Also available as the MCP `org` argument and the action's
+  `sfdx-auth-url` / `org` inputs. See [docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md).
 
 ### Fixed
 

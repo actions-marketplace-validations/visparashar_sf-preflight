@@ -1,0 +1,304 @@
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  assertSafeOrg,
+  collectOrgContext,
+  createSfRunner,
+  loadProject,
+  run,
+  type SfRunner,
+  toMarkdown,
+} from "../src/core/index.js";
+import { createMcpServer } from "../src/mcp.js";
+
+const FIXTURE = path.resolve(__dirname, "../fixtures/sample-org");
+const FIELD = path.join(
+  FIXTURE,
+  "force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml",
+);
+const PERMSET = path.join(FIXTURE, "force-app/main/default/permissionsets/Agent_Runtime_User.permissionset-meta.xml");
+
+const rec = (type: string, fields: Record<string, unknown>) => ({ attributes: { type, url: `/x/${type}` }, ...fields });
+
+/** Recorded responses keyed by what the command/query asks for. */
+function fakeRunner(overrides: Partial<Record<string, unknown | Error>> = {}): SfRunner & { calls: string[][] } {
+  const calls: string[][] = [];
+  const respond = (k: string, value: unknown) => {
+    const o = overrides[k];
+    if (o instanceof Error) throw o;
+    return o ?? value;
+  };
+  const runner = ((args: string[]) => {
+    calls.push(args);
+    if (args[0] === "org" && args[1] === "display") return respond("display", { id: "00D000000000001", alias: "dev" });
+    if (args[0] === "org" && args[1] === "list") {
+      return respond("counts", [
+        { name: "Account", count: 120000 },
+        { name: "Opportunity", count: 2500000 },
+      ]);
+    }
+    const q = args[args.indexOf("--query") + 1] ?? "";
+    const records = (r: unknown[]) => ({ records: r, totalSize: r.length, done: true });
+    if (q.includes("FROM EntityDefinition")) {
+      return respond(
+        "entities",
+        records([
+          rec("EntityDefinition", { QualifiedApiName: "Account", DurableId: "Account", Label: "Account" }),
+          rec("EntityDefinition", { QualifiedApiName: "Contact", DurableId: "Contact", Label: "Contact" }),
+          rec("EntityDefinition", { QualifiedApiName: "Opportunity", DurableId: "Opportunity", Label: "Opportunity" }),
+        ]),
+      );
+    }
+    if (q.includes("FROM InstalledSubscriberPackage")) {
+      return respond(
+        "packages",
+        records([
+          rec("InstalledSubscriberPackage", {
+            SubscriberPackage: rec("SubscriberPackage", { NamespacePrefix: "SBQQ", Name: "Salesforce CPQ" }),
+            SubscriberPackageVersion: rec("SubscriberPackageVersion", {
+              MajorVersion: 252,
+              MinorVersion: 3,
+              PatchVersion: 0,
+            }),
+          }),
+        ]),
+      );
+    }
+    if (q.includes("FROM FlowDefinitionView")) {
+      return respond(
+        "flows",
+        records([
+          // in the project → ignored
+          rec("FlowDefinitionView", {
+            ApiName: "Opportunity_Closed_Won_Followup",
+            TriggerType: "RecordAfterSave",
+            RecordTriggerType: "CreateAndUpdate",
+            TriggerObjectOrEventId: "Opportunity",
+            TriggerObjectOrEventLabel: "Opportunity",
+          }),
+          // managed, matched by label
+          rec("FlowDefinitionView", {
+            ApiName: "Account_Quote_Sync",
+            TriggerType: "RecordAfterSave",
+            RecordTriggerType: "Update",
+            TriggerObjectOrEventId: "0kx000000000001",
+            TriggerObjectOrEventLabel: "Account",
+            NamespacePrefix: "SBQQ",
+          }),
+          // not an impacted object → ignored
+          rec("FlowDefinitionView", {
+            ApiName: "Lead_Router",
+            TriggerType: "RecordAfterSave",
+            RecordTriggerType: "Create",
+            TriggerObjectOrEventId: "Lead",
+            TriggerObjectOrEventLabel: "Lead",
+          }),
+          // screen flow → ignored
+          rec("FlowDefinitionView", { ApiName: "Intake", TriggerType: null, TriggerObjectOrEventId: null }),
+        ]),
+      );
+    }
+    if (q.includes("FROM ApexTrigger")) {
+      return respond(
+        "triggers",
+        records([
+          rec("ApexTrigger", { Name: "ContactTrigger", TableEnumOrId: "Contact", UsageAfterUpdate: true }),
+          rec("ApexTrigger", {
+            Name: "LegacyOpportunityTrigger",
+            TableEnumOrId: "Opportunity",
+            UsageBeforeUpdate: true,
+            UsageAfterInsert: true,
+          }),
+        ]),
+      );
+    }
+    if (q.includes("FROM ValidationRule")) {
+      return respond(
+        "vrs",
+        records([
+          rec("ValidationRule", { ValidationName: "Require_Contract_Signed_Date", EntityDefinitionId: "Opportunity" }),
+          rec("ValidationRule", { ValidationName: "Contact_Email_Required", EntityDefinitionId: "Contact" }),
+        ]),
+      );
+    }
+    if (q.includes("FROM PermissionSet WHERE")) {
+      return respond(
+        "permsets",
+        records([rec("PermissionSet", { Id: "0PS000000000001AAA", Name: "Agent_Runtime_User" })]),
+      );
+    }
+    if (q.includes("FROM PermissionSetAssignment")) {
+      return respond(
+        "assignments",
+        records([rec("AggregateResult", { PermissionSetId: "0PS000000000001AAA", n: 37 })]),
+      );
+    }
+    throw new Error(`unexpected sf call: ${args.join(" ")}`);
+  }) as SfRunner & { calls: string[][] };
+  runner.calls = calls;
+  return runner;
+}
+
+describe("org enrichment", () => {
+  it("collects record counts, org-only automation, packages and assignments", () => {
+    const runner = fakeRunner();
+    const result = run({ projectDir: FIXTURE, files: [FIELD, PERMSET], org: "dev", sfRunner: runner });
+    const org = result.org!;
+    expect(org.org).toBe("dev");
+    expect(org.errors).toEqual([]);
+    expect(org.recordCounts).toEqual({ Account: 120000, Opportunity: 2500000 });
+    expect(org.packages).toEqual([{ namespace: "SBQQ", name: "Salesforce CPQ", version: "252.3.0" }]);
+    expect(
+      org.orgOnlyAutomation.map((a) => `${a.kind}:${a.name}:${a.object}:${a.when.join("|")}:${a.packageName ?? ""}`),
+    ).toEqual([
+      "Flow:Account_Quote_Sync:Account:after update:Salesforce CPQ",
+      "ApexTrigger:LegacyOpportunityTrigger:Opportunity:after insert|before update:",
+      "ValidationRule:Contact_Email_Required:Contact:validation:",
+    ]);
+    expect(org.assignments).toEqual([{ kind: "PermissionSet", name: "Agent_Runtime_User", activeUsers: 37 }]);
+  });
+
+  it("only issues read-only commands, always against the requested org", () => {
+    const runner = fakeRunner();
+    run({ projectDir: FIXTURE, files: [FIELD, PERMSET], org: "dev", sfRunner: runner });
+    for (const args of runner.calls) {
+      expect(["org display", "org list", "data query"]).toContain(args.slice(0, 2).join(" "));
+      expect(args[args.indexOf("--target-org") + 1]).toBe("dev");
+      const q = args[args.indexOf("--query") + 1];
+      if (args[0] === "data") expect(q).toMatch(/^SELECT /);
+    }
+  });
+
+  it("turns org context into findings, annotations and a report section", () => {
+    const result = run({ projectDir: FIXTURE, files: [FIELD, PERMSET], org: "dev", sfRunner: fakeRunner() });
+    const orgOnly = result.findings.filter((f) => f.rule === "org-only-automation");
+    expect(orgOnly.map((f) => `${f.severity}:${f.object}`).sort()).toEqual([
+      "low:Account",
+      "medium:Contact",
+      "medium:Opportunity",
+    ]);
+    const opp = orgOnly.find((f) => f.object === "Opportunity")!;
+    expect(opp.detail).toContain("`sf project retrieve start --metadata ApexTrigger:LegacyOpportunityTrigger`");
+    const contact = orgOnly.find((f) => f.object === "Contact")!;
+    expect(contact.detail).toContain("--metadata ValidationRule:Contact.Contact_Email_Required");
+    expect(orgOnly.find((f) => f.object === "Account")!.detail).not.toContain("retrieve start");
+    const escalation = result.findings.find((f) => f.rule === "permission-escalation")!;
+    expect(escalation.detail).toContain("In dev it is assigned to 37 active user(s).");
+    const bulk = result.suggestedTests.find((t) => t.kind === "bulk" && t.object === "Opportunity")!;
+    expect(bulk.description).toContain("dev has 2,500,000 Opportunity records");
+    const md = toMarkdown(result);
+    expect(md).toContain("### Org context: `dev`");
+    expect(md).toContain("| Opportunity | 2,500,000 | trigger `LegacyOpportunityTrigger` |");
+    expect(md).toContain("`Agent_Runtime_User` is assigned to **37** active user(s)");
+  });
+
+  it("keeps going when one query fails and reports it", () => {
+    const runner = fakeRunner({ flows: new Error("sObject type 'FlowDefinitionView' is not supported.") });
+    const result = run({ projectDir: FIXTURE, files: [FIELD], org: "dev", sfRunner: runner });
+    expect(result.org!.errors).toEqual(["flows: sObject type 'FlowDefinitionView' is not supported."]);
+    expect(result.org!.orgOnlyAutomation.some((a) => a.kind === "ApexTrigger")).toBe(true);
+    expect(toMarkdown(result)).toContain("Org queries that failed");
+  });
+
+  it("fails clearly when the org can't be used", () => {
+    const runner = fakeRunner({ display: new Error("No authorization information found for nope.") });
+    expect(() => run({ projectDir: FIXTURE, files: [FIELD], org: "nope", sfRunner: runner })).toThrow(
+      'Could not use org "nope": No authorization information found for nope.',
+    );
+  });
+
+  it("matches custom objects referenced by id", () => {
+    const model = loadProject(FIXTURE);
+    const runner: SfRunner = (args) => {
+      const q = args[args.indexOf("--query") + 1] ?? "";
+      if (args[1] === "display" || args[1] === "list") return args[1] === "list" ? [] : {};
+      if (q.includes("EntityDefinition")) {
+        return { records: [{ QualifiedApiName: "Invoice__c", DurableId: "01I000000000ABC", Label: "Invoice" }] };
+      }
+      if (q.includes("ApexTrigger"))
+        return { records: [{ Name: "InvoiceTrigger", TableEnumOrId: "01I000000000ABC", UsageAfterInsert: true }] };
+      return { records: [] };
+    };
+    const ctx = collectOrgContext(
+      model,
+      { impactedObjects: ["Invoice__c"], changes: [] } as unknown as Parameters<typeof collectOrgContext>[1],
+      { org: "dev", runner },
+    );
+    expect(ctx.orgOnlyAutomation).toEqual([
+      {
+        kind: "ApexTrigger",
+        name: "InvoiceTrigger",
+        object: "Invoice__c",
+        when: ["after insert"],
+        namespace: undefined,
+        packageName: undefined,
+      },
+    ]);
+  });
+
+  it("validates org aliases", () => {
+    for (const ok of ["dev", "my-sandbox", "user@example.com.uat", "DevHub_1"]) expect(assertSafeOrg(ok)).toBe(ok);
+    for (const bad of ["--target-org", "a b", "", "x;rm -rf /", "-p"])
+      expect(() => assertSafeOrg(bad)).toThrow(/Invalid org/);
+  });
+});
+
+describe("sf runner (real subprocess)", () => {
+  let bin: string;
+  const originalPath = process.env.PATH;
+  beforeAll(() => {
+    bin = mkdtempSync(path.join(tmpdir(), "sf-preflight-sf-"));
+    const script = path.join(bin, "sf");
+    writeFileSync(
+      script,
+      `#!/bin/sh
+case "$*" in
+  *"org display"*"--target-org good"*) echo '{"status":0,"result":{"id":"00D"}}' ;;
+  *"data query"*) printf '%s' '{"status":0,"result":{"records":[{"attributes":{"type":"Account"},"Name":"x"}],"totalSize":1,"done":true}}' ;;
+  *) echo '{"status":1,"name":"NamedOrgNotFoundError","message":"No authorization information found for bad."}'; exit 1 ;;
+esac
+`,
+    );
+    chmodSync(script, 0o755);
+  });
+  afterAll(() => {
+    process.env.PATH = originalPath;
+    rmSync(bin, { recursive: true, force: true });
+  });
+
+  it("parses results, strips attributes and surfaces sf error messages", () => {
+    process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
+    const sf = createSfRunner();
+    expect(sf(["org", "display", "--target-org", "good"])).toEqual({ id: "00D" });
+    expect(() => sf(["org", "display", "--target-org", "bad"])).toThrow("No authorization information found for bad.");
+  });
+
+  it("explains how to proceed when sf is not installed", () => {
+    process.env.PATH = bin.replace(/[^/]+$/, "definitely-missing");
+    expect(() => createSfRunner()(["org", "display"])).toThrow(/Salesforce CLI \(`sf`\) not found/);
+  });
+});
+
+describe("MCP org argument", () => {
+  let client: Client;
+  beforeAll(async () => {
+    const server = createMcpServer({ root: FIXTURE, version: "0.0.0-test" });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    client = new Client({ name: "t", version: "1" });
+    await Promise.all([server.connect(b), client.connect(a)]);
+  });
+  afterAll(async () => client.close());
+
+  it("rejects unsafe org values as a tool error", async () => {
+    const res = await client.callTool({
+      name: "analyze_change",
+      arguments: { files: ["force-app/main/default/classes/OpportunityCloser.cls"], org: "--upload-pack=x" },
+    });
+    expect(res.isError).toBe(true);
+    expect((res.content as { text: string }[])[0]!.text).toContain("Invalid org alias");
+  });
+});

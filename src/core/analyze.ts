@@ -564,15 +564,10 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   // ------------------------------------------------------------------------------------
   // 4. Summary
   // ------------------------------------------------------------------------------------
-  const finalFindings = uniqBy(findings, (f) => `${f.rule}|${f.title}`).sort(
-    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
-  );
-  const findingsBySeverity: Record<Severity, number> = { high: 0, medium: 0, low: 0, info: 0 };
-  for (const f of finalFindings) findingsBySeverity[f.severity]++;
+  const { findings: finalFindings, findingsBySeverity, risk } = summarizeFindings(findings);
   const automationsInvolved = uniq(
     saveProcedures.flatMap((p) => p.steps.map((s) => `${s.automation.kind}:${s.automation.name}`)),
   ).length;
-  const risk = findingsBySeverity.high ? "high" : findingsBySeverity.medium ? "medium" : "low";
 
   return {
     schemaVersion: 1,
@@ -605,6 +600,21 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
 // ----------------------------------------------------------------------------------------
 // helpers
 // ----------------------------------------------------------------------------------------
+
+/** De-duplicate and sort findings by severity, count them, and derive the overall risk. */
+export function summarizeFindings(findings: Finding[]): {
+  findings: Finding[];
+  findingsBySeverity: Record<Severity, number>;
+  risk: "high" | "medium" | "low";
+} {
+  const sorted = uniqBy(findings, (f) => `${f.rule}|${f.title}`).sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+  );
+  const findingsBySeverity: Record<Severity, number> = { high: 0, medium: 0, low: 0, info: 0 };
+  for (const f of sorted) findingsBySeverity[f.severity]++;
+  const risk = findingsBySeverity.high ? "high" : findingsBySeverity.medium ? "medium" : "low";
+  return { findings: sorted, findingsBySeverity, risk };
+}
 
 /** Everything in the project that references `Object.Field`. */
 export function fieldReferences(model: OrgModel, object: string, field: string): Reference[] {
