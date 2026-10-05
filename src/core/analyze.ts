@@ -4,6 +4,7 @@ import { saveProcedure } from "./orderOfExecution.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import type {
   AnalysisResult,
+  ApexAnalysis,
   AutomationRef,
   CascadeNode,
   Change,
@@ -541,7 +542,9 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       rule: "dml-or-soql-in-loop",
       severity: a.changed ? "high" : "medium",
       title: `${a.issues.length} DML/SOQL statement(s) inside loops in ${a.name}${a.changed ? " (changed)" : " (in blast radius)"}`,
-      detail: a.issues.map((i) => `line ${i.line} ${i.kind}: ${i.snippet}`).join("; "),
+      detail: a.issues
+        .map((i) => `line ${i.line} ${i.kind}${i.via ? ` (inside ${i.via}())` : ""}: ${i.snippet}`)
+        .join("; "),
       files: [a.file],
       line: a.issues[0]?.line,
     });
@@ -619,15 +622,19 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
     if (flow.fieldRefs.some((r) => key(r) === tk))
       refs.push({ from: { kind: "Flow", name: flow.name, file: flow.file }, to: target });
   }
-  if (fk.endsWith("__c")) {
-    const re = new RegExp(`\\b${field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-    for (const trig of model.triggers.values()) {
-      if (re.test(trig.stripped))
-        refs.push({ from: { kind: "ApexTrigger", name: trig.name, file: trig.file }, to: target });
+  const re = new RegExp(`\\b${field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const apexUses = (def: ApexAnalysis): boolean => {
+    if (def.parser === "ast" && def.fieldRefs) {
+      return def.fieldRefs.some((r) => apexRefMatches(model, r, object, field));
     }
-    for (const cls of model.classes.values()) {
-      if (re.test(cls.stripped)) refs.push({ from: { kind: "ApexClass", name: cls.name, file: cls.file }, to: target });
-    }
+    // Heuristic fallback: text match, custom fields only (standard names are too common).
+    return fk.endsWith("__c") && re.test(def.stripped);
+  };
+  for (const trig of model.triggers.values()) {
+    if (apexUses(trig)) refs.push({ from: { kind: "ApexTrigger", name: trig.name, file: trig.file }, to: target });
+  }
+  for (const cls of model.classes.values()) {
+    if (apexUses(cls)) refs.push({ from: { kind: "ApexClass", name: cls.name, file: cls.file }, to: target });
   }
   for (const obj of model.objects.values()) {
     for (const f of obj.fields.values()) {
@@ -647,6 +654,38 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
       refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
   }
   return refs;
+}
+
+const RELATIONSHIP_OBJECTS: Record<string, string> = {
+  owner: "User",
+  createdby: "User",
+  lastmodifiedby: "User",
+  parent: "",
+};
+
+/**
+ * Does an AST field reference (`Object.Field`, `*.Field` or a SOQL path such as
+ * `Contact.Account.Industry`) point at `object.field`?
+ */
+function apexRefMatches(model: OrgModel, ref: string, object: string, field: string): boolean {
+  const parts = ref.split(".");
+  const last = parts[parts.length - 1]!;
+  if (key(last) !== key(field)) return false;
+  if (parts[0] === "*") return key(field).endsWith("__c");
+  if (parts.length === 2) return key(parts[0]!) === key(object);
+  // Walk relationship segments: Contact.Account.Industry → Account.Industry
+  let current = parts[0]!;
+  for (const rel of parts.slice(1, -1)) {
+    const relKey = key(rel);
+    if (relKey.endsWith("__r")) {
+      const lookup = model.objects.get(key(current))?.fields.get(relKey.replace(/__r$/, "__c"));
+      current = lookup?.referenceTo[0] ?? "";
+    } else {
+      current = RELATIONSHIP_OBJECTS[relKey] ?? rel;
+    }
+    if (!current) return false;
+  }
+  return key(current) === key(object);
 }
 
 /** Triggers and record-triggered flows that (transitively) call a class. */

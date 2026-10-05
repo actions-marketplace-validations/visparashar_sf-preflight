@@ -19,7 +19,7 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Development setup
 
-Requirements: Node.js **22.12+** and git.
+Requirements: Node.js **22.13+** and git.
 
 ```bash
 git clone https://github.com/visparashar/sf-preflight.git

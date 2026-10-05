@@ -21,7 +21,9 @@ git diff / --files
 | `parsers/fields.ts` | Custom fields, formula references, roll-up summary definitions. |
 | `parsers/validationRules.ts` | Active flag, formula and the fields it references. |
 | `parsers/flows.ts` | Record-triggered start conditions and the objects a flow writes, resolving `$Record`, typed variables, Get Records outputs and loop variables. |
-| `parsers/apex.ts` | Heuristic analysis of triggers and classes: DML targets, SOQL reads, class references, DML/SOQL inside loops. |
+| `parsers/apexAst.ts` | Apex analysis on a real parse tree ([@apexdevtools/apex-parser](https://github.com/apex-dev-tools/apex-parser)): DML targets with type resolution, SOQL reads, method calls (with enclosing method and loop context), field references and field writes. |
+| `parsers/apex.ts` | Entry points for triggers and classes. Uses `apexAst.ts`, and falls back to regex heuristics for files with syntax errors (with a warning). |
+| `callGraph.ts` | Cross-method and cross-class pass: which methods perform DML/SOQL directly or through callees, and which loops call them. |
 | `parsers/permissions.ts` | Object, field and system permissions in permission sets and profiles. |
 | `graph.ts` | Derived relationships: effective writes of a trigger/flow/class (following handlers, Apex actions and subflows), writers of an object, callers of a class. |
 | `orderOfExecution.ts` | The simplified save procedure for an object and DML event. |
@@ -71,8 +73,13 @@ rule implies something worth testing, also push a `SuggestedTest`.
 
 ## Known limitations
 
-- Apex analysis is regex-based. It resolves typed variables, `new`, inline SOQL and
-  `Trigger.new`, but not data flowing through method returns or collections of `SObject`.
+- Apex type resolution covers locals, parameters, for-each variables, class fields and
+  properties, casts, `new`, inline SOQL, `Trigger.*` and return types of methods in the same
+  class. DML on generic `SObject` collections, values returned from other classes and dynamic
+  DML (`Database.insert(records)` built from `Schema` describes) are counted as unresolved.
+- The call graph merges overloads by method name and does not follow interfaces, virtual
+  dispatch or dynamic `Type.forName` instantiation.
+- Files that fail to parse use the regex fallback and are listed in the report's warnings.
 - Process Builder, legacy workflow rules, duplicate rules, assignment rules, escalation rules
   and sharing recalculation are not modelled yet.
 - Order *within* a phase is alphabetical; Salesforce's flow trigger order is not yet read.

@@ -5,6 +5,12 @@ import { Command, Option } from "commander";
 import type { AnalysisResult, SaveEvent } from "./core/index.js";
 import { loadProject, run, saveProcedure, toMarkdown, toSarif } from "./core/index.js";
 
+// `preflight analyze | head` closes stdout early; exit quietly instead of crashing on EPIPE.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EPIPE") process.exit(process.exitCode ?? 0);
+  throw err;
+});
+
 const RISK_RANK = { low: 0, medium: 1, high: 2 } as const;
 const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   version: string;

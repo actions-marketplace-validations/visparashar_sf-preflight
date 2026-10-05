@@ -28,7 +28,7 @@ inputs:
     description: "sf-preflight npm version to run. Defaults to the version matching this action's ref. Use `local` to build from the action's source."
     default: ""
   node-version:
-    description: "Node.js version to set up (22.12 or newer). Set to an empty string to use the runner's Node."
+    description: "Node.js version to set up (22.13 or newer). Set to an empty string to use the runner's Node."
     default: "22"
   github-token:
     description: "Token used to post the PR comment."
