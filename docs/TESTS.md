@@ -45,6 +45,11 @@ On top of that, preflight works out the values each test needs from your metadat
   record (a roll-up summary, or automation that updates the parent), the bulk records share one
   parent so that part of the cascade runs too.
 
+The factory also copes with common org differences: it sets a record type when an object has
+them (the running user's default, else any active one), builds business accounts in orgs with
+Person Accounts, and always sets the fields a test asks for, even a field deployed together with
+the tests that no profile can see yet.
+
 When a value can't be worked out — a rule using functions preflight doesn't evaluate, or two
 rules that contradict the values a test needs — the test is still generated, with a `NOTE`
 comment naming the rule. Adjust the values there if the test fails on that rule.
