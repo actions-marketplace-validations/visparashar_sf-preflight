@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-import { actionsForAgentChange, actionTarget, actionWrites, analyzeAgents, targetRef } from "./agentImpact.js";
+import {
+  actionsForAgentChange,
+  actionTarget,
+  actionWrites,
+  analyzeAgents,
+  stillReferenced,
+  targetRef,
+} from "./agentImpact.js";
 import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -313,7 +320,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           if (!via) continue;
           for (const w of actionWrites(model, action)) roots.push({ object: w.object, event: opToEvent(w.op), via });
         }
-        if (!refs.length) {
+        if (!refs.length && !(deleted && stillReferenced(model, comp))) {
           addFinding({
             rule: "agent-metadata-changed",
             severity: "info",

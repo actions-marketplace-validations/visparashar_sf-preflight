@@ -7,5 +7,5 @@
     <logPrivateConversationData>false</logPrivateConversationData>
     <richContentEnabled>true</richContentEnabled>
     <sessionTimeout>0</sessionTimeout>
-    <type>InternalCopilot</type>
+    <type>ExternalCopilot</type>
 </Bot>

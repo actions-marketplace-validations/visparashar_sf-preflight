@@ -379,6 +379,29 @@ export function checkAgentUser(
   needs: AccessNeed[],
   apexClasses: string[] = [],
 ): Omit<AgentUserAccess, "agent" | "agentLabel"> {
+  try {
+    return checkAgentUserUnsafe(run, org, username, needs, apexClasses);
+  } catch (err) {
+    // sf errors can echo the command, which contains the username: never let it through.
+    const escaped = username.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const message = redactEmails(
+      String((err as Error).message ?? err)
+        .split(escaped)
+        .join("<runtime user>")
+        .split(username)
+        .join("<runtime user>"),
+    );
+    throw new SfError(message.includes("@") ? "query failed" : message);
+  }
+}
+
+function checkAgentUserUnsafe(
+  run: SfRunner,
+  org: string,
+  username: string,
+  needs: AccessNeed[],
+  apexClasses: string[],
+): Omit<AgentUserAccess, "agent" | "agentLabel"> {
   if (!USERNAME.test(username)) throw new SfError("the runtime user's username has an unexpected format");
   const quoted = `'${username.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
   const [user] = query(run, org, `SELECT Id, IsActive FROM User WHERE Username = ${quoted} LIMIT 1`);
@@ -394,7 +417,8 @@ export function checkAgentUser(
   const broad: string[] = [];
   const modifyAllData = assignments.some((a) => field(a, "PermissionSet.PermissionsModifyAllData") === true);
   if (modifyAllData) broad.push("Modify All Data");
-  if (assignments.some((a) => field(a, "PermissionSet.PermissionsViewAllData") === true)) broad.push("View All Data");
+  const viewAllData = assignments.some((a) => field(a, "PermissionSet.PermissionsViewAllData") === true);
+  if (viewAllData) broad.push("View All Data");
 
   const ids = uniq(assignments.map((a) => sfId(a.PermissionSetId, "0PS")).filter((i): i is string => !!i));
   const objects = needs.map((n) => n.object).filter((o) => /^[A-Za-z][A-Za-z0-9_]*$/.test(o));
@@ -418,8 +442,12 @@ export function checkAgentUser(
   for (const n of needs) {
     if (modifyAllData) break;
     const e = effective.get(key(n.object)) ?? {};
-    const lacking = n.access.filter((a) => !e[a === "create" ? "Create" : a === "edit" ? "Edit" : "Delete"]);
-    if (!e.Read || lacking.length) missing.push({ object: n.object, access: e.Read ? lacking : n.access });
+    const canRead = !!e.Read || viewAllData;
+    const column = { read: "Read", create: "Create", edit: "Edit", delete: "Delete" } as const;
+    const lacking = n.access.filter((a) => a !== "read" && !e[column[a]]);
+    if (!canRead || lacking.length) {
+      missing.push({ object: n.object, access: canRead ? lacking : ["read", ...lacking] });
+    }
   }
   for (const n of needs) {
     if (!modifyAllData && effective.get(key(n.object))?.ModifyAllRecords) broad.push(`Modify All on ${n.object}`);

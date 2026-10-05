@@ -139,6 +139,8 @@ export interface FlowDef {
   status: string;
   active: boolean;
   processType?: string;
+  /** "DefaultMode", "SystemModeWithSharing" or "SystemModeWithoutSharing". */
+  runInMode?: string;
   trigger?: FlowTrigger;
   writes: Write[];
   reads: string[];
@@ -255,6 +257,8 @@ export interface AgentAction {
   target?: string;
   /** The agent asks the user to confirm before running it. */
   confirmationRequired?: boolean;
+  /** Other names metadata uses to refer to it (developer name, full name, local name). */
+  aliases?: string[];
   file: string;
 }
 
@@ -272,6 +276,8 @@ export interface AgentDef {
   /** "Bot": Agent Builder metadata (bots, planners, topics, actions). "AgentScript": an `.agent` file. */
   source: "Bot" | "AgentScript";
   agentType?: string;
+  /** Employee agents run as the signed-in user, even when the metadata names a default user. */
+  employee?: boolean;
   /**
    * Username of the agent's dedicated runtime user (service agents). Used only to query the org with
    * `--org`; it must never appear in a report.
@@ -462,7 +468,8 @@ export interface SuggestedTest {
 /** Object access a user needs (read is implied). */
 export interface AccessNeed {
   object: string;
-  access: ("create" | "edit" | "delete")[];
+  /** "read" is implied by the others; it's listed when it's all that's needed (or missing). */
+  access: ("read" | "create" | "edit" | "delete")[];
 }
 
 /** An agent action the change affects. */

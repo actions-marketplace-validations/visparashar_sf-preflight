@@ -32,12 +32,21 @@ const SUFFIXES: [string, AgentFileKind][] = [
   [".genAiPromptTemplate-meta.xml", "promptTemplate"],
 ];
 
+/** Files that can belong to each bundle type (anything else in such a folder is ignored). */
+const BUNDLE_FILES: Record<string, RegExp> = {
+  bot: /\.(?:bot|botVersion)-meta\.xml$/,
+  planner: /\.(?:genAiPlannerBundle|xml|json)$/,
+  action: /\.(?:xml|json)$/,
+  script: /\.(?:agent|xml)$/,
+};
+
 /** Classify an Agentforce metadata path; undefined for anything else. */
 export function agentFileKind(parts: string[]): { kind: AgentFileKind; name: string } | undefined {
   const base = parts[parts.length - 1] ?? "";
   for (let i = parts.length - 3; i >= 0; i--) {
     const kind = BUNDLE_FOLDERS[parts[i]!];
     if (kind) {
+      if (!BUNDLE_FILES[kind]!.test(base)) return undefined;
       const name = parts[i + 1]!;
       if (kind === "bot" && base.endsWith(".botVersion-meta.xml")) return { kind: "botVersion", name };
       return { kind, name };
@@ -54,6 +63,8 @@ export function agentFileKind(parts: string[]): { kind: AgentFileKind; name: str
 // ---------------------------------------------------------------------------------------
 
 const nameOf = (n: XmlNode) => text(n.developerName) ?? text(n.fullName) ?? text(n.localDeveloperName);
+const namesOf = (n: XmlNode) =>
+  uniq([text(n.developerName), text(n.fullName), text(n.localDeveloperName)].filter((x): x is string => !!x));
 
 /** "apex" targets name a class; Agent Builder sometimes stores "Class.method". */
 function normalizeTarget(type: string, target: string | undefined): string | undefined {
@@ -64,7 +75,9 @@ function normalizeTarget(type: string, target: string | undefined): string | und
 
 function actionFrom(n: XmlNode, fallbackName: string, file: string): AgentAction {
   const targetType = text(n.invocationTargetType) ?? "unknown";
+  const aliases = namesOf(n).slice(1);
   return {
+    ...(aliases.length ? { aliases } : {}),
     name: nameOf(n) ?? fallbackName,
     label: text(n.masterLabel),
     description: text(n.description),
@@ -88,11 +101,15 @@ export interface ParsedTopic {
   local: AgentAction[];
   /** Names of actions defined elsewhere (GenAiFunction or the topic's local actions). */
   refs: string[];
+  /** Other names metadata uses to refer to the topic. */
+  aliases?: string[];
   file: string;
 }
 
 function topicFrom(n: XmlNode, fallbackName: string, file: string): ParsedTopic {
+  const aliases = namesOf(n).slice(1);
   return {
+    ...(aliases.length ? { aliases } : {}),
     name: nameOf(n) ?? fallbackName,
     label: text(n.masterLabel),
     local: nodes(n.localActions).map((a, i) => actionFrom(a, `${fallbackName}_action_${i + 1}`, file)),
@@ -146,9 +163,15 @@ export interface ParsedBot {
   name: string;
   label?: string;
   agentType?: string;
+  /** Bot type: "ExternalCopilot" (service agents), "InternalCopilot" (employee agents), "Bot", … */
+  botType?: string;
   runtimeUser?: string;
   file: string;
 }
+
+/** Employee agents run as the person using them. */
+const isEmployee = (agentType?: string, botType?: string) =>
+  /employee/i.test(agentType ?? "") || /^internalcopilot$/i.test(botType ?? "");
 
 /** `bots/<Name>/<Name>.bot-meta.xml` */
 export function parseBot(xml: string, name: string, file: string): ParsedBot {
@@ -157,6 +180,7 @@ export function parseBot(xml: string, name: string, file: string): ParsedBot {
     name,
     label: text(body.label),
     agentType: text(body.agentType),
+    botType: text(body.type),
     runtimeUser: text(body.botUser),
     file,
   };
@@ -231,7 +255,23 @@ function scriptTree(source: string): ScriptLine[] {
   return roots;
 }
 
-const unquote = (v: string) => v.replace(/^["']|["']$/g, "");
+/** Drop a trailing `# comment` outside quotes. */
+function stripComment(v: string): string {
+  let quote: string | undefined;
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i]!;
+    if (quote) {
+      if (c === quote) quote = undefined;
+    } else if (c === '"' || c === "'") {
+      quote = c;
+    } else if (c === "#" && (i === 0 || /\s/.test(v[i - 1]!))) {
+      return v.slice(0, i).trimEnd();
+    }
+  }
+  return v;
+}
+
+const unquote = (v: string) => stripComment(v).replace(/^["']|["']$/g, "");
 const child = (n: ScriptLine, k: string) => n.children.find((c) => c.key === k);
 
 const SCHEMES: Record<string, string> = { apex: "apex", flow: "flow", prompt: "prompt" };
@@ -275,6 +315,7 @@ export function parseAgentScript(source: string, name: string, file: string): Ag
     label: setting("agent_label"),
     source: "AgentScript",
     agentType: setting("agent_type"),
+    employee: isEmployee(setting("agent_type")) || undefined,
     runtimeUser: setting("default_agent_user"),
     topics,
     actions: [],
@@ -307,6 +348,11 @@ export function emptyAgentMetadata(): ParsedAgentMetadata {
  * agents of their own; references to topics or actions that aren't in the project are kept as
  * actions of type "unknown" so they still show up.
  */
+/** Look up by name or any alias. */
+function byNames<T extends { name: string; aliases?: string[] }>(items: T[]): Map<string, T> {
+  return new Map(items.flatMap((i) => [i.name, ...(i.aliases ?? [])].map((n) => [key(n), i] as const)));
+}
+
 export function linkAgents(parsed: ParsedAgentMetadata, warnings: string[]): Map<string, AgentDef> {
   const actions = new Map(parsed.actions.map((a) => [key(a.name), a]));
   const topics = new Map(parsed.topics.map((t) => [key(t.name), t]));
@@ -314,7 +360,7 @@ export function linkAgents(parsed: ParsedAgentMetadata, warnings: string[]): Map
   const missing = (name: string, file: string): AgentAction => ({ name, targetType: "unknown", file });
 
   const resolveTopic = (t: ParsedTopic): AgentTopic => {
-    const local = new Map(t.local.map((a) => [key(a.name), a]));
+    const local = byNames(t.local);
     const resolved = t.refs.map((r) => local.get(key(r)) ?? actions.get(key(r)) ?? missing(r, t.file));
     return {
       name: t.name,
@@ -333,7 +379,7 @@ export function linkAgents(parsed: ParsedAgentMetadata, warnings: string[]): Map
         continue;
       }
       out.files.push(p.file);
-      const local = new Map(p.localTopics.map((t) => [key(t.name), t]));
+      const local = byNames(p.localTopics);
       for (const t of p.localTopics) out.topics.push(resolveTopic(t));
       for (const ref of p.topicRefs) {
         if (local.has(key(ref))) continue;
@@ -345,7 +391,7 @@ export function linkAgents(parsed: ParsedAgentMetadata, warnings: string[]): Map
           out.topics.push({ name: ref, actions: [], file: p.file });
         }
       }
-      const localActions = new Map(p.localActions.map((a) => [key(a.name), a]));
+      const localActions = byNames(p.localActions);
       out.actions.push(
         ...p.localActions,
         ...p.actionRefs.filter((r) => !localActions.has(key(r))).map((r) => actions.get(key(r)) ?? missing(r, p.file)),
@@ -368,6 +414,7 @@ export function linkAgents(parsed: ParsedAgentMetadata, warnings: string[]): Map
       label: bot.label,
       source: "Bot",
       agentType: bot.agentType,
+      employee: isEmployee(bot.agentType, bot.botType) || undefined,
       runtimeUser: bot.runtimeUser,
       topics: uniqBy(resolved.topics, (t) => key(t.name)),
       actions: uniqBy(resolved.actions, (a) => key(a.name)),

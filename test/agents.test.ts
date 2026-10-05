@@ -63,6 +63,8 @@ describe("agent metadata paths", () => {
       name: "P",
     });
     expect(kind(`${SRC}/classes/Bots.cls`)).toBeUndefined();
+    // Only files a bundle can contain count, so a folder that happens to be named "bots" doesn't.
+    expect(kind(`${SRC}/bots/Sales_Agent/notes.md`)).toBeUndefined();
   });
 });
 
@@ -171,7 +173,7 @@ describe("agent metadata parsers", () => {
         "subagent Returns:",
         "    actions:",
         "        Start_Return:",
-        "            target: flow://Start_Return",
+        "            target: flow://Start_Return   # the main path",
       ].join("\n"),
       "concierge",
       "c.agent",
@@ -185,6 +187,39 @@ describe("agent metadata parsers", () => {
       "Returns:Start_Return=flow:Start_Return",
     ]);
     expect(agent.topics[1]!.actions[0]!.confirmationRequired).toBe(true);
+    expect(agent.employee).toBeUndefined();
+    const employee = parseAgentScript(
+      'config:\n    developer_name: "Helper"\n    agent_type: "AgentforceEmployeeAgent"\n    default_agent_user: "x@example.com"\n',
+      "helper",
+      "h.agent",
+    );
+    expect(employee.employee).toBe(true);
+  });
+
+  it("treats employee agents as running as the signed-in user", () => {
+    const meta = emptyAgentMetadata();
+    meta.bots.push(parseBot(xml("Bot", "<botUser>u@x.com</botUser><type>InternalCopilot</type>"), "Internal", "i"));
+    meta.bots.push(parseBot(xml("Bot", "<botUser>u@x.com</botUser><type>ExternalCopilot</type>"), "External", "e"));
+    const agents = linkAgents(meta, []);
+    expect(agents.get("internal")!.employee).toBe(true);
+    expect(agents.get("external")!.employee).toBeUndefined();
+  });
+
+  it("resolves local topics and actions by any of their names", () => {
+    const planner = parsePlanner(
+      xml(
+        "GenAiPlannerBundle",
+        "<localTopicLinks><genAiPluginName>Orders_16j</genAiPluginName></localTopicLinks><localTopics><developerName>Orders</developerName><fullName>Orders_16j</fullName><localActions><developerName>Cancel</developerName><fullName>Cancel_179</fullName><invocationTarget>C</invocationTarget><invocationTargetType>apex</invocationTargetType></localActions><localActionLinks><functionName>Cancel_179</functionName></localActionLinks></localTopics>",
+      ),
+      "P",
+      "p",
+    );
+    const meta = emptyAgentMetadata();
+    meta.planners.push(planner);
+    const agent = linkAgents(meta, []).get("p")!;
+    expect(agent.topics.map((t) => `${t.name}:${t.actions.map((a) => `${a.name}/${a.targetType}`).join(",")}`)).toEqual(
+      ["Orders:Cancel/apex"],
+    );
   });
 
   it("links bots to planners, topics and actions, and keeps unresolved references visible", () => {
@@ -358,6 +393,16 @@ describe("agent changes in a scratch copy of the project", () => {
     );
   });
 
+  it("never quotes agent files in parse warnings", () => {
+    const bot = path.join(dir, SRC, "bots/Broken_Agent/Broken_Agent.bot-meta.xml");
+    mkdirSync(path.dirname(bot), { recursive: true });
+    writeFileSync(bot, '<?xml version="1.0"?><Bot><label>B</label><botUser note="x>owner@acmecorp</botUser></Bot>');
+    const m = loadProject(dir);
+    expect(m.warnings).toContain(`Could not parse ${SRC}/bots/Broken_Agent/Broken_Agent.bot-meta.xml.`);
+    expect(m.warnings.join("\n")).not.toContain("acmecorp");
+    rmSync(path.dirname(bot), { recursive: true });
+  });
+
   it("flags actions whose class or flow is deleted", () => {
     const file = `${SRC}/flows/Remove_Task.flow-meta.xml`;
     rmSync(path.join(dir, file));
@@ -368,6 +413,37 @@ describe("agent changes in a scratch copy of the project", () => {
     const f = r.findings.find((x) => x.rule === "deleted-still-referenced")!;
     expect(f.severity).toBe("high");
     expect(f.title).toBe("Agent action Remove Task (Sales Agent › Close Deals) calls deleted flow Remove_Task");
+  });
+
+  it("flags deleted actions and topics an agent still uses", () => {
+    const actionFile = `${SRC}/genAiFunctions/Remove_Task/Remove_Task.genAiFunction-meta.xml`;
+    rmSync(path.join(dir, SRC, "genAiFunctions/Remove_Task"), { recursive: true });
+    const action = analyze({
+      model: loadProject(dir),
+      changes: [
+        {
+          changeType: "deleted",
+          component: { type: "AgentMetadata", agentKind: "action", name: "Remove_Task", file: actionFile },
+        },
+      ],
+    });
+    expect(action.findings.map((f) => `${f.severity}:${f.rule}:${f.title}`)).toEqual([
+      "high:deleted-still-referenced:Deleted agent action Remove_Task is still used by Sales Agent › Close Deals",
+    ]);
+    const topicFile = `${SRC}/genAiPlugins/Close_Deals.genAiPlugin-meta.xml`;
+    rmSync(path.join(dir, topicFile));
+    const topic = analyze({
+      model: loadProject(dir),
+      changes: [
+        {
+          changeType: "deleted",
+          component: { type: "AgentMetadata", agentKind: "topic", name: "Close_Deals", file: topicFile },
+        },
+      ],
+    });
+    expect(topic.findings.map((f) => `${f.severity}:${f.rule}:${f.title}`)).toEqual([
+      "high:deleted-still-referenced:Deleted topic Close_Deals is still used by agent Sales Agent",
+    ]);
   });
 });
 
@@ -391,17 +467,30 @@ describe("explaining agents", () => {
     expect(explainAgent(model, "Nope")).toBeUndefined();
   });
 
-  it("counts object access for Apex that enforces user mode", () => {
+  it("counts object access for Apex only when it uses user-mode DML", () => {
     const m = loadProject(FIXTURE);
     const cls = m.classes.get("opportunitycloser")!;
-    m.classes.set("opportunitycloser", { ...cls, stripped: `${cls.stripped}\n// update as user: WITH USER_MODE` });
-    const agent = m.agents.get("sales_agent") as AgentDef;
-    const action = agent.topics[0]!.actions[0]!;
+    const action = (m.agents.get("sales_agent") as AgentDef).topics[0]!.actions[0]!;
+    // Secured reads don't make the DML run as the user.
+    m.classes.set("opportunitycloser", {
+      ...cls,
+      stripped: `${cls.stripped}\n[SELECT Id FROM Account WITH SECURITY_ENFORCED];`,
+    });
+    expect(userAccess(m, action)).toEqual({ needs: [], apexClass: "OpportunityCloser", systemMode: true });
+    m.classes.set("opportunitycloser", { ...cls, stripped: `${cls.stripped}\nupdate as user opps;` });
     expect(userAccess(m, action)).toEqual({
       needs: [{ object: "Opportunity", access: ["edit"] }],
       apexClass: "OpportunityCloser",
       systemMode: undefined,
     });
+  });
+
+  it("needs no object access for flows that run in system mode", () => {
+    const m = loadProject(FIXTURE);
+    const action = (m.agents.get("service_agent") as AgentDef).topics[1]!.actions[0]!;
+    expect(userAccess(m, action).needs).toEqual([{ object: "Account", access: ["edit"] }]);
+    m.flows.get("update_customer_tier")!.runInMode = "SystemModeWithoutSharing";
+    expect(userAccess(m, action).needs).toEqual([]);
   });
 });
 

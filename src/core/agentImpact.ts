@@ -129,29 +129,46 @@ export function accessNeeds(writes: Write[]): AccessNeed[] {
     .sort((a, b) => a.object.localeCompare(b.object));
 }
 
-const USER_MODE = /\bWITH\s+USER_MODE\b|\bAccessLevel\.USER_MODE\b|\bstripInaccessible\b|\bWITH\s+SECURITY_ENFORCED\b/i;
+/** DML in user mode: `update as user records;` or `Database.update(records, AccessLevel.USER_MODE)`. */
+const USER_MODE_DML = /\b(?:insert|update|upsert|delete|undelete|merge)\s+as\s+user\b|\bAccessLevel\.USER_MODE\b/i;
+
+const SYSTEM_MODE_FLOW = new Set(["systemmodewithsharing", "systemmodewithoutsharing"]);
+
+/** Records a flow saves as the running user: its own writes and those of user-mode subflows. */
+function flowUserWrites(model: OrgModel, flowName: string, seen = new Set<string>()): Write[] {
+  const flow = model.flows.get(key(flowName));
+  if (!flow || seen.has(key(flow.name))) return [];
+  seen.add(key(flow.name));
+  if (flow.runInMode && SYSTEM_MODE_FLOW.has(key(flow.runInMode))) return [];
+  // Apex actions the flow calls run in system mode, so only the flow's own elements count.
+  return [...flow.writes, ...flow.subflows.flatMap((s) => flowUserWrites(model, s, seen))];
+}
 
 /**
- * Object access the action's user needs. Flows an agent calls run as the user; Apex runs in
- * system mode unless the class enforces user mode, so its saves need no object permissions.
+ * Object access the action's user needs. Flows run as the user unless set to system mode; Apex
+ * runs in system mode, so its saves need object permissions only when the code uses user-mode DML.
  */
 export function userAccess(
   model: OrgModel,
   action: AgentAction,
 ): { needs: AccessNeed[]; apexClass?: string; systemMode?: boolean } {
   const t = actionTarget(model, action);
-  const writes = actionWrites(model, action);
   if (t.kind === "ApexClass" && t.name) {
-    const cls = model.classes.get(key(t.name));
-    const enforces = !!cls && USER_MODE.test(cls.stripped);
-    return { needs: enforces ? accessNeeds(writes) : [], apexClass: t.name, systemMode: !enforces || undefined };
+    const code = actionCode(model, action);
+    const userMode = [...code.classes].some((c) => USER_MODE_DML.test(model.classes.get(c)?.stripped ?? ""));
+    return {
+      needs: userMode ? accessNeeds(actionWrites(model, action)) : [],
+      apexClass: t.name,
+      systemMode: !userMode || undefined,
+    };
   }
-  return { needs: accessNeeds(writes) };
+  if (t.kind === "Flow" && t.name) return { needs: accessNeeds(flowUserWrites(model, t.name)) };
+  return { needs: [] };
 }
 
 /** How the agent runs: as its own user (service agents) or as the person using it. */
 export function runsAs(agent: AgentDef): AgentImpact["runsAs"] {
-  return agent.runtimeUser ? "dedicated user" : "signed-in user";
+  return agent.runtimeUser && !agent.employee ? "dedicated user" : "signed-in user";
 }
 
 export const agentLabel = (a: AgentDef) => a.label ?? a.name;
@@ -261,6 +278,7 @@ function touched(changes: Change[]): Touched {
                 : "agent action";
         if (part === "agent" || part === "planner" || part === "topic" || part === "action") {
           t.agentParts.set(`${part}|${key(comp.name)}`, `${verb} ${noun} ${comp.name}`);
+          if (c.changeType === "deleted") t.deleted.add(`${part}|${key(comp.name)}`);
         }
         if (kind === "promptTemplate") {
           t.automation.set(`prompttemplate|${key(comp.name)}`, `${verb} prompt template ${comp.name}`);
@@ -326,8 +344,9 @@ function reasonsFor(
 /** Save procedures reached from an action's writes, and the first cycle found on the way. */
 function reachOf(input: AgentAnalysisInput, writes: Write[]): { procedures: SaveProcedure[]; cycle?: string[] } {
   const visited = new Map<string, SaveProcedure>();
+  const shallowest = new Map<string, number>();
   let cycle: string[] | undefined;
-  let budget = 300;
+  let budget = 500;
   const visit = (object: string, event: SaveEvent, path: string[], depth: number, via?: AutomationRef) => {
     if (budget-- <= 0) return;
     const p = input.proc(object, event);
@@ -337,9 +356,13 @@ function reachOf(input: AgentAnalysisInput, writes: Write[]): { procedures: Save
       cycle ??= [...path.map((x) => x.split("§")[1]!), label];
       return;
     }
-    const first = !visited.has(k);
     visited.set(k, p);
-    if (depth >= input.maxDepth || !first) return;
+    // Expand again only when reached at a shallower depth than before, so results don't depend
+    // on the order writes are followed in.
+    const before = shallowest.get(k);
+    if (before !== undefined && before <= depth) return;
+    shallowest.set(k, depth);
+    if (depth >= input.maxDepth) return;
     for (const step of p.steps) {
       for (const w of step.writes) {
         const ev: SaveEvent = w.op === "upsert" ? "update" : w.op;
@@ -351,6 +374,19 @@ function reachOf(input: AgentAnalysisInput, writes: Write[]): { procedures: Save
     visit(w.object, w.op === "upsert" ? "update" : w.op, [], 0);
   }
   return { procedures: [...visited.values()], cycle };
+}
+
+/** A deleted action or topic that agents in the project still use (reported by analyzeAgents). */
+export function stillReferenced(model: OrgModel, comp: ComponentRef): boolean {
+  const name = key(comp.name);
+  if (comp.agentKind === "action") {
+    return allAgentActions(model).some(({ action }) =>
+      [action.name, ...(action.aliases ?? [])].some((n) => key(n) === name),
+    );
+  }
+  if (comp.agentKind === "topic")
+    return [...model.agents.values()].some((a) => a.topics.some((t) => key(t.name) === name));
+  return false;
 }
 
 /** Agent actions that a changed piece of agent metadata defines or contains. */
@@ -391,8 +427,33 @@ export function analyzeAgents(input: AgentAnalysisInput): AgentAnalysis {
   const tests: SuggestedTest[] = [];
   if (!model.agents.size) return { impacts, findings, tests };
 
+  // Topics and actions deleted by the change but still used by an agent.
+  for (const agent of model.agents.values()) {
+    for (const topic of agent.topics) {
+      if (!t.deleted.has(`topic|${key(topic.name)}`)) continue;
+      findings.push({
+        rule: "deleted-still-referenced",
+        severity: "high",
+        title: `Deleted topic ${topic.name} is still used by agent ${agentLabel(agent)}`,
+        detail: "The deployment fails, or the agent loses the topic. Remove it from the agent too, or keep the topic.",
+        files: uniq([topic.file, agent.file]),
+      });
+    }
+  }
+
   for (const ref of allAgentActions(model)) {
     const { agent, topic, action } = ref;
+    if ([action.name, ...(action.aliases ?? [])].some((n) => t.deleted.has(`action|${key(n)}`))) {
+      findings.push({
+        rule: "deleted-still-referenced",
+        severity: "high",
+        title: `Deleted agent action ${action.name} is still used by ${agentLabel(agent)}${topic ? ` › ${topic.label ?? topic.name}` : ""}`,
+        detail: `The deployment fails, or the agent loses the action. Remove it from ${topic ? `topic ${topic.name}` : "the agent"} too, or keep the action.`,
+        files: uniq([topic?.file ?? agent.file, agent.file]),
+      });
+      continue;
+    }
+    if (topic && t.deleted.has(`topic|${key(topic.name)}`)) continue;
     const target = actionTarget(model, action);
     const writes = actionWrites(model, action);
     const reach = reachOf(input, writes);
@@ -619,6 +680,8 @@ export function explainAgent(model: OrgModel, name: string, maxDepth = 4): Agent
   };
 }
 
+const cell = (s: string) => s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+
 /** One line per agent, for `preflight agents` without a name. */
 export function agentListToMarkdown(model: OrgModel): string {
   if (!model.agents.size) return "No Agentforce agents found in the project.";
@@ -629,7 +692,7 @@ export function agentListToMarkdown(model: OrgModel): string {
   for (const a of [...model.agents.values()].sort((x, y) => x.name.localeCompare(y.name))) {
     const tests = model.agentTests.filter((t) => key(t.subject) === key(a.name)).map((t) => t.name);
     out.push(
-      `| \`${a.name}\`${a.label ? ` (${a.label})` : ""} | ${a.source === "AgentScript" ? "Agent Script" : "Agent Builder"} | ${a.topics.length} | ${agentActions(a).length} | ${runsAs(a) === "dedicated user" ? "own user" : "signed-in user"} | ${tests.join(", ") || "—"} |`,
+      `| \`${cell(a.name)}\`${a.label ? ` (${cell(a.label)})` : ""} | ${a.source === "AgentScript" ? "Agent Script" : "Agent Builder"} | ${a.topics.length} | ${agentActions(a).length} | ${runsAs(a) === "dedicated user" ? "own user" : "signed-in user"} | ${cell(tests.join(", ")) || "—"} |`,
     );
   }
   return out.join("\n");
@@ -656,7 +719,7 @@ export function agentExplanationToMarkdown(e: AgentExplanation): string {
           ...a.needs.map((n) => `${n.access.join("/") || "read"} ${n.object}`),
         ].join(", ") || "—";
       out.push(
-        `| ${a.topic ? `${a.topic} › ` : ""}${a.label ?? a.action}${a.confirmationRequired ? " (asks to confirm)" : ""} | ${calls} | ${saves}${a.cycle ? " ⟲" : ""} | ${needs} | ${a.tests.length ? `✅ ${a.tests.join(", ")}` : "⚠️ not tested"} |`,
+        `| ${cell(`${a.topic ? `${a.topic} › ` : ""}${a.label ?? a.action}`)}${a.confirmationRequired ? " (asks to confirm)" : ""} | ${cell(calls)} | ${cell(saves)}${a.cycle ? " ⟲" : ""} | ${cell(needs)} | ${a.tests.length ? `✅ ${cell(a.tests.join(", "))}` : "⚠️ not tested"} |`,
       );
     }
     out.push("");

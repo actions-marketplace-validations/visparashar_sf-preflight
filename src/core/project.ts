@@ -20,7 +20,7 @@ import { parseFlow } from "./parsers/flows.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
 import type { ComponentRef, ObjectDef, OrgModel } from "./types.js";
-import { key, toPosix } from "./util.js";
+import { key, redactEmails, toPosix } from "./util.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".sfdx", ".sf", ".vscode", ".idea", "dist"]);
 
@@ -148,7 +148,16 @@ export function loadProject(projectDirInput: string): OrgModel {
     try {
       fn();
     } catch (err) {
-      model.warnings.push(`Could not parse ${ref.file}: ${(err as Error).message}`);
+      // Parser messages can quote the file (a "Context:" excerpt). Agent files can name the agent's
+      // runtime user, so they get no details; other messages lose the excerpt and any emails.
+      const message = (err as Error).message;
+      const context = message.indexOf("Context:");
+      const detail = redactEmails((context >= 0 ? message.slice(0, context) : message).trim());
+      model.warnings.push(
+        ref.type === "AgentMetadata" || !detail
+          ? `Could not parse ${ref.file}.`
+          : `Could not parse ${ref.file}: ${detail}`,
+      );
     }
   };
 

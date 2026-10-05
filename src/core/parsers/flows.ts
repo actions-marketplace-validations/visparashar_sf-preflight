@@ -133,6 +133,7 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
     status,
     active: status === "Active",
     processType,
+    runInMode: text(body.runInMode),
     trigger,
     writes: uniqBy(writes, (w) => `${w.object}|${w.op}|${w.via}`),
     reads: uniq(reads),

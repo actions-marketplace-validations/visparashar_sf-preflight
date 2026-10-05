@@ -64,13 +64,14 @@ those no test covers.
 ## Runtime user
 
 Service agents run as a dedicated user (`botUser` in the bot, `default_agent_user` in Agent
-Script); employee agents run as the person using them. What that user needs depends on what the
-action calls:
+Script). Employee agents (bot type `InternalCopilot`, or an employee agent type) run as the person
+using them, even when a default user is named. What the user needs depends on what the action
+calls:
 
-- **Flows** run as the user, so it needs object access for everything the flow saves.
+- **Flows** run as the user unless set to run in system mode, so the user needs object access
+  for everything the flow and its subflows save (Apex actions inside the flow run in system mode).
 - **Apex** runs in system mode: the user needs access to the Apex class, plus object access only
-  when the class enforces user mode (`WITH USER_MODE`, `AccessLevel.USER_MODE`,
-  `Security.stripInaccessible`, `WITH SECURITY_ENFORCED`).
+  when the code saves in user mode (`update as user records;` or `AccessLevel.USER_MODE`).
 
 Without an org, preflight lists these needs. With `--org`, it checks the user's effective access
 from its permission set assignments (including its profile), and whether it can run the Apex

@@ -341,11 +341,30 @@ describe("org enrichment", () => {
     });
     const result = run({ projectDir: FIXTURE, files: [VR], org: "dev", sfRunner: runner });
     const service = result.org!.agentUsers!.find((u) => u.agent === "Service_Agent")!;
-    expect(service.missing).toEqual([{ object: "Account", access: ["edit"] }]);
+    expect(service.missing).toEqual([{ object: "Account", access: ["read", "edit"] }]);
     const sales = result.org!.agentUsers!.find((u) => u.agent === "Sales_Agent")!;
     expect(sales).toMatchObject({ missing: [], missingClasses: [], broad: [] });
     const finding = result.findings.find((f) => f.title.startsWith("Service Agent's runtime user lacks"))!;
-    expect(finding.detail).toContain("Missing: edit on Account (needed by Update Tier).");
+    expect(finding.detail).toContain("Missing: read/edit on Account (needed by Update Tier).");
+  });
+
+  it("keeps the runtime user's username out of query errors", () => {
+    const username = "sales.agent@example.com.sample";
+    const result = run({
+      projectDir: FIXTURE,
+      files: [FIELD],
+      org: "dev",
+      sfRunner: fakeRunner({
+        agentUser: new Error(
+          `sf data failed: Command failed: sf data query --query SELECT Id, IsActive FROM User WHERE Username = '${username}' LIMIT 1`,
+        ),
+      }),
+    });
+    expect(result.org!.errors).toEqual([
+      "runtime user of agent Sales Agent: sf data failed: Command failed: sf data query --query SELECT Id, IsActive FROM User WHERE Username = '<runtime user>' LIMIT 1",
+    ]);
+    expect(JSON.stringify(result)).not.toContain("sales.agent");
+    expect(toMarkdown(result)).not.toContain("sales.agent");
   });
 
   it("reports runtime users that are missing or inactive", () => {
