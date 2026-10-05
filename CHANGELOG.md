@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-05
+
+Accurate Apex analysis on a real parse tree, and read-only org context (beta).
+**Requires Node.js 22.13 or newer.**
+
 ### Changed
 
 - Apex is now analyzed on a real parse tree using
@@ -81,5 +86,6 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/visparashar/sf-preflight/releases/tag/v0.1.0
