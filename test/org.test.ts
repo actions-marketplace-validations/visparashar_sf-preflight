@@ -107,6 +107,8 @@ function fakeRunner(overrides: Partial<Record<string, unknown | Error>> = {}): S
         "triggers",
         records([
           rec("ApexTrigger", { Name: "ContactTrigger", TableEnumOrId: "Contact", UsageAfterUpdate: true }),
+          // only fires on delete, which this change never reaches → filtered out
+          rec("ApexTrigger", { Name: "ContactCleanup", TableEnumOrId: "Contact", UsageAfterDelete: true }),
           rec("ApexTrigger", {
             Name: "LegacyOpportunityTrigger",
             TableEnumOrId: "Opportunity",
@@ -194,6 +196,70 @@ describe("org enrichment", () => {
     expect(md).toContain("### Org context: `dev`");
     expect(md).toContain("| Opportunity | 2,500,000 | trigger `LegacyOpportunityTrigger` |");
     expect(md).toContain("`Agent_Runtime_User` is assigned to **37** active user(s)");
+  });
+
+  it("explains how the change reaches each org-only automation", () => {
+    const result = run({ projectDir: FIXTURE, files: [FIELD], org: "dev", sfRunner: fakeRunner() });
+    const orgOnly = result.findings.filter((f) => f.rule === "org-only-automation");
+    const byObject = (o: string) => orgOnly.find((f) => f.object === o)!.detail;
+    expect(byObject("Contact")).toContain(
+      "This change reaches Contact (update) via flow Account_Sync_Tier_To_Contacts, so these run too.",
+    );
+    expect(byObject("Account")).toContain(
+      "Account (update) via roll-up Account.Total_Won_Amount__c, trigger ContactTrigger",
+    );
+    expect(byObject("Opportunity")).toContain(
+      "Opportunity (update) via the change to Opportunity.Contract_Signed_Date__c",
+    );
+    for (const f of orgOnly) {
+      expect(f.detail).toBe(f.detail.trim());
+      expect(f.detail).not.toContain("  ");
+      expect(f.detail).not.toContain("ContactCleanup");
+    }
+  });
+
+  it("lists every impacted object in the org table and explains missing counts", () => {
+    const md = toMarkdown(run({ projectDir: FIXTURE, files: [FIELD], org: "dev", sfRunner: fakeRunner() }));
+    expect(md).toContain("| Task | n/a | — |");
+    expect(md).toContain("| Contact | n/a | VR `Contact_Email_Required` |");
+    expect(md).toContain("n/a: Salesforce's record-count API returned no count for this object.");
+    expect(md).toContain("plus read-only org context");
+  });
+
+  it("words bulk tests for small orgs", () => {
+    const runner = fakeRunner({ counts: [{ name: "Opportunity", count: 31 }] });
+    const result = run({ projectDir: FIXTURE, files: [FIELD], org: "dev", sfRunner: runner });
+    const bulk = result.suggestedTests.find((t) => t.kind === "bulk" && t.object === "Opportunity")!;
+    expect(bulk.description).toContain("(dev has 31 Opportunity records; 200 is still the minimum bulk size to test)");
+  });
+
+  it("never puts a username in the report", () => {
+    const username = "integration.user@example.com";
+    const withAlias = run({
+      projectDir: FIXTURE,
+      files: [FIELD, PERMSET],
+      org: username,
+      sfRunner: fakeRunner({ display: { alias: "uat", username } }),
+    });
+    expect(withAlias.org!.org).toBe("uat");
+    expect(toMarkdown(withAlias)).toContain("### Org context: `uat`");
+
+    const noAlias = run({
+      projectDir: FIXTURE,
+      files: [FIELD, PERMSET],
+      org: username,
+      sfRunner: fakeRunner({ display: { username }, flows: new Error(`INSUFFICIENT_ACCESS for ${username}`) }),
+    });
+    expect(noAlias.org!.org).toBe("target org");
+    expect(noAlias.org!.errors).toEqual(["flows: INSUFFICIENT_ACCESS for <username>"]);
+    const md = toMarkdown(noAlias);
+    expect(md).toContain("### Org context\n");
+    expect(md).toContain("run in the target org but aren't in this project");
+    expect(md).toContain("In the target org it is assigned to 37 active user(s).");
+    for (const r of [withAlias, noAlias]) {
+      expect(JSON.stringify(r)).not.toContain(username);
+      expect(toMarkdown(r)).not.toContain(username);
+    }
   });
 
   it("keeps going when one query fails and reports it", () => {

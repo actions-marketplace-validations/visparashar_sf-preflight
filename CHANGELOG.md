@@ -30,8 +30,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   org authorized with the Salesforce CLI. It reports record volumes for impacted objects
   (used in bulk test suggestions), active flows/triggers/validation rules that exist in the
   org but not in the project (new `org-only-automation` rule), how many active users hold
-  changed permission sets and profiles, and installed packages. Reports contain only counts
-  and metadata names. Also available as the MCP `org` argument and the action's
+  changed permission sets and profiles, and installed packages. Each org-only finding says
+  how the change reaches that automation and gives the `sf project retrieve start` command to
+  pull it in; automation that never fires for the events reached is left out. Reports contain
+  only counts and metadata names: a username passed to `--org` is shown as the org's alias
+  (or "target org"). Also available as the MCP `org` argument and the action's
   `sfdx-auth-url` / `org` inputs. See [docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md).
 
 ### Fixed
