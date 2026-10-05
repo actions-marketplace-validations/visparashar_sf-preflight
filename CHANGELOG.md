@@ -7,6 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Test generation:** `preflight tests` writes Apex tests for what a change touches: bulk saves
+  of 200 records for each affected object and event, recursion along cross-object automation
+  cycles, idempotency of after-save flows that update their own record and create related
+  records, and invocable actions surfacing (not swallowing) validation errors. Tests use a
+  generated, describe-driven data factory (`PreflightDataFactory`) that fills required fields at
+  run time; the values a test needs are solved from flow entry criteria and validation-rule
+  formulas. Anything not generated is listed with the reason, and the summary prints the
+  check-only `sf project deploy validate` command to run them. See
+  [docs/TESTS.md](docs/TESTS.md).
+- MCP tool `generate_tests` returns the same tests as code for coding agents (read-only; nothing
+  is written to disk).
+- `runTests()` and `generateTests()` in the library API.
+- Flow parsing now keeps start-condition values, filter logic, formulas and "only when updated to
+  meet the criteria"; the field a flow uses to link records it creates or updates to the
+  triggering record; Apex method parameter types and `static`; and custom field `required` and
+  default values.
+
 ## [0.2.0] - 2026-10-05
 
 Accurate Apex analysis on a real parse tree, and read-only org context (beta).

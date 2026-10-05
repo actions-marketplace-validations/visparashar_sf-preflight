@@ -6,3 +6,4 @@ coverage/
 .sf/
 .sfdx/
 .preflight/
+preflight-tests/

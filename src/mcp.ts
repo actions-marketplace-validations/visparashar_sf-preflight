@@ -3,7 +3,17 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { fieldReferences, loadProject, run, type SaveEvent, saveProcedure, toMarkdown } from "./core/index.js";
+import {
+  fieldReferences,
+  loadProject,
+  run,
+  runTests,
+  type SaveEvent,
+  saveProcedure,
+  sourceRoots,
+  testsToMarkdown,
+  toMarkdown,
+} from "./core/index.js";
 
 const INSTRUCTIONS = `sf-preflight analyzes Salesforce DX metadata changes before they ship.
 
@@ -11,7 +21,8 @@ Use it whenever you create or edit Salesforce metadata (flows, Apex, validation 
 permission sets):
 1. After editing, call analyze_change (no arguments compares the working tree with HEAD).
 2. Treat high findings as blockers: fix them or explain to the user why they are acceptable.
-3. Add the suggested tests that cover what you changed.
+3. Call generate_tests and add the generated Apex test classes (it returns the code; write the
+   files yourself), then review their NOTE comments.
 Use explain_save_order to understand what already runs on an object before adding automation,
 and find_field_references before renaming, retyping or deleting a field.`;
 
@@ -142,6 +153,59 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
             `${refs.length} reference(s) to ${args.object}.${args.field}:`,
             ...refs.map((r) => `- ${r.from.kind} ${r.from.name}${r.from.file ? ` (${r.from.file})` : ""}`),
           ].join("\n"),
+        );
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "generate_tests",
+    {
+      title: "Generate Apex tests for a change",
+      description:
+        "Generate Apex tests for what a Salesforce change touches: bulk saves at 200 records, recursion along " +
+        "automation cycles, flows not applied twice, and invocable actions surfacing validation errors. Returns " +
+        "a summary plus the Apex classes (a runtime data factory and a test class) as code; nothing is written " +
+        "to disk. With no base or files, uses the working tree versus HEAD.",
+      inputSchema: {
+        project_dir: projectDirSchema,
+        base: z.string().optional().describe("Git base ref, e.g. origin/main (default: HEAD)"),
+        head: z.string().optional().describe("Git head ref (default: the working tree)"),
+        files: z.array(z.string()).optional().describe("Use these metadata files as the change instead of a git diff"),
+        prefix: z
+          .string()
+          .regex(/^[A-Za-z][A-Za-z0-9_]{0,20}$/)
+          .optional()
+          .describe('Prefix for generated class names (default "Preflight")'),
+        bulk_size: z.number().int().min(1).max(10000).optional().describe("Records per bulk test (default 200)"),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const dir = projectDir(args.project_dir);
+        const { tests } = runTests({
+          projectDir: dir,
+          base: args.files?.length ? undefined : (args.base ?? "HEAD"),
+          head: args.head,
+          files: args.files,
+          prefix: args.prefix,
+          bulkSize: args.bulk_size,
+        });
+        const files = tests.files.map((f) => {
+          const lang = f.path.endsWith(".cls") ? "apex" : "xml";
+          return `#### ${f.path}\n\n\`\`\`${lang}\n${f.content.trimEnd()}\n\`\`\``;
+        });
+        return text(
+          [
+            testsToMarkdown(tests, { sourceDirs: sourceRoots(dir) }),
+            files.length ? "\n### Files\n\nWrite these into a package directory, e.g. force-app/main/default/:" : "",
+            ...files,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
         );
       } catch (err) {
         return failure(err);

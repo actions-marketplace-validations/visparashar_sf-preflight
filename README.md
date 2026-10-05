@@ -15,8 +15,8 @@ permissions — and reports the blast radius, the risks and the tests that matte
 
 It is open source, runs offline on your source code, and needs no org credentials.
 
-> **Status:** early (0.x). The CLI, MCP server and GitHub Action work today; live-org
-> enrichment, test generation and Agentforce action verification are on the
+> **Status:** early (0.x). The CLI, MCP server, GitHub Action and test generation work today;
+> org context is in beta, and Agentforce action verification is on the
 > [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
 
 ## What it finds
@@ -33,7 +33,8 @@ It is open source, runs offline on your source code, and needs no org credential
 | **Broken references** | Deleted fields, flows or classes that are still used |
 
 Every run also produces a **suggested test plan**: bulk, recursion, validation-collision,
-idempotency, boundary and permission-negative tests for exactly what the change touches.
+idempotency, boundary and permission-negative tests for exactly what the change touches — and
+`preflight tests` [generates the Apex](#generate-tests) for them.
 
 ## Quick start
 
@@ -100,6 +101,25 @@ Opportunity (update)   [changed: Opportunity.Contract_Signed_Date__c]
 The full Markdown report adds a findings table, the order of execution for each impacted
 object, references to the changed field and a test checklist — ready to paste into a PR.
 
+### Generate tests
+
+```bash
+preflight tests --base origin/main
+```
+
+Writes Apex tests for exactly what the change touches to `preflight-tests/`: bulk saves of 200
+records, recursion along automation cycles, flows that must not apply twice, and invocable
+actions that must not swallow validation errors. Test data comes from a schema-aware data
+factory, with values chosen to meet your flows' entry criteria and pass your validation rules.
+Run them with a check-only deployment to a sandbox:
+
+```bash
+sf project deploy validate --source-dir force-app --source-dir preflight-tests \
+  --test-level RunSpecifiedTests --tests PreflightChangeTest --target-org my-sandbox
+```
+
+See [docs/TESTS.md](docs/TESTS.md) for what is generated and how to read a failure.
+
 ### On pull requests (GitHub Action)
 
 ```yaml
@@ -126,9 +146,10 @@ summary, can upload findings to code scanning as SARIF, and exposes `risk` and
 claude mcp add sf-preflight -- npx -y sf-preflight mcp
 ```
 
-`preflight mcp` is a read-only MCP server with three tools — `analyze_change`,
-`explain_save_order` and `find_field_references` — so Claude Code, Cursor, VS Code agents and
-other MCP clients can check their own Salesforce changes before committing. Setup for each
+`preflight mcp` is a read-only MCP server with four tools — `analyze_change`,
+`explain_save_order`, `find_field_references` and `generate_tests` — so Claude Code, Cursor,
+VS Code agents and other MCP clients can check their own Salesforce changes, and write the tests
+for them, before committing. Setup for each
 client is in [docs/MCP.md](docs/MCP.md).
 
 ### With org context (beta)
@@ -163,13 +184,14 @@ console.log(toMarkdown(result));
 ## How it works
 
 ```
-SFDX source ─► parsers ─► org model ─► change mapper ─► order of execution ─► cascade ─► findings ─► Markdown / JSON
+SFDX source ─► parsers ─► org model ─► change mapper ─► order of execution ─► cascade ─► findings ─► Markdown / JSON / SARIF
+                                                                                               └─► generated Apex tests
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details and known limitations, and
 [docs/RULES.md](docs/RULES.md) for every rule. In short:
-Apex analysis is heuristic in v0.1, and Process Builder, legacy workflow, duplicate and
-assignment rules are not modelled yet.
+Process Builder, legacy workflow, duplicate and assignment rules are not modelled yet, and the
+Apex call graph doesn't follow interfaces or dynamic dispatch.
 
 ## Contributing
 

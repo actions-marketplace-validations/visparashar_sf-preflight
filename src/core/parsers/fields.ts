@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { FieldDef } from "../types.js";
-import { asArray, nodes, parseMetadataXml, text, uniq } from "../util.js";
+import { asArray, bool, nodes, parseMetadataXml, text, uniq } from "../util.js";
 import { formulaFieldRefs } from "./formula.js";
 
 /** Parse `objects/<Object>/fields/<Field>.field-meta.xml`. */
@@ -19,6 +19,8 @@ export function parseField(xml: string, object: string, fallbackName: string, fi
     formula,
     formulaRefs: formula ? formulaFieldRefs(formula) : [],
     referenceTo,
+    required: bool(body.required) || type === "MasterDetail" || undefined,
+    defaultValue: text(body.defaultValue),
     file,
   };
 

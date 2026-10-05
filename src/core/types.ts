@@ -43,9 +43,24 @@ export interface Write {
   fields?: string[];
   /** The automation writes back to the record that triggered it. */
   selfUpdate?: boolean;
+  /** Field on the written object that is set to (or filtered by) the triggering record's Id. */
+  linkField?: string;
   /** Flow element name or Apex line reference. */
   via?: string;
   confidence: Confidence;
+}
+
+/** A literal or reference value in flow metadata. */
+export interface FlowValue {
+  kind: "string" | "number" | "boolean" | "date" | "reference";
+  value: string;
+}
+
+export interface FlowFilter {
+  field: string;
+  /** EqualTo, NotEqualTo, IsChanged, IsNull, GreaterThan, … */
+  operator: string;
+  value?: FlowValue;
 }
 
 export interface FieldDef {
@@ -57,6 +72,9 @@ export interface FieldDef {
   /** Field API names referenced by a formula. */
   formulaRefs: string[];
   referenceTo: string[];
+  /** `<required>true</required>` (master-detail fields are always required). */
+  required?: boolean;
+  defaultValue?: string;
   /** Roll-up summary: this field (on the parent) is recalculated when `childObject` records change. */
   summary?: {
     childObject: string;
@@ -92,6 +110,13 @@ export interface FlowTrigger {
   events: SaveEvent[];
   /** Fields used in entry criteria. */
   entryFields: string[];
+  /** Entry conditions; `filterLogic` is "and", "or", a custom expression or undefined. */
+  filters: FlowFilter[];
+  filterLogic?: string;
+  /** Entry criteria written as a formula instead of filters. */
+  filterFormula?: string;
+  /** "Only when a record is updated to meet the condition requirements". */
+  requiresChange?: boolean;
   hasScheduledPaths: boolean;
 }
 
@@ -136,6 +161,9 @@ export interface ApexMethod {
   name: string;
   line: number;
   invocable: boolean;
+  isStatic?: boolean;
+  /** Parameter types as written, e.g. ["List<Id>"]. */
+  params?: string[];
   /** The method body itself contains DML / SOQL (not counting callees). */
   dml: boolean;
   soql: boolean;

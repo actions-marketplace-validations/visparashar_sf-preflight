@@ -286,6 +286,10 @@ class Analyzer {
       method.invocable = true;
       this.invocable = true;
     }
+    if (annotations.includes("static")) method.isStatic = true;
+    method.params = (n.formalParameters().formalParameterList()?.formalParameter_list() ?? []).map((p) =>
+      p.typeRef().getText(),
+    );
     const savedScope = this.scope;
     const savedMethod = this.currentMethod;
     this.scope = new Map();

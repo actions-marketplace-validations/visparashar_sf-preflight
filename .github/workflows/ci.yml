@@ -35,6 +35,13 @@ jobs:
       - run: npm run build
       - name: Smoke test CLI on sample org
         run: npm run analyze:sample
+      - name: Smoke test test generation on sample org
+        run: |
+          node dist/cli.js tests --project fixtures/sample-org \
+            --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml \
+            --out "$RUNNER_TEMP/preflight-tests"
+          test -s "$RUNNER_TEMP/preflight-tests/classes/PreflightChangeTest.cls"
+          test -s "$RUNNER_TEMP/preflight-tests/classes/PreflightDataFactory.cls"
       - name: Check the npm package contents
         run: npm pack --dry-run
 

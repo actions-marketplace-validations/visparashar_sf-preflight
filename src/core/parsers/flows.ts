@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { DmlOp, FlowDef, FlowTrigger, SaveEvent, Timing, Write } from "../types.js";
+import type { DmlOp, FlowDef, FlowTrigger, FlowValue, SaveEvent, Timing, Write } from "../types.js";
 import { nodes, parseMetadataXml, text, uniq, uniqBy, type XmlNode } from "../util.js";
 
 const RECORD_TRIGGER_EVENTS: Record<string, SaveEvent[]> = {
@@ -78,12 +78,18 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
         .map((a) => text(a.field))
         .filter((f): f is string => !!f),
     );
+    // A field assigned or filtered by the triggering record's Id links written records to it.
+    const pointsAtRecord = (n: XmlNode) => /^\$Record(\.Id)?$/i.test(flowValue(n.value)?.value ?? "");
+    const linkField =
+      trigger && !self
+        ? text([...nodes(el.inputAssignments), ...nodes(el.filters)].find(pointsAtRecord)?.field)
+        : undefined;
     for (const f of fields) fieldRefs.push(`${object}.${f}`);
     for (const filter of nodes(el.filters)) {
       const f = text(filter.field);
       if (f) fieldRefs.push(`${object}.${f}`);
     }
-    writes.push({ object, op, fields, selfUpdate: self || undefined, via: elementName, confidence });
+    writes.push({ object, op, fields, selfUpdate: self || undefined, linkField, via: elementName, confidence });
   };
 
   for (const el of nodes(body.recordUpdates)) addWrite(el, "update");
@@ -147,11 +153,10 @@ function parseTrigger(start: XmlNode | undefined): FlowTrigger | undefined {
     triggerType === "RecordBeforeDelete"
       ? (["delete"] as SaveEvent[])
       : (RECORD_TRIGGER_EVENTS[recordTriggerType ?? ""] ?? ["insert", "update"]);
-  const entryFields = uniq(
-    nodes(start.filters)
-      .map((f) => text(f.field))
-      .filter((f): f is string => !!f),
-  );
+  const filters = nodes(start.filters)
+    .map((f) => ({ field: text(f.field) ?? "", operator: text(f.operator) ?? "", value: flowValue(f.value) }))
+    .filter((f) => f.field);
+  const entryFields = uniq(filters.map((f) => f.field));
   const filterFormula = text(start.filterFormula);
   if (filterFormula) {
     for (const m of filterFormula.matchAll(/\$Record(?:__Prior)?\.([A-Za-z_][A-Za-z0-9_]*)/g)) {
@@ -163,6 +168,27 @@ function parseTrigger(start: XmlNode | undefined): FlowTrigger | undefined {
     timing: TRIGGER_TIMING[triggerType]!,
     events,
     entryFields: uniq(entryFields),
+    filters,
+    filterLogic: text(start.filterLogic)?.toLowerCase(),
+    filterFormula,
+    requiresChange: text(start.doesRequireRecordChangedToMeetCriteria)?.toLowerCase() === "true" || undefined,
     hasScheduledPaths: nodes(start.scheduledPaths).length > 0,
   };
+}
+
+/** Read a `<value>` element: stringValue, numberValue, booleanValue, dateValue or elementReference. */
+export function flowValue(v: unknown): FlowValue | undefined {
+  const node = nodes(v)[0];
+  if (!node) return undefined;
+  const pick = (k: string, kind: FlowValue["kind"]) => {
+    const t = text(node[k]);
+    return t === undefined ? undefined : { kind, value: t };
+  };
+  return (
+    pick("stringValue", "string") ??
+    pick("numberValue", "number") ??
+    pick("booleanValue", "boolean") ??
+    pick("dateValue", "date") ??
+    pick("elementReference", "reference")
+  );
 }
