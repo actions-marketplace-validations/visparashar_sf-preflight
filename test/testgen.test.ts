@@ -183,6 +183,11 @@ describe("test generation", () => {
     ]);
   });
 
+  it("fills name fields even when the org reports them as optional", () => {
+    // Account.Name is nillable in orgs with Person Accounts but required for business accounts.
+    expect(fileOf(g0(), "DataFactory.cls")).toContain("field.isNameField() && !field.isAutoNumber()");
+  });
+
   it("qualifies system classes that an org's own classes could hide", () => {
     // Orgs often have a class named Test; a bare Test.startTest() then doesn't compile.
     for (const f of g0().files.filter((x) => x.path.endsWith(".cls"))) {

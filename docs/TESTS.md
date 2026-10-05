@@ -94,13 +94,16 @@ sf project deploy validate --source-dir force-app --source-dir preflight-tests \
   --test-level RunSpecifiedTests --tests PreflightChangeTest --target-org my-sandbox
 ```
 
-A failing test points at one of two things:
+A test that doesn't pass is reported in one of two ways:
 
-- **A real risk**: a governor limit at bulk volume, a recursion loop, automation applied twice,
-  or an action that swallows validation errors. The assertion message says which.
-- **Test data the org rejects**, for example a validation rule, duplicate rule or required field
-  that only exists in the org. The `NOTE` comments say which values to adjust; `--org` context
-  in `preflight analyze` lists automation that exists only in the org.
+- **❌ fail** points at a real risk: a governor limit at bulk volume, a recursion loop, automation
+  applied twice, or an action that swallows validation errors. The assertion message says which.
+  It can also mean the org rejected a value the test set itself; the `NOTE` comments say which
+  values to adjust.
+- **⚠️ setup failed** means the data factory couldn't create records the org accepts (for
+  example a validation rule, duplicate rule or required field that exists only in the org), so
+  the test stopped before checking anything. The message names the object and the error. `--org`
+  context in `preflight analyze` lists automation that exists only in the org.
 
 The generated classes are a starting point. Keep the ones that are useful in your project's own
 test suite, rename them, and extend them with assertions about your business rules.

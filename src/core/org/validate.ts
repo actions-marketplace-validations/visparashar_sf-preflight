@@ -33,7 +33,8 @@ export type OrgKind = "sandbox" | "scratch" | "developer" | "production" | "unkn
 
 export interface TestOutcome {
   method: string;
-  outcome: "pass" | "fail" | "not run";
+  /** "setup failed": the data factory couldn't create records the org accepts, so nothing was checked. */
+  outcome: "pass" | "fail" | "setup failed" | "not run";
   /** Failure message and the first line of the stack trace. */
   message?: string;
   ms?: number;
@@ -97,6 +98,10 @@ interface DeployResponse {
   };
 }
 
+/** The generated data factory throws PreflightException when the org rejects its records. */
+const failureKind = (message: string): "fail" | "setup failed" =>
+  /^[\w.]*PreflightException:/.test(message.trim()) ? "setup failed" : "fail";
+
 /** Turn a deploy result from `sf project deploy validate|report --json` into test outcomes. */
 export function readDeployResult(
   response: DeployResponse,
@@ -119,7 +124,8 @@ export function readDeployResult(
     if (!f.methodName) continue;
     const trace = (f.stackTrace ?? "").split("\n")[0]?.trim();
     const message = clip(redact([f.message?.trim(), trace ? `(${trace})` : ""].filter(Boolean).join(" ")));
-    byMethod.set(f.methodName.toLowerCase(), { method: f.methodName, outcome: "fail", message, ms: ms(f) });
+    const outcome = failureKind(f.message ?? "");
+    byMethod.set(f.methodName.toLowerCase(), { method: f.methodName, outcome, message, ms: ms(f) });
   }
   const tests = methods.map((m) => byMethod.get(m.toLowerCase()) ?? { method: m, outcome: "not run" as const });
 
@@ -175,7 +181,7 @@ export function readFailureMessage(
   return {
     tests: methods.map((method) => {
       const msg = failed.get(method.toLowerCase());
-      return msg !== undefined ? { method, outcome: "fail" as const, message: msg } : { method, outcome: "not run" };
+      return msg !== undefined ? { method, outcome: failureKind(msg), message: msg } : { method, outcome: "not run" };
     }),
     message: clip(redact(message)),
   };
@@ -252,7 +258,12 @@ export function validateTests(opts: ValidateTestsOptions): ValidationResult {
   return { org: label, orgKind: kind, ...read };
 }
 
-const OUTCOME = { pass: "✅ pass", fail: "❌ fail", "not run": "⏭️ not run" } as const;
+const OUTCOME = {
+  pass: "✅ pass",
+  fail: "❌ fail",
+  "setup failed": "⚠️ setup failed",
+  "not run": "⏭️ not run",
+} as const;
 const cell = (s: string) => s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 const seconds = (ms?: number) => (ms === undefined ? "" : `${(ms / 1000).toFixed(1)} s`);
 
@@ -261,6 +272,8 @@ export function validationToMarkdown(v: ValidationResult): string {
   const out: string[] = [`### Run in ${orgRef(v.org)}`, ""];
   const passed = v.tests.filter((t) => t.outcome === "pass").length;
   const failed = v.tests.filter((t) => t.outcome === "fail").length;
+  const setup = v.tests.filter((t) => t.outcome === "setup failed").length;
+  const setupNote = setup ? `${setup} couldn't create their test data in this org` : "";
   const coverageOnly =
     v.status === "failed" &&
     !v.componentErrors.length &&
@@ -274,8 +287,10 @@ export function validationToMarkdown(v: ValidationResult): string {
         : v.componentErrors.length
           ? `❌ The deployment has ${v.componentErrors.length} component error(s); ${passed ? `${passed} test(s) passed` : "no tests ran"}.`
           : failed
-            ? `❌ ${failed} of ${v.tests.length} tests failed.`
-            : "❌ The validation failed.";
+            ? `❌ ${failed} of ${v.tests.length} tests failed${setup ? `, and ${setupNote}` : ""}.`
+            : setup
+              ? `⚠️ ${setup} of ${v.tests.length} tests couldn't create their test data in this org; the others passed.`
+              : "❌ The validation failed.";
   const ran = v.tests.some((t) => t.outcome !== "not run");
   out.push(
     ran
@@ -310,7 +325,13 @@ export function validationToMarkdown(v: ValidationResult): string {
   }
   if (failed) {
     out.push(
-      "A failure is either a real risk (the assertion or exception says which) or test data the org rejects; the NOTE comments in the test class say which values to adjust.",
+      "A failed test points at a real risk (the assertion or exception says which) or at values this org rejects; the NOTE comments in the test class say which values to adjust.",
+      "",
+    );
+  }
+  if (setup) {
+    out.push(
+      "A test whose setup failed stopped before checking anything: the data factory couldn't create records this org accepts. The message names the object and the error; set the missing values in that test's map, and please report it if the factory should have handled it.",
       "",
     );
   }

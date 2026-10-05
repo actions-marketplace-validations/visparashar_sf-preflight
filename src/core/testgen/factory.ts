@@ -76,7 +76,9 @@ public class ${className} {
             Schema.DescribeFieldResult field = fields.get(key).getDescribe();
             Boolean overridden = wanted.containsKey(key);
             Boolean required = !field.isNillable() && !field.isDefaultedOnCreate();
-            if (!field.isCreateable() || (!overridden && !required)) {
+            // A name field can be nillable yet still required, e.g. Account.Name with Person Accounts.
+            Boolean nameField = field.isNameField() && !field.isAutoNumber() && !field.isCalculated();
+            if (!field.isCreateable() || (!overridden && !required && !nameField)) {
                 continue;
             }
             plan.add(field);

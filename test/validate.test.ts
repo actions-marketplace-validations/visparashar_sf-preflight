@@ -190,6 +190,47 @@ describe("validateTests", () => {
     expect(validationToMarkdown(v)).toContain("Failed to validate the deployment");
   });
 
+  it("tells failed setup apart from failed checks", () => {
+    const v = readDeployResult(
+      {
+        id: DEPLOY_ID,
+        success: false,
+        details: {
+          runTestResult: {
+            successes: [success(CLASS, "bulkInsertOpportunity")],
+            failures: [
+              {
+                name: CLASS,
+                methodName: "bulkUpdateOpportunity",
+                message:
+                  "PreflightDataFactory.PreflightException: Could not create test Account records: REQUIRED_FIELD_MISSING",
+              },
+              {
+                name: CLASS,
+                methodName: "recursionAccountContact",
+                message: "System.LimitException: Too many SOQL queries: 101",
+              },
+            ],
+          },
+        },
+      },
+      CLASS,
+      METHODS,
+    );
+    expect(v.tests.map((t) => t.outcome)).toEqual(["setup failed", "pass", "fail"]);
+    const md = validationToMarkdown({ org: "dev", orgKind: "developer", ...v });
+    expect(md).toContain("❌ 1 of 3 tests failed, and 1 couldn't create their test data in this org.");
+    expect(md).toContain("| `bulkUpdateOpportunity` | ⚠️ setup failed |");
+    expect(md).toContain("A test whose setup failed stopped before checking anything");
+    const onlySetup = validationToMarkdown({
+      org: "dev",
+      orgKind: "developer",
+      ...v,
+      tests: v.tests.filter((t) => t.outcome !== "fail"),
+    });
+    expect(onlySetup).toContain("⚠️ 1 of 2 tests couldn't create their test data in this org; the others passed.");
+  });
+
   it("explains a deployment rejected only on code coverage", () => {
     const v = readDeployResult(
       {
