@@ -4,7 +4,7 @@
 [![CodeQL](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml)
 [![npm](https://img.shields.io/npm/v/sf-preflight.svg)](https://www.npmjs.com/package/sf-preflight)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-![Node.js 22.12+](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen.svg)
+![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)
 
 **Preflight checks for Salesforce changes: know what a change will set off — before it ships.**
 
@@ -37,7 +37,7 @@ idempotency, boundary and permission-negative tests for exactly what the change 
 
 ## Quick start
 
-Requires Node.js 22.12 or newer. Run it from the root of an SFDX project:
+Requires Node.js 22.13 or newer. Run it from the root of an SFDX project:
 
 ```bash
 npx sf-preflight analyze --base origin/main

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { applyCallGraph } from "./callGraph.js";
 import { parseApexClass, parseApexTrigger } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
@@ -204,6 +205,16 @@ export function loadProject(projectDirInput: string): OrgModel {
         break;
       default:
         break;
+    }
+  }
+
+  applyCallGraph(model);
+  for (const def of [...model.classes.values(), ...model.triggers.values()]) {
+    const first = def.parseErrors?.[0];
+    if (first) {
+      model.warnings.push(
+        `Apex syntax error in ${def.file} (line ${first.line}: ${first.message}); used heuristic analysis for this file.`,
+      );
     }
   }
 

@@ -115,6 +115,30 @@ export interface LoopIssue {
   kind: "soql-in-loop" | "dml-in-loop";
   line: number;
   snippet: string;
+  /** Set when the DML/SOQL happens inside a method called from the loop, e.g. "AccountService.save". */
+  via?: string;
+}
+
+/** A method call found in Apex source. */
+export interface ApexCall {
+  /** Target class; undefined for calls to the same class. */
+  cls?: string;
+  method: string;
+  line: number;
+  inLoop: boolean;
+  /** Name of the calling method ("<trigger>" for trigger bodies). */
+  from: string;
+  snippet: string;
+}
+
+/** Per-method summary used for cross-method and cross-class analysis. */
+export interface ApexMethod {
+  name: string;
+  line: number;
+  invocable: boolean;
+  /** The method body itself contains DML / SOQL (not counting callees). */
+  dml: boolean;
+  soql: boolean;
 }
 
 export interface ApexAnalysis {
@@ -125,6 +149,17 @@ export interface ApexAnalysis {
   unresolvedDml: number;
   /** Source with comments and string contents blanked out (same length/lines as original). */
   stripped: string;
+  /** "ast" when parsed with the Apex grammar; "heuristic" for the regex fallback. */
+  parser?: "ast" | "heuristic";
+  /** Syntax errors that forced the heuristic fallback. */
+  parseErrors?: { line: number; message: string }[];
+  /** AST only: method calls, method summaries and resolved field references. */
+  calls?: ApexCall[];
+  methods?: ApexMethod[];
+  /** `Object.Field` references; `*.Field` when the object could not be resolved. */
+  fieldRefs?: string[];
+  /** `Object.Field` values assigned in code. */
+  fieldWrites?: string[];
 }
 
 export interface ApexTriggerDef extends ApexAnalysis {

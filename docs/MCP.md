@@ -23,7 +23,7 @@ metadata, before adding automation to an object, and before renaming or deleting
 
 ## Setup
 
-Requires Node.js 22.12+. The server analyzes the directory it is started in; pass
+Requires Node.js 22.13+. The server analyzes the directory it is started in; pass
 `--root <dir>` to choose another one. Tool calls cannot reach outside that root.
 
 ### Claude Code

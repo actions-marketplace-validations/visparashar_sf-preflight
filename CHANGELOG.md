@@ -7,6 +7,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Apex is now analyzed on a real parse tree using
+  [@apexdevtools/apex-parser](https://github.com/apex-dev-tools/apex-parser) instead of regular
+  expressions. DML targets resolve through parameters, for-each variables, class fields and
+  properties, casts and same-class method return types. Files with syntax errors fall back to
+  the previous heuristics and are listed in the warnings.
+- Field references in Apex are matched precisely by object, including standard fields and SOQL
+  relationship paths, so `find_field_references` and the "deleted but still referenced" check
+  have fewer false positives.
+- Requires Node.js 22.13 or newer (required by the Apex parser).
+
+### Added
+
+- DML and SOQL inside helper methods called from a loop are now found, across classes (for
+  example a trigger handler loop calling `AccountRepo.touch()` which runs a query). The finding
+  names the method that does the work.
+- `EventBus.publish` is treated as an insert of the platform event, so event-triggered
+  automation joins the cascade.
+
+### Fixed
+
+- Piping output into a command that exits early (for example `preflight analyze | head`) no
+  longer crashes with an `EPIPE` error.
+
 ## [0.1.0] - 2026-10-05
 
 First public release: offline analysis, CLI, MCP server for coding agents, GitHub Action

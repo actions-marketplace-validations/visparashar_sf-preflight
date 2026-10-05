@@ -11,11 +11,12 @@ import type {
   Write,
 } from "../types.js";
 import { lineOf, uniq, uniqBy } from "../util.js";
+import { analyzeApexAst } from "./apexAst.js";
 
 /**
- * Heuristic Apex analysis (v0). Good enough to find DML targets, SOQL reads, class
- * references and DML/SOQL inside loops in typical trigger/handler code. Replaced by a real
- * parser in M3.
+ * Apex entry points. Source is parsed with the Apex grammar (see apexAst.ts); when a file has
+ * syntax errors the regex-based heuristic analysis below is used instead, so one broken file
+ * never stops the run.
  */
 
 /** Blank out comments and string literal contents, preserving offsets and newlines. */
@@ -197,9 +198,16 @@ export function analyzeApex(source: string, ctx: Context, stripped = stripApex(s
 
 export function parseApexClass(source: string, name: string, file: string, projectObjects: Set<string>): ApexClassDef {
   const stripped = stripApex(source);
+  const ast = analyzeApexAst(source, { projectObjects, kind: "class" });
+  if (!("errors" in ast)) {
+    const { name: _parsedName, triggerObject: _t, triggerEvents: _e, ...analysis } = ast;
+    return { ...analysis, stripped, name, file };
+  }
   const analysis = analyzeApex(source, { projectObjects }, stripped);
   return {
     ...analysis,
+    parser: "heuristic",
+    parseErrors: ast.errors,
     name,
     invocable: /@InvocableMethod\b/i.test(stripped),
     isTest: /@isTest\b/i.test(stripped),
@@ -216,6 +224,18 @@ export function parseApexTrigger(
   projectObjects: Set<string>,
 ): ApexTriggerDef | undefined {
   const stripped = stripApex(source);
+  const ast = analyzeApexAst(source, { projectObjects, kind: "trigger" });
+  if (!("errors" in ast) && ast.triggerObject) {
+    const { name, triggerObject, triggerEvents, invocable: _i, isTest: _t, ...analysis } = ast;
+    return {
+      ...analysis,
+      stripped,
+      name: name ?? fallbackName,
+      object: triggerObject,
+      events: triggerEvents ?? [],
+      file,
+    };
+  }
   const header = stripped.match(TRIGGER_HEADER);
   if (!header) return undefined;
   const object = header[2]!;
@@ -229,5 +249,13 @@ export function parseApexTrigger(
   const body =
     stripped.slice(0, headerStart) + " ".repeat(header[0].length) + stripped.slice(headerStart + header[0].length);
   const analysis = analyzeApex(source, { projectObjects, triggerObject: object }, body);
-  return { ...analysis, name: header[1] ?? fallbackName, object, events, file };
+  return {
+    ...analysis,
+    parser: "heuristic",
+    parseErrors: "errors" in ast ? ast.errors : undefined,
+    name: header[1] ?? fallbackName,
+    object,
+    events,
+    file,
+  };
 }
