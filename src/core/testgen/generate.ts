@@ -399,9 +399,9 @@ export function generateTests(model: OrgModel, result: AnalysisResult, opts: Tes
       const notes = [...links.notes, ...base.notes];
       b.add({ method: b.uniqueName(`bulkDelete${pascal(object)}`), kind: "bulk", title, covers, notes }, [
         `List<SObject> records = ${F}.create(${apexString(object)}, RECORD_COUNT, ${b.map(base.assignment, "        ")});`,
-        "Test.startTest();",
+        "System.Test.startTest();",
         "List<Database.DeleteResult> results = Database.delete(records, false);",
-        "Test.stopTest();",
+        "System.Test.stopTest();",
         `assertDeleted(results, ${apexString(`bulk delete of ${object}`)});`,
       ]);
       continue;
@@ -420,9 +420,9 @@ export function generateTests(model: OrgModel, result: AnalysisResult, opts: Tes
         },
         [
           `List<SObject> records = ${F}.build(${apexString(object)}, RECORD_COUNT, ${b.map(solved.assignment, "        ")});`,
-          "Test.startTest();",
+          "System.Test.startTest();",
           "List<Database.SaveResult> results = Database.insert(records, false);",
-          "Test.stopTest();",
+          "System.Test.stopTest();",
           `assertSaved(results, ${apexString(`bulk insert of ${object}`)});`,
         ],
       );
@@ -439,9 +439,9 @@ export function generateTests(model: OrgModel, result: AnalysisResult, opts: Tes
         [
           `List<SObject> records = ${F}.create(${apexString(object)}, RECORD_COUNT, ${b.map(base.assignment, "        ")});`,
           ...touchLine("records", solved.assignment),
-          "Test.startTest();",
+          "System.Test.startTest();",
           "List<Database.SaveResult> results = Database.update(records, false);",
-          "Test.stopTest();",
+          "System.Test.stopTest();",
           `assertSaved(results, ${apexString(`bulk update of ${object}`)});`,
         ],
       );
@@ -581,9 +581,9 @@ export function generateTests(model: OrgModel, result: AnalysisResult, opts: Tes
       [
         ...lines,
         ...touchLine("records", update.assignment),
-        "Test.startTest();",
+        "System.Test.startTest();",
         "List<Database.SaveResult> results = Database.update(records, false);",
-        "Test.stopTest();",
+        "System.Test.stopTest();",
         `assertSaved(results, ${apexString(`update of ${start.object} along the ${label} cycle (${linkObject}.${link})`)});`,
       ],
     );
@@ -649,9 +649,9 @@ export function generateTests(model: OrgModel, result: AnalysisResult, opts: Tes
         ...touchLine("new List<SObject>{ record }", update.assignment),
         "update record;",
         ...counts.map((c) => `Integer ${c.v}First = ${c.q};`),
-        "Test.startTest();",
+        "System.Test.startTest();",
         "update record.getSObjectType().newSObject(recordId); // save again without changes",
-        "Test.stopTest();",
+        "System.Test.stopTest();",
         ...counts.flatMap((c) => [
           `Integer ${c.v}Second = ${c.q};`,
           `System.assertEquals(${c.v}First, ${c.v}Second, 'Saving ${object} again without changes created ' + (${c.v}Second - ${c.v}First) + ' more ${c.object} record(s): flow ${flow.name} runs on every save that meets its entry criteria. Consider "Only when a record is updated to meet the condition requirements".');`,
@@ -772,13 +772,13 @@ export function generateTests(model: OrgModel, result: AnalysisResult, opts: Tes
           "Id recordId = record.Id;",
           `SObject beforeCall = ${select};`,
           "Boolean surfaced = false;",
-          "Test.startTest();",
+          "System.Test.startTest();",
           "try {",
           `    ${cls.name}.${method.name}(${arg});`,
           "} catch (Exception e) {",
           "    surfaced = true;",
           "}",
-          "Test.stopTest();",
+          "System.Test.stopTest();",
           `SObject afterCall = ${select};`,
           `Boolean changed = ${written.map((f) => `beforeCall.get(${apexString(f)}) != afterCall.get(${apexString(f)})`).join(" || ")};`,
           `System.assert(surfaced || changed, ${apexString(`${cls.name}.${method.name} neither changed ${object} `)} + recordId + ${apexString(` nor raised an error: a validation failure (${rule.name}) was swallowed.`)});`,

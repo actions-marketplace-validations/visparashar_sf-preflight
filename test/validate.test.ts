@@ -171,7 +171,9 @@ describe("validateTests", () => {
     ]);
     expect(v.tests.every((t) => t.outcome === "not run")).toBe(true);
     const md = validationToMarkdown(v);
-    expect(md).toContain("❌ The deployment has 1 component error(s); no tests ran.");
+    expect(md).toContain(
+      "❌ The deployment has 1 component error(s); no tests ran. Check-only deployment: nothing was saved",
+    );
     expect(md).toContain(`| ApexClass ${CLASS} | 42 | Variable does not exist: Customer_Tier__c |`);
     expect(md).not.toContain("| Test | Result |");
   });

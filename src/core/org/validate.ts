@@ -276,8 +276,11 @@ export function validationToMarkdown(v: ValidationResult): string {
           : failed
             ? `❌ ${failed} of ${v.tests.length} tests failed.`
             : "❌ The validation failed.";
+  const ran = v.tests.some((t) => t.outcome !== "not run");
   out.push(
-    `${headline} Check-only deployment: Salesforce compiled and ran everything, then rolled it back, so nothing was saved in the org.`,
+    ran
+      ? `${headline} Check-only deployment: Salesforce compiled and ran everything, then rolled it back, so nothing was saved in the org.`
+      : `${headline} Check-only deployment: nothing was saved in the org.`,
     "",
   );
   if (v.componentErrors.length) {

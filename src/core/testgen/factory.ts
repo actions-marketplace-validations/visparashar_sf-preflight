@@ -222,11 +222,11 @@ public class ${className} {
         if (whole || fieldType == Schema.DisplayType.DOUBLE || fieldType == Schema.DisplayType.CURRENCY || fieldType == Schema.DisplayType.PERCENT) {
             // A different value per record (unique and external ID fields), within the field's digits.
             Integer digits = whole ? field.getDigits() : field.getPrecision() - field.getScale();
-            Long ceiling = digits > 0 && digits < 10 ? Math.pow(10, digits).longValue() - 1 : 999999999L;
+            Long ceiling = digits > 0 && digits < 10 ? System.Math.pow(10, digits).longValue() - 1 : 999999999L;
             Long position = sequence;
-            Decimal candidate = Math.mod(position, ceiling) + 1;
+            Decimal candidate = System.Math.mod(position, ceiling) + 1;
             for (Integer attempt = 0; attempt < 2 && (sameNumber(current, candidate) || sameNumber(excluded, candidate)); attempt++) {
-                candidate = Math.mod(candidate.longValue(), ceiling) + 1;
+                candidate = System.Math.mod(candidate.longValue(), ceiling) + 1;
             }
             if (fieldType == Schema.DisplayType.INTEGER) {
                 return candidate.intValue();
@@ -278,8 +278,8 @@ public class ${className} {
     private static Id parentId(Schema.DescribeFieldResult field, Object current) {
         List<Schema.SObjectType> targets = field.getReferenceTo();
         for (Schema.SObjectType parentType : targets) {
-            if (parentType == User.SObjectType && current != UserInfo.getUserId()) {
-                return UserInfo.getUserId();
+            if (parentType == User.SObjectType && current != System.UserInfo.getUserId()) {
+                return System.UserInfo.getUserId();
             }
         }
         for (Schema.SObjectType parentType : targets) {

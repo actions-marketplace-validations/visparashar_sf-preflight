@@ -183,6 +183,15 @@ describe("test generation", () => {
     ]);
   });
 
+  it("qualifies system classes that an org's own classes could hide", () => {
+    // Orgs often have a class named Test; a bare Test.startTest() then doesn't compile.
+    for (const f of g0().files.filter((x) => x.path.endsWith(".cls"))) {
+      const code = f.content.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+      expect(code).not.toMatch(/(^|[^.\w])(Test|Math|UserInfo)\./m);
+    }
+    expect(fileOf(g0(), "ChangeTest.cls")).toContain("System.Test.startTest();");
+  });
+
   it("doesn't declare Apex reserved words as identifiers", () => {
     const declared = g0()
       .files.filter((f) => f.path.endsWith(".cls"))
