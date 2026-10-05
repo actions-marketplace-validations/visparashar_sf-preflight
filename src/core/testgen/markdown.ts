@@ -26,6 +26,10 @@ export interface TestsMarkdownOptions {
    * Leave it out when they were saved inside a package directory.
    */
   outDir?: string;
+  /** Results of running the tests (Markdown), shown before the command to run them again. */
+  results?: string;
+  /** Org alias for the suggested command (default: a placeholder). */
+  targetOrg?: string;
 }
 
 /** Quote a path for a POSIX shell when it needs it. */
@@ -57,21 +61,28 @@ export function testsToMarkdown(gen: TestGenResult, opts: TestsMarkdownOptions =
     const dirs = [...(opts.sourceDirs?.length ? opts.sourceDirs : ["force-app"])];
     if (opts.outDir) dirs.push(opts.outDir);
     const cd = opts.projectDir && opts.projectDir !== "." ? [`cd ${shellArg(opts.projectDir)}`] : [];
-    out.push(
-      "### Run them",
-      "",
-      "Run them in a sandbox or scratch org together with your change, for example as a check-only deployment that",
-      "rolls everything back:",
-      "",
+    const command = [
       "```bash",
       ...cd,
       `sf project deploy validate ${dirs.map((d) => `--source-dir ${shellArg(d)}`).join(" ")} \\`,
-      `  --test-level RunSpecifiedTests --tests ${gen.className} --target-org <sandbox>`,
+      `  --test-level RunSpecifiedTests --tests ${gen.className} --target-org ${opts.targetOrg ? shellArg(opts.targetOrg) : "<sandbox>"}`,
       "```",
-      "",
-      "A failing test points at a real risk (governor limits, recursion, double-applied automation, swallowed",
-      "errors) or at test data this org rejects; the NOTE comments in the class say which values to adjust.",
-    );
+    ];
+    if (opts.results) {
+      out.push(opts.results, "", "### Run them again", "", ...command);
+    } else {
+      out.push(
+        "### Run them",
+        "",
+        "Run them in a sandbox or scratch org together with your change, for example as a check-only deployment that",
+        "rolls everything back (or use `preflight tests --validate --org <sandbox>`):",
+        "",
+        ...command,
+        "",
+        "A failing test points at a real risk (governor limits, recursion, double-applied automation, swallowed",
+        "errors) or at test data this org rejects; the NOTE comments in the class say which values to adjust.",
+      );
+    }
   }
   return out.join("\n");
 }

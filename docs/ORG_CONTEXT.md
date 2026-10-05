@@ -42,7 +42,9 @@ SELECT Id, Name FROM Profile WHERE Name IN (...)                                
 SELECT ProfileId, COUNT(Id) n FROM User WHERE IsActive = true AND ProfileId IN (...) GROUP BY ProfileId
 ```
 
-Nothing is written to the org. The report contains **only counts and metadata names**, never
+Nothing is written to the org. (The one command that deploys is
+[`preflight tests --validate`](TESTS.md#running-them), and only check-only: Salesforce rolls the
+deployment back.) The report contains **only counts and metadata names**, never
 record data, user names or org IDs, so it is safe to post as a pull-request comment:
 
 - If you pass a **username** to `--org`, the report names the org by its alias, or "target

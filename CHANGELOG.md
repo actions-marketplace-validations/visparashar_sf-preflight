@@ -18,6 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   formulas. Anything not generated is listed with the reason, and the summary prints the
   check-only `sf project deploy validate` command to run them. See
   [docs/TESTS.md](docs/TESTS.md).
+- `preflight tests --validate --org <alias>` runs the generated tests in a sandbox, scratch org or
+  Developer Edition org with a check-only deployment (nothing is saved) and reports each test's
+  outcome, compile errors and coverage problems; exit code 2 when anything fails. Production orgs
+  are refused unless `--allow-production` is passed.
 - MCP tool `generate_tests` returns the same tests as code for coding agents (read-only; nothing
   is written to disk).
 - `runTests()` and `generateTests()` in the library API.

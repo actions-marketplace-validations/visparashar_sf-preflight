@@ -51,16 +51,48 @@ comment naming the rule. Adjust the values there if the test fails on that rule.
 
 ## Running them
 
-Run the tests together with your change, for example as a check-only deployment, which runs the
-tests and rolls everything back. Run it from the project directory:
+Let preflight run them for you in an org authorized with the Salesforce CLI:
+
+```bash
+preflight tests --base origin/main --validate --org my-sandbox
+```
+
+This runs a **check-only deployment** of your package directories plus the generated tests
+(`sf project deploy validate` with `RunSpecifiedTests`): Salesforce compiles everything, runs the
+generated tests and rolls it all back, so nothing is saved in the org. Preflight then reports each
+test, with the failure message and the first line of the stack trace:
+
+```
+### Run in my-sandbox
+
+❌ 2 of 5 tests failed. Check-only deployment: Salesforce compiled and ran everything, then rolled it back, so nothing was saved in the org.
+
+| Test | Result | Details |
+|---|---|---|
+| `bulkUpdateOpportunity` | ✅ pass | 2.1 s |
+| `recursionAccountContact` | ❌ fail | System.LimitException: Too many SOQL queries: 101 (Class.ContactTriggerHandler.syncTier: line 9, column 1) |
+| … | | |
+```
+
+The exit code is 2 when a test fails or the deployment doesn't compile, so you can use it in CI.
+
+- **Which orgs.** Sandboxes, scratch orgs and Developer Edition orgs. Preflight checks the org's
+  `Organization` record first and refuses production orgs unless you pass `--allow-production`.
+- **What it reads.** The org's alias, whether it's a sandbox, and the deployment result. Reports
+  name the org by its alias, never by username, and redact email addresses from messages.
+- **How long.** Like any validation with tests, usually a few minutes; `--wait <minutes>`
+  (default 33) sets the limit.
+- **Code coverage.** With `RunSpecifiedTests`, Salesforce can require 75% coverage for each Apex
+  class and trigger in the deployment from the tests that ran. If every generated test passes but
+  the deployment is rejected on coverage, preflight says so and lists the classes.
+
+To run the deployment yourself, use the command `preflight tests` prints, from the project
+directory:
 
 ```bash
 sf project deploy validate --source-dir force-app --source-dir preflight-tests \
   --test-level RunSpecifiedTests --tests PreflightChangeTest --target-org my-sandbox
 ```
-
-`preflight tests` prints this command with your project's package directories filled in. Use a
-sandbox or scratch org, never production.
 
 A failing test points at one of two things:
 
@@ -87,7 +119,11 @@ test suite, rename them, and extend them with assertions about your business rul
 | `--bulk-size <n>` | `200` | Records per bulk test (1–10,000) |
 | `--depth <n>` | `4` | Maximum cascade depth |
 | `--dry-run` | — | Print the summary without writing files |
-| `--format <md\|json>` | `md` | Summary format |
+| `--validate` | — | Run the tests in `--org` with a check-only deployment |
+| `--org <alias>` | — | Org for `--validate`: a sandbox, scratch org or Developer Edition org |
+| `--allow-production` | — | Allow `--validate` in a production org |
+| `--wait <minutes>` | `33` | Minutes to wait for `--validate` |
+| `--format <md\|json>` | `md` | Summary format (JSON includes a `validation` object with each test's outcome) |
 
 The default output directory is outside your package directories, so the tests aren't deployed
 with the rest of your project unless you move them. Add `preflight-tests/` to `.gitignore` if you
@@ -98,7 +134,8 @@ source.
 
 The MCP server's `generate_tests` tool returns the same summary and the Apex classes as code,
 without writing anything to disk; the agent saves them into a package directory. See
-[MCP.md](MCP.md).
+[MCP.md](MCP.md). The MCP server stays read-only, so it doesn't deploy: the agent (or you) runs
+`preflight tests --validate` to run them.
 
 ## Limitations
 

@@ -111,11 +111,12 @@ Writes Apex tests for exactly what the change touches to `preflight-tests/`: bul
 records, recursion along automation cycles, flows that must not apply twice, and invocable
 actions that must not swallow validation errors. Test data comes from a schema-aware data
 factory, with values chosen to meet your flows' entry criteria and pass your validation rules.
-Run them with a check-only deployment to a sandbox:
+Add `--validate --org my-sandbox` to run them right away: preflight deploys your project and the
+tests check-only (Salesforce compiles and runs everything, then rolls it back) and reports each
+test's result.
 
 ```bash
-sf project deploy validate --source-dir force-app --source-dir preflight-tests \
-  --test-level RunSpecifiedTests --tests PreflightChangeTest --target-org my-sandbox
+preflight tests --base origin/main --validate --org my-sandbox
 ```
 
 See [docs/TESTS.md](docs/TESTS.md) for what is generated and how to read a failure.

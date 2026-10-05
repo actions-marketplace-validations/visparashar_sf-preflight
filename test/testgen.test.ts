@@ -307,6 +307,15 @@ describe("test generation", () => {
       "```bash\ncd 'my project'\nsf project deploy validate --source-dir force-app --source-dir preflight-tests \\\n" +
         "  --test-level RunSpecifiedTests --tests PreflightChangeTest --target-org <sandbox>\n```",
     );
+    // After a run: the results come first, then the command with the org filled in.
+    const ran = testsToMarkdown(g0(), {
+      sourceDirs: ["force-app"],
+      results: "### Run in dev\n\nRESULTS",
+      targetOrg: "dev",
+    });
+    expect(ran).toContain("### Run in dev\n\nRESULTS\n\n### Run them again\n\n```bash\n");
+    expect(ran).toContain("--target-org dev\n```");
+    expect(ran).not.toContain("### Run them\n");
     // Saved inside a package directory: no extra --source-dir, no cd.
     const inSource = testsToMarkdown(g0(), { projectDir: ".", sourceDirs: ["force-app", "libs"] });
     expect(inSource).toContain("```bash\nsf project deploy validate --source-dir force-app --source-dir libs \\\n");

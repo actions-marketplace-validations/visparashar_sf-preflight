@@ -13,8 +13,18 @@ import { toPosix } from "./util.js";
 export { analyze, fieldReferences } from "./analyze.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
 export { saveProcedure } from "./orderOfExecution.js";
-export { applyOrgContext, collectOrgContext, enrichWithOrg } from "./org/enrich.js";
-export { assertSafeOrg, createSfRunner, type SfRunner } from "./org/sf.js";
+export { applyOrgContext, collectOrgContext, enrichWithOrg, GENERIC_ORG_LABEL } from "./org/enrich.js";
+export { assertSafeOrg, createSfRunner, SfError, type SfRunner } from "./org/sf.js";
+export {
+  type ComponentError,
+  type OrgKind,
+  readDeployResult,
+  type TestOutcome,
+  type ValidateTestsOptions,
+  type ValidationResult,
+  validateTests,
+  validationToMarkdown,
+} from "./org/validate.js";
 export { classifyPath, loadProject, sourceRoots } from "./project.js";
 export { detectAiTools, gitProvenance } from "./provenance.js";
 export { toMarkdown } from "./report/markdown.js";
