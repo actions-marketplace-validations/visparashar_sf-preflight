@@ -14,6 +14,7 @@ deploys, writes files or contacts a Salesforce org.
 | `analyze_change` | Full preflight report for a change: cascade, findings, suggested tests | `base` (default `HEAD`), `head`, `files`, `format` (`markdown`/`json`), `project_dir`, `max_depth`, `org` (beta, see [ORG_CONTEXT.md](ORG_CONTEXT.md)) |
 | `explain_save_order` | What runs, in order, when an object is saved | `object`, `event` (`insert`/`update`/`delete`/`undelete`), `project_dir` |
 | `find_field_references` | Validation rules, flows, Apex, formulas, roll-ups and permission sets that use a field | `object`, `field`, `project_dir` |
+| `explain_agent` | An Agentforce agent's topics and actions, what each action calls and saves, the access its runtime user needs and its Testing Center coverage; lists the agents without a name. See [AGENTS.md](AGENTS.md) | `agent`, `project_dir` |
 | `generate_tests` | Apex tests for what a change touches (bulk, recursion, idempotency, validation errors surfacing), returned as code; nothing is written to disk. See [TESTS.md](TESTS.md) | `base` (default `HEAD`), `head`, `files`, `project_dir`, `prefix`, `bulk_size` |
 
 With no arguments, `analyze_change` compares the working tree (including untracked files) with

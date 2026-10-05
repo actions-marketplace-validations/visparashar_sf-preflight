@@ -3,6 +3,7 @@ import type { TestKind } from "../types.js";
 import type { TestGenResult } from "./generate.js";
 
 const KIND_LABEL: Record<TestKind, string> = {
+  agent: "agent",
   bulk: "bulk",
   recursion: "recursion",
   idempotency: "idempotency",

@@ -5,6 +5,10 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import type { AnalysisResult, SaveEvent } from "./core/index.js";
 import {
+  agentExplanationToMarkdown,
+  agentListToMarkdown,
+  allAgentActions,
+  explainAgent,
   GENERIC_ORG_LABEL,
   loadProject,
   run,
@@ -219,6 +223,41 @@ program
       }
     },
   );
+
+program
+  .command("agents")
+  .description("List Agentforce agents, or explain what one agent's actions call, save and need")
+  .argument("[agent]", "agent API name, e.g. Sales_Agent")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .action((agent: string | undefined, opts: { project: string; depth: number; format: "md" | "json" }) => {
+    const model = loadProject(opts.project);
+    if (!agent) {
+      if (opts.format === "json") {
+        const list = [...model.agents.values()].map((a) => ({
+          name: a.name,
+          label: a.label,
+          source: a.source,
+          topics: a.topics.map((t) => t.name),
+          actions: allAgentActions(model)
+            .filter((r) => r.agent === a)
+            .map((r) => r.action.name),
+          file: a.file,
+        }));
+        process.stdout.write(`${JSON.stringify(list, null, 2)}\n`);
+      } else {
+        process.stdout.write(`${agentListToMarkdown(model)}\n`);
+      }
+      return;
+    }
+    const e = explainAgent(model, agent, opts.depth);
+    if (!e) {
+      const known = [...model.agents.values()].map((a) => a.name).join(", ");
+      throw new Error(`No agent named ${agent} in the project${known ? ` (agents: ${known})` : ""}.`);
+    }
+    process.stdout.write(`${opts.format === "json" ? JSON.stringify(e, null, 2) : agentExplanationToMarkdown(e)}\n`);
+  });
 
 program
   .command("explain")

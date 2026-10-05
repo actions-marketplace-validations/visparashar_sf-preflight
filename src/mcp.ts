@@ -4,6 +4,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import {
+  agentExplanationToMarkdown,
+  agentListToMarkdown,
+  explainAgent,
   fieldReferences,
   loadProject,
   run,
@@ -24,7 +27,8 @@ permission sets):
 3. Call generate_tests and add the generated Apex test classes (it returns the code; write the
    files yourself), then review their NOTE comments.
 Use explain_save_order to understand what already runs on an object before adding automation,
-and find_field_references before renaming, retyping or deleting a field.`;
+find_field_references before renaming, retyping or deleting a field, and explain_agent before
+changing anything an Agentforce agent action calls.`;
 
 export interface McpServerOptions {
   /** Directory the server may analyze; tool calls cannot reach outside it. */
@@ -124,6 +128,33 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
           return `${s.order}. ${s.phaseLabel}: ${s.automation.name}${writes}${notes}`;
         });
         return text([`${args.object} — ${event}`, ...lines].join("\n"));
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "explain_agent",
+    {
+      title: "Explain an Agentforce agent",
+      description:
+        "For an Agentforce agent in the project: its topics and actions, the Apex class or flow each action " +
+        "calls, the records it saves (including the automation that follows), the access its runtime user " +
+        "needs, and which Testing Center tests cover it. Without an agent name, lists the agents.",
+      inputSchema: {
+        agent: z.string().optional().describe("Agent API name, e.g. Sales_Agent (omit to list agents)"),
+        project_dir: projectDirSchema,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const model = loadProject(projectDir(args.project_dir));
+        if (!args.agent) return text(agentListToMarkdown(model));
+        const e = explainAgent(model, args.agent);
+        if (!e) return failure(new Error(`No agent named ${args.agent} in the project.`));
+        return text(agentExplanationToMarkdown(e));
       } catch (err) {
         return failure(err);
       }

@@ -21,8 +21,21 @@ export type ComponentType =
   | "WorkflowRule"
   | "Other";
 
+/** Which kind of Agentforce metadata an `AgentMetadata` component is. */
+export type AgentFileKind =
+  | "bot"
+  | "botVersion"
+  | "planner"
+  | "topic"
+  | "action"
+  | "script"
+  | "test"
+  | "promptTemplate";
+
 export interface ComponentRef {
   type: ComponentType;
+  /** Set for AgentMetadata components. */
+  agentKind?: AgentFileKind;
   /** Display name, e.g. `Opportunity.Contract_Signed_Date__c` or `AccountTrigger`. */
   name: string;
   /** Owning object for object-scoped components. */
@@ -230,6 +243,64 @@ export interface PermissionContainerDef {
   file: string;
 }
 
+/** An agent action (GenAiFunction, or an action declared in Agent Script). */
+export interface AgentAction {
+  /** API name (developer name, or the action's name in Agent Script). */
+  name: string;
+  label?: string;
+  description?: string;
+  /** How the action runs: "apex", "flow", "prompt", "standardInvocableAction", … */
+  targetType: string;
+  /** Apex class, flow or prompt template it calls; undefined for standard actions without one. */
+  target?: string;
+  /** The agent asks the user to confirm before running it. */
+  confirmationRequired?: boolean;
+  file: string;
+}
+
+/** A topic (GenAiPlugin, or a topic/subagent in Agent Script) and the actions it can use. */
+export interface AgentTopic {
+  name: string;
+  label?: string;
+  actions: AgentAction[];
+  file: string;
+}
+
+export interface AgentDef {
+  name: string;
+  label?: string;
+  /** "Bot": Agent Builder metadata (bots, planners, topics, actions). "AgentScript": an `.agent` file. */
+  source: "Bot" | "AgentScript";
+  agentType?: string;
+  /**
+   * Username of the agent's dedicated runtime user (service agents). Used only to query the org with
+   * `--org`; it must never appear in a report.
+   */
+  runtimeUser?: string;
+  topics: AgentTopic[];
+  /** Actions the agent can use outside any topic. */
+  actions: AgentAction[];
+  /** Planner bundles the agent uses. */
+  planners: string[];
+  /** Main definition file. */
+  file: string;
+  /** Every file that makes up the agent (bot, versions, planner, topics, actions, script). */
+  files: string[];
+}
+
+/** A Testing Center test definition (AiEvaluationDefinition or AiTestingDefinition). */
+export interface AgentTestDef {
+  name: string;
+  format: "AiEvaluationDefinition" | "AiTestingDefinition";
+  /** The agent it tests (subjectName). */
+  subject: string;
+  testCases: number;
+  /** Topics and actions the test cases expect the agent to choose. */
+  topics: string[];
+  actions: string[];
+  file: string;
+}
+
 export interface OrgModel {
   projectDir: string;
   sourceRoots: string[];
@@ -239,6 +310,10 @@ export interface OrgModel {
   triggers: Map<string, ApexTriggerDef>;
   classes: Map<string, ApexClassDef>;
   permissionContainers: Map<string, PermissionContainerDef>;
+  /** Agentforce agents, keyed by lower-cased name. */
+  agents: Map<string, AgentDef>;
+  /** Testing Center test definitions. */
+  agentTests: AgentTestDef[];
   /** Every metadata file found, keyed by relative path. */
   components: Map<string, ComponentRef>;
   warnings: string[];
@@ -270,8 +345,23 @@ export interface OrgContext {
   /** Active automation on impacted objects that exists in the org but not in the project. */
   orgOnlyAutomation: OrgAutomation[];
   packages: { namespace?: string; name: string; version: string }[];
+  /** Access checks of the dedicated runtime users of affected agents (named by agent, never by username). */
+  agentUsers?: AgentUserAccess[];
   /** Queries that failed; the rest of the context is still usable. */
   errors: string[];
+}
+
+export interface AgentUserAccess {
+  /** Agent name; the user is only ever referred to as "<agent>'s runtime user". */
+  agent: string;
+  agentLabel?: string;
+  status: "checked" | "not found" | "inactive";
+  /** Access the affected actions need that the user doesn't have. */
+  missing: AccessNeed[];
+  /** Apex classes the affected actions call that the user can't run. */
+  missingClasses?: string[];
+  /** Broad access beyond what the actions need, e.g. "Modify All Data". */
+  broad: string[];
 }
 
 export interface CommitProvenance {
@@ -354,6 +444,7 @@ export interface Finding {
 }
 
 export type TestKind =
+  | "agent"
   | "bulk"
   | "validation-collision"
   | "recursion"
@@ -366,6 +457,45 @@ export interface SuggestedTest {
   object?: string;
   description: string;
   covers: string[];
+}
+
+/** Object access a user needs (read is implied). */
+export interface AccessNeed {
+  object: string;
+  access: ("create" | "edit" | "delete")[];
+}
+
+/** An agent action the change affects. */
+export interface AgentImpact {
+  agent: string;
+  agentLabel?: string;
+  topic?: string;
+  action: string;
+  actionLabel?: string;
+  /** What the action calls. */
+  target: { kind: "ApexClass" | "Flow" | "PromptTemplate" | "Other"; name?: string; inProject: boolean };
+  /** Why the change affects it, e.g. "it runs changed class OpportunityCloser". */
+  reasons: string[];
+  /** Objects saved when the action runs, including the cascade. */
+  reaches: string[];
+  /** An automation cycle its saves run into. */
+  cycle?: string[];
+  /**
+   * Object access its runtime user needs: what a flow saves (flows run as the user), or what an
+   * Apex class saves when the class enforces user mode. Apex in system mode needs none.
+   */
+  needs: AccessNeed[];
+  /** Apex class the runtime user needs access to (Apex targets). */
+  apexClass?: string;
+  /** Apex target runs in system mode: object permissions aren't enforced for its saves. */
+  systemMode?: boolean;
+  runsAs: "dedicated user" | "signed-in user";
+  /** Testing Center tests that expect this action. */
+  tests: string[];
+  /** All Testing Center tests of the agent. */
+  agentTests: string[];
+  confirmationRequired: boolean;
+  files: string[];
 }
 
 export interface Reference {
@@ -390,6 +520,8 @@ export interface AnalysisResult {
   cycles: string[][];
   findings: Finding[];
   suggestedTests: SuggestedTest[];
+  /** Agent actions the change affects (empty when the project has no agents or none are affected). */
+  agents: AgentImpact[];
   summary: {
     risk: "high" | "medium" | "low";
     changedComponents: number;

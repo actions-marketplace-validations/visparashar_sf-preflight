@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GenAiPlugin xmlns="http://soap.sforce.com/2006/04/metadata">
+    <canEscalate>false</canEscalate>
+    <description>Close won deals and log customer calls.</description>
+    <developerName>Close_Deals</developerName>
+    <genAiFunctions>
+        <functionName>Close_Opportunity</functionName>
+    </genAiFunctions>
+    <genAiFunctions>
+        <functionName>Log_Customer_Call</functionName>
+    </genAiFunctions>
+    <genAiPluginInstructions>
+        <description>Only close opportunities the user owns. Ask for the contract signed date first.</description>
+        <developerName>instruction_close</developerName>
+        <language xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+        <masterLabel>instruction_close</masterLabel>
+        <sortOrder>0</sortOrder>
+    </genAiPluginInstructions>
+    <language>en_US</language>
+    <masterLabel>Close Deals</masterLabel>
+    <pluginType>Topic</pluginType>
+    <scope>Your job is to help sales reps close the opportunities they own and log their customer calls.</scope>
+</GenAiPlugin>

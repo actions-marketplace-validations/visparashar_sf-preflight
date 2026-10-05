@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AiEvaluationDefinition xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Sales Agent regression tests.</description>
+    <name>Sales_Agent_Tests</name>
+    <subjectName>Sales_Agent</subjectName>
+    <subjectType>AGENT</subjectType>
+    <testCase>
+        <expectation>
+            <expectedValue>Close_Deals</expectedValue>
+            <name>topic_sequence_match</name>
+        </expectation>
+        <expectation>
+            <expectedValue>['Log_Customer_Call']</expectedValue>
+            <name>action_sequence_match</name>
+        </expectation>
+        <expectation>
+            <expectedValue>The agent confirms the call was logged.</expectedValue>
+            <name>bot_response_rating</name>
+        </expectation>
+        <inputs>
+            <utterance>Log a call with Acme about renewal pricing.</utterance>
+        </inputs>
+        <number>1</number>
+    </testCase>
+</AiEvaluationDefinition>

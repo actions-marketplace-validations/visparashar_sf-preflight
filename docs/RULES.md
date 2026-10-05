@@ -25,7 +25,13 @@ that is only inside the blast radius).
 | [`validation-rule-inactive`](#validation-rule-inactive) | Info | A changed validation rule is inactive. |
 | [`flow-inactive`](#flow-inactive) | Info | A changed flow is not active. |
 | [`org-only-automation`](#org-only-automation) | Medium | Active automation on an impacted object exists in the org (`--org`) but not in the project. |
-| [`agent-metadata-changed`](#agent-metadata-changed) | Info | Agentforce metadata changed. |
+| [`agent-metadata-changed`](#agent-metadata-changed) | Info | Agentforce metadata changed that no agent action in the project uses. |
+| [`agent-action-affected`](#agent-action-affected) | Medium | The change reaches what an agent action calls or saves. |
+| [`agent-action-untested`](#agent-action-untested) | Low | No Testing Center test expects an affected agent action. |
+| [`agent-action-target-missing`](#agent-action-target-missing) | Low | An affected agent action calls an Apex class or flow that isn't in the project. |
+| [`agent-runtime-access`](#agent-runtime-access) | High | With --org: an affected agent's runtime user lacks access its actions need, is inactive or doesn't exist. |
+| [`agent-runtime-overprivileged`](#agent-runtime-overprivileged) | Medium | With --org: an affected agent's runtime user holds broad access such as Modify All Data. |
+| [`agent-action-no-confirmation`](#agent-action-no-confirmation) | Medium | An agent action deletes records without asking the user for confirmation. |
 | [`legacy-workflow`](#legacy-workflow) | Info | A legacy workflow rule changed. |
 
 ## recursion-cycle
@@ -168,9 +174,57 @@ Preflight can only follow automation it can read, so the cascade may be incomple
 
 **AgentMetadataChanged** · default severity: Info
 
-Agentforce metadata changed.
+Agentforce metadata changed that no agent action in the project uses.
 
-Agent action verification is on the roadmap (M5). Use Agentforce Testing Center for the decision layer meanwhile.
+Preflight follows agent changes through the actions that use them. Metadata that no agent in the project uses (or that was deleted) can't be followed; check the agents that use it in Agent Builder.
+
+## agent-action-affected
+
+**AgentActionAffected** · default severity: Medium
+
+The change reaches what an agent action calls or saves.
+
+Agents call actions at volume and can't interpret errors the way a person does. Re-run the agent's Testing Center tests, check the action still succeeds with realistic data, and make sure failures are reported back to the agent. High when the action's saves run into an automation cycle.
+
+## agent-action-untested
+
+**AgentActionUntested** · default severity: Low
+
+No Testing Center test expects an affected agent action.
+
+Testing Center checks the decision layer: that the agent picks the right topic and action for a request. Add a test case (an utterance plus the expected topic and action) for every action a change affects.
+
+## agent-action-target-missing
+
+**AgentActionTargetMissing** · default severity: Low
+
+An affected agent action calls an Apex class or flow that isn't in the project.
+
+Preflight can't follow what the action does. Retrieve the class or flow into the project if it only lives in the org.
+
+## agent-runtime-access
+
+**AgentRuntimeAccess** · default severity: High · security
+
+With --org: an affected agent's runtime user lacks access its actions need, is inactive or doesn't exist.
+
+The action fails when the agent runs it. Grant the object access in a permission set assigned to the agent's user, and keep the user active.
+
+## agent-runtime-overprivileged
+
+**AgentRuntimeOverprivileged** · default severity: Medium · security
+
+With --org: an affected agent's runtime user holds broad access such as Modify All Data.
+
+An agent acts on whatever a conversation leads it to. Give its user only the object access its actions need.
+
+## agent-action-no-confirmation
+
+**AgentActionNoConfirmation** · default severity: Medium · security
+
+An agent action deletes records without asking the user for confirmation.
+
+Require confirmation for destructive actions so a misunderstood request can't delete data.
 
 ## legacy-workflow
 

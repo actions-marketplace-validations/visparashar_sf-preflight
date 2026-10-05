@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import { mergeNeeds } from "../agentImpact.js";
 import { summarizeFindings } from "../analyze.js";
 import type {
+  AccessNeed,
+  AgentUserAccess,
   AnalysisResult,
   AutomationRef,
   CascadeNode,
@@ -335,6 +339,24 @@ export function collectOrgContext(model: OrgModel, result: AnalysisResult, opts:
     });
   }
 
+  // Runtime users of affected agents: do they have the access their actions need, and no more?
+  for (const agentName of uniq((result.agents ?? []).map((a) => a.agent))) {
+    const agent = model.agents.get(key(agentName));
+    if (!agent?.runtimeUser) continue;
+    const label = agent.label ?? agent.name;
+    attempt(`runtime user of agent ${label}`, () => {
+      const impacts = (result.agents ?? []).filter((a) => a.agent === agentName);
+      const access = checkAgentUser(
+        run,
+        org,
+        agent.runtimeUser!,
+        mergeNeeds(impacts.flatMap((a) => a.needs)),
+        uniq(impacts.map((a) => a.apexClass).filter((c): c is string => !!c)),
+      );
+      ctx.agentUsers = [...(ctx.agentUsers ?? []), { agent: agent.name, agentLabel: agent.label, ...access }];
+    });
+  }
+
   // Keep only automation that fires for an event this change actually reaches.
   const reached = reachedEvents(result);
   ctx.orgOnlyAutomation = ctx.orgOnlyAutomation.filter((a) => {
@@ -343,6 +365,92 @@ export function collectOrgContext(model: OrgModel, result: AnalysisResult, opts:
   });
 
   return ctx;
+}
+
+const USERNAME = /^[A-Za-z0-9._%+'-]{1,80}@[A-Za-z0-9.-]{1,180}$/;
+const sfId = (v: unknown, prefix: string) =>
+  typeof v === "string" && new RegExp(`^${prefix}[A-Za-z0-9]{12,15}$`).test(v) ? v : undefined;
+
+/** Effective object access and broad permissions of one user, from their permission set assignments. */
+export function checkAgentUser(
+  run: SfRunner,
+  org: string,
+  username: string,
+  needs: AccessNeed[],
+  apexClasses: string[] = [],
+): Omit<AgentUserAccess, "agent" | "agentLabel"> {
+  if (!USERNAME.test(username)) throw new SfError("the runtime user's username has an unexpected format");
+  const quoted = `'${username.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  const [user] = query(run, org, `SELECT Id, IsActive FROM User WHERE Username = ${quoted} LIMIT 1`);
+  const userId = sfId(user?.Id, "005");
+  if (!user || !userId) return { status: "not found", missing: [], broad: [] };
+  if (user.IsActive !== true) return { status: "inactive", missing: [], broad: [] };
+
+  const assignments = query(
+    run,
+    org,
+    `SELECT PermissionSetId, PermissionSet.PermissionsModifyAllData, PermissionSet.PermissionsViewAllData, PermissionSet.PermissionsAuthorApex FROM PermissionSetAssignment WHERE AssigneeId = '${userId}'`,
+  );
+  const broad: string[] = [];
+  const modifyAllData = assignments.some((a) => field(a, "PermissionSet.PermissionsModifyAllData") === true);
+  if (modifyAllData) broad.push("Modify All Data");
+  if (assignments.some((a) => field(a, "PermissionSet.PermissionsViewAllData") === true)) broad.push("View All Data");
+
+  const ids = uniq(assignments.map((a) => sfId(a.PermissionSetId, "0PS")).filter((i): i is string => !!i));
+  const objects = needs.map((n) => n.object).filter((o) => /^[A-Za-z][A-Za-z0-9_]*$/.test(o));
+  const effective = new Map<string, Record<string, boolean>>();
+  if (ids.length && objects.length) {
+    const rows = query(
+      run,
+      org,
+      `SELECT SobjectType, PermissionsRead, PermissionsCreate, PermissionsEdit, PermissionsDelete, PermissionsModifyAllRecords FROM ObjectPermissions WHERE ParentId IN (${ids.map((i) => `'${i}'`).join(", ")}) AND SobjectType IN (${soqlList(objects)})`,
+    );
+    for (const r of rows) {
+      const o = key(String(r.SobjectType ?? ""));
+      const cur = effective.get(o) ?? {};
+      for (const p of ["Read", "Create", "Edit", "Delete", "ModifyAllRecords"]) {
+        cur[p] = cur[p] || r[`Permissions${p}`] === true;
+      }
+      effective.set(o, cur);
+    }
+  }
+  const missing: AccessNeed[] = [];
+  for (const n of needs) {
+    if (modifyAllData) break;
+    const e = effective.get(key(n.object)) ?? {};
+    const lacking = n.access.filter((a) => !e[a === "create" ? "Create" : a === "edit" ? "Edit" : "Delete"]);
+    if (!e.Read || lacking.length) missing.push({ object: n.object, access: e.Read ? lacking : n.access });
+  }
+  for (const n of needs) {
+    if (!modifyAllData && effective.get(key(n.object))?.ModifyAllRecords) broad.push(`Modify All on ${n.object}`);
+  }
+  // Apex class access (Author Apex grants all classes).
+  const missingClasses: string[] = [];
+  const classes = apexClasses.filter((c) => /^[A-Za-z][A-Za-z0-9_]*$/.test(c));
+  const authorApex = assignments.some((a) => field(a, "PermissionSet.PermissionsAuthorApex") === true);
+  if (classes.length && !authorApex) {
+    const rows = query(
+      run,
+      org,
+      `SELECT Id, Name FROM ApexClass WHERE NamespacePrefix = null AND Name IN (${soqlList(classes)})`,
+    );
+    const idByName = new Map(rows.map((r) => [key(String(r.Name)), sfId(r.Id, "01p")]));
+    const classIds = [...idByName.values()].filter((i): i is string => !!i);
+    const granted = new Set<string>();
+    if (ids.length && classIds.length) {
+      const grants = query(
+        run,
+        org,
+        `SELECT SetupEntityId FROM SetupEntityAccess WHERE SetupEntityType = 'ApexClass' AND ParentId IN (${ids.map((i) => `'${i}'`).join(", ")}) AND SetupEntityId IN (${classIds.map((i) => `'${i}'`).join(", ")})`,
+      );
+      for (const r of grants) if (typeof r.SetupEntityId === "string") granted.add(r.SetupEntityId);
+    }
+    for (const c of classes) {
+      const id = idByName.get(key(c));
+      if (id && !granted.has(id)) missingClasses.push(c);
+    }
+  }
+  return { status: "checked", missing, missingClasses, broad };
 }
 
 function safeDecode(s: string): string {
@@ -433,6 +541,58 @@ export function applyOrgContext(result: AnalysisResult, ctx: OrgContext): Analys
       const matches = f.title.includes(`${a.kind === "Profile" ? "Profile" : "Permission set"} ${a.name} `);
       if (!matches) continue;
       f.detail += ` In ${where} it is assigned to ${a.activeUsers.toLocaleString("en-US")} active user(s).`;
+    }
+  }
+
+  for (const u of ctx.agentUsers ?? []) {
+    const who = `${u.agentLabel ?? u.agent}'s runtime user`;
+    const actions = (result.agents ?? []).filter((a) => a.agent === u.agent);
+    const files = uniq(actions.flatMap((a) => a.files));
+    if (u.status !== "checked") {
+      findings.push({
+        rule: "agent-runtime-access",
+        severity: u.status === "inactive" ? "high" : "medium",
+        title: `${who} is ${u.status === "inactive" ? "inactive" : "not found"} in ${where}`,
+        detail:
+          u.status === "inactive"
+            ? "The agent can't run any action until its user is active."
+            : "The agent definition names a user that doesn't exist in this org. In a sandbox, usernames get the sandbox name as a suffix: update the agent's user there.",
+        files,
+      });
+      continue;
+    }
+    const missingClasses = u.missingClasses ?? [];
+    if (u.missing.length || missingClasses.length) {
+      const users = (n: AccessNeed) =>
+        actions
+          .filter((a) => a.needs.some((x) => key(x.object) === key(n.object)))
+          .map((a) => a.actionLabel ?? a.action);
+      const byClass = (c: string) =>
+        actions.filter((a) => a.apexClass && key(a.apexClass) === key(c)).map((a) => a.actionLabel ?? a.action);
+      const parts = [
+        ...missingClasses.map((c) => `access to Apex class ${c} (needed by ${uniq(byClass(c)).join(", ")})`),
+        ...u.missing.map(
+          (n) =>
+            `${n.access.length ? n.access.join("/") : "read"} on ${n.object} (needed by ${uniq(users(n)).join(", ")})`,
+        ),
+      ];
+      findings.push({
+        rule: "agent-runtime-access",
+        severity: "high",
+        title: `${who} lacks access the affected actions need in ${where}`,
+        detail: `Missing: ${parts.join("; ")}. The actions fail when the agent runs them. Grant the access in a permission set assigned to the agent's user.`,
+        files,
+      });
+    }
+    if (u.broad.length) {
+      findings.push({
+        rule: "agent-runtime-overprivileged",
+        severity: "medium",
+        title: `${who} has broad access in ${where}: ${u.broad.join(", ")}`,
+        detail:
+          "An agent acts on whatever a conversation leads it to; its user should hold only the access its actions need. Replace broad permissions with object access scoped to the actions.",
+        files,
+      });
     }
   }
 

@@ -94,6 +94,39 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
     out.push("");
   }
 
+  // Agent actions
+  if (result.agents?.length) {
+    out.push(
+      "### Agent actions",
+      "",
+      "Agentforce actions this change reaches, what they call and save, and whether Testing Center covers them:",
+      "",
+      "| Agent | Topic › Action | Calls | Saves | Runtime user needs | Testing Center |",
+      "|---|---|---|---|---|---|",
+    );
+    for (const a of result.agents) {
+      const calls =
+        a.target.kind === "ApexClass"
+          ? `class \`${esc(a.target.name ?? "?")}\``
+          : a.target.kind === "Flow"
+            ? `flow \`${esc(a.target.name ?? "?")}\``
+            : a.target.kind === "PromptTemplate"
+              ? `prompt \`${esc(a.target.name ?? "?")}\``
+              : esc(a.target.name ?? "standard action");
+      const needs =
+        [
+          ...(a.apexClass ? [a.systemMode ? "class access (Apex saves in system mode)" : "class access"] : []),
+          ...a.needs.map((n) => `${n.access.join("/") || "read"} ${n.object}`),
+        ].join(", ") || "—";
+      const who = a.runsAs === "dedicated user" ? "" : " (as the signed-in user)";
+      const tc = a.tests.length ? `✅ ${a.tests.map(esc).join(", ")}` : "⚠️ not tested";
+      out.push(
+        `| ${esc(a.agentLabel ?? a.agent)} | ${esc(a.topic ? `${a.topic} › ` : "")}${esc(a.actionLabel ?? a.action)} | ${calls}${a.target.inProject || a.target.kind === "Other" ? "" : " (not in project)"} | ${esc(a.reaches.join(", ") || "—")} | ${esc(needs)}${who} | ${tc} |`,
+      );
+    }
+    out.push("");
+  }
+
   // Org context
   const org = result.org;
   if (org) {
@@ -126,9 +159,24 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
         `- ${a.kind === "Profile" ? "Profile" : "Permission set"} \`${esc(a.name)}\` is assigned to **${a.activeUsers.toLocaleString("en-US")}** active user(s).`,
       );
     }
+    for (const u of org.agentUsers ?? []) {
+      const who = `${esc(u.agentLabel ?? u.agent)}'s runtime user`;
+      const state =
+        u.status === "not found"
+          ? "not found in the org"
+          : u.status === "inactive"
+            ? "**inactive**"
+            : u.missing.length || u.missingClasses?.length
+              ? `**lacks** ${[
+                  ...(u.missingClasses ?? []).map((c) => `access to class ${esc(c)}`),
+                  ...u.missing.map((n) => `${n.access.join("/") || "read"} on ${esc(n.object)}`),
+                ].join(", ")}`
+              : "has the access the affected actions need";
+      out.push(`- ${who}: ${state}${u.broad.length ? `; holds ${u.broad.map(esc).join(", ")}` : ""}.`);
+    }
     if (org.packages.length)
       out.push(`- ${org.packages.length} installed package(s): ${org.packages.map((p) => esc(p.name)).join(", ")}.`);
-    if (org.assignments.length || org.packages.length) out.push("");
+    if (org.assignments.length || org.packages.length || org.agentUsers?.length) out.push("");
     if (org.errors.length) {
       out.push("<details><summary>Org queries that failed</summary>", "");
       for (const e of org.errors) out.push(`- ${esc(e)}`);

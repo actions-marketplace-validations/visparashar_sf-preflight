@@ -23,11 +23,13 @@ const rules = (r: AnalysisResult) => r.findings.map((f) => f.rule);
 
 describe("loadProject", () => {
   it("loads every supported component in the fixture", () => {
-    expect(model.flows.size).toBe(3);
+    expect(model.flows.size).toBe(5);
     expect(model.triggers.size).toBe(1);
     expect(model.classes.size).toBe(3);
     expect(model.validationRules).toHaveLength(2);
     expect(model.permissionContainers.size).toBe(1);
+    expect([...model.agents.keys()]).toEqual(["sales_agent", "service_agent"]);
+    expect(model.agentTests.map((t) => t.name)).toEqual(["Sales_Agent_Tests"]);
     expect(model.warnings).toEqual([]);
   });
 });

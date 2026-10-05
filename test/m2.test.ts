@@ -155,6 +155,7 @@ describe("MCP server", () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       "analyze_change",
+      "explain_agent",
       "explain_save_order",
       "find_field_references",
       "generate_tests",

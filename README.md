@@ -15,9 +15,9 @@ permissions — and reports the blast radius, the risks and the tests that matte
 
 It is open source, runs offline on your source code, and needs no org credentials.
 
-> **Status:** early (0.x). The CLI, MCP server, GitHub Action and test generation work today;
-> org context is in beta, and Agentforce action verification is on the
-> [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
+> **Status:** early (0.x). The CLI, MCP server, GitHub Action, test generation and Agentforce
+> action verification work today; org context is in beta. See the [roadmap](docs/ROADMAP.md).
+> Feedback and contributions are very welcome.
 
 ## What it finds
 
@@ -31,6 +31,7 @@ It is open source, runs offline on your source code, and needs no org credential
 | **DML/SOQL in loops** | In changed Apex and in Apex inside the blast radius |
 | **Permission escalations** | New Modify All / View All, delete access, sensitive system permissions — diffed against the base |
 | **Broken references** | Deleted fields, flows or classes that are still used |
+| **Affected agent actions** | Agentforce actions the change reaches, their Testing Center coverage and what their runtime user needs |
 
 Every run also produces a **suggested test plan**: bulk, recursion, validation-collision,
 idempotency, boundary and permission-negative tests for exactly what the change touches — and
@@ -70,6 +71,9 @@ preflight analyze --base origin/main --format json --out preflight.json --fail-o
 
 # What runs, in order, when an object is saved?
 preflight explain Opportunity --event update
+
+# What can an Agentforce agent do, and what do its actions save?
+preflight agents Sales_Agent
 ```
 
 | Option | Default | Description |
@@ -121,6 +125,18 @@ preflight tests --base origin/main --validate --org my-sandbox
 
 See [docs/TESTS.md](docs/TESTS.md) for what is generated and how to read a failure.
 
+### Agentforce agents
+
+```bash
+preflight agents Sales_Agent
+```
+
+Preflight reads agents from source, both Agent Builder metadata and Agent Script (`.agent`
+files), and follows each action to the Apex class or flow it calls and the records that saves.
+Every analysis then reports the agent actions a change reaches, whether Testing Center tests
+cover them, and the access their runtime user needs. With `--org`, it checks that user's real
+permissions. See [docs/AGENTS.md](docs/AGENTS.md).
+
 ### On pull requests (GitHub Action)
 
 ```yaml
@@ -147,10 +163,10 @@ summary, can upload findings to code scanning as SARIF, and exposes `risk` and
 claude mcp add sf-preflight -- npx -y sf-preflight mcp
 ```
 
-`preflight mcp` is a read-only MCP server with four tools — `analyze_change`,
-`explain_save_order`, `find_field_references` and `generate_tests` — so Claude Code, Cursor,
-VS Code agents and other MCP clients can check their own Salesforce changes, and write the tests
-for them, before committing. Setup for each
+`preflight mcp` is a read-only MCP server with five tools — `analyze_change`,
+`explain_save_order`, `find_field_references`, `explain_agent` and `generate_tests` — so Claude
+Code, Cursor, VS Code agents and other MCP clients can check their own Salesforce changes, and
+write the tests for them, before committing. Setup for each
 client is in [docs/MCP.md](docs/MCP.md).
 
 ### With org context (beta)
