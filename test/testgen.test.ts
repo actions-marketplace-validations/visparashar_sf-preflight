@@ -185,7 +185,10 @@ describe("test generation", () => {
 
   it("fills name fields even when the org reports them as optional", () => {
     // Account.Name is nillable in orgs with Person Accounts but required for business accounts.
-    expect(fileOf(g0(), "DataFactory.cls")).toContain("field.isNameField() && !field.isAutoNumber()");
+    const factory = fileOf(g0(), "DataFactory.cls");
+    expect(factory).toContain("field.getName() == 'Name' && field.isNameField() && !field.isAutoNumber()");
+    // ...but never the person-account fields, which business accounts can't have.
+    expect(factory).toContain("personAccountField(describe.getName(), field.getName())");
   });
 
   it("sets a business record type when the object has record types", () => {

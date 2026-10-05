@@ -78,10 +78,13 @@ public class ${className} {
             Schema.DescribeFieldResult field = fields.get(key).getDescribe();
             Boolean overridden = wanted.containsKey(key);
             Boolean required = !field.isNillable() && !field.isDefaultedOnCreate();
-            // A name field can be nillable yet still required, e.g. Account.Name with Person Accounts.
-            Boolean nameField = field.isNameField() && !field.isAutoNumber() && !field.isCalculated();
+            // Name can be nillable yet still required, e.g. Account.Name with Person Accounts.
+            Boolean nameField = field.getName() == 'Name' && field.isNameField() && !field.isAutoNumber() && !field.isCalculated();
             if (!field.isCreateable() || (!overridden && !required && !nameField)) {
                 continue;
+            }
+            if (!overridden && personAccountField(describe.getName(), field.getName())) {
+                continue; // the factory builds business accounts, which can't have person fields
             }
             plan.add(field);
             planValues.add(overridden ? wanted.get(key) : ANY_VALUE);
@@ -277,6 +280,17 @@ public class ${className} {
             }
         }
         return fallback;
+    }
+
+    private static final Set<String> PERSON_NAME_FIELDS = new Set<String>{ 'firstname', 'lastname', 'middlename', 'suffix', 'salutation' };
+
+    /** Account fields that only person accounts can have (orgs with Person Accounts). */
+    private static Boolean personAccountField(String objectName, String fieldName) {
+        if (objectName != 'Account') {
+            return false;
+        }
+        String lower = fieldName.toLowerCase();
+        return PERSON_NAME_FIELDS.contains(lower) || lower.startsWith('person') || lower.endsWith('__pc');
     }
 
     /**
