@@ -1,9 +1,23 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { Command, Option } from "commander";
 import type { AnalysisResult, SaveEvent } from "./core/index.js";
-import { loadProject, run, saveProcedure, toMarkdown, toSarif } from "./core/index.js";
+import {
+  GENERIC_ORG_LABEL,
+  loadProject,
+  run,
+  runTests,
+  saveProcedure,
+  sourceRoots,
+  testsToMarkdown,
+  toMarkdown,
+  toSarif,
+  type ValidationResult,
+  validateTests,
+  validationToMarkdown,
+} from "./core/index.js";
 
 // `preflight analyze | head` closes stdout early; exit quietly instead of crashing on EPIPE.
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -83,6 +97,125 @@ program
         RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn as keyof typeof RISK_RANK]
       ) {
         process.exitCode = 2;
+      }
+    },
+  );
+
+program
+  .command("tests")
+  .description("Generate Apex tests for what a change touches (bulk, recursion, idempotency, swallowed errors)")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+  .option("--head <ref>", "git head ref (default: working tree)")
+  .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
+  .option("-o, --out <dir>", "directory to write the classes to (default: <project>/preflight-tests)")
+  .option("--prefix <name>", "prefix for generated class names", "Preflight")
+  .option("--class-name <name>", "test class name (default: <prefix>ChangeTest)")
+  .option("--bulk-size <n>", "records per bulk test", (v) => Number.parseInt(v, 10), 200)
+  .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
+  .option("--dry-run", "print the summary without writing files")
+  .option("--validate", "run the tests in --org with a check-only deployment (nothing is saved)")
+  .option("--org <alias>", "org for --validate: a sandbox, scratch org or Developer Edition org")
+  .option("--allow-production", "allow --validate in a production org")
+  .option("--wait <minutes>", "minutes to wait for --validate", (v) => Number.parseInt(v, 10), 33)
+  .addOption(new Option("--format <format>", "summary format").choices(["md", "json"]).default("md"))
+  .action(
+    (opts: {
+      project: string;
+      base?: string;
+      head?: string;
+      files?: string[];
+      out?: string;
+      prefix: string;
+      className?: string;
+      bulkSize: number;
+      depth: number;
+      dryRun?: boolean;
+      validate?: boolean;
+      org?: string;
+      allowProduction?: boolean;
+      wait: number;
+      format: "md" | "json";
+    }) => {
+      if (opts.validate && !opts.org) throw new Error("--validate needs --org <alias>.");
+      if (opts.validate && opts.dryRun) throw new Error("--validate can't be combined with --dry-run.");
+      if (opts.org && !opts.validate) throw new Error("--org is only used with --validate.");
+      const { tests } = runTests({
+        projectDir: opts.project,
+        base: opts.base,
+        head: opts.head,
+        files: opts.files,
+        maxDepth: opts.depth,
+        prefix: opts.prefix,
+        className: opts.className,
+        bulkSize: opts.bulkSize,
+      });
+      const outDir = path.resolve(opts.out ?? path.join(opts.project, "preflight-tests"));
+      if (!opts.dryRun) {
+        for (const f of tests.files) {
+          const target = path.join(outDir, f.path);
+          mkdirSync(path.dirname(target), { recursive: true });
+          writeFileSync(target, f.content);
+        }
+      }
+      const shown = (p: string) => {
+        const rel = path.relative(process.cwd(), p);
+        return rel === "" ? "." : rel.startsWith("..") ? p : rel;
+      };
+      const shownDir = shown(outDir);
+      const projectAbs = path.resolve(opts.project);
+      const sourceDirs = sourceRoots(projectAbs);
+      // Paths in the suggested `sf` command are relative to the project, where `sf` has to run.
+      const inProject = path.relative(projectAbs, outDir);
+      const insideSource = sourceDirs.some((d) => {
+        const rel = path.relative(path.resolve(projectAbs, d), outDir);
+        return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+      });
+      const outForSf = insideSource
+        ? undefined
+        : inProject.startsWith("..") || path.isAbsolute(inProject)
+          ? outDir
+          : inProject.split(path.sep).join("/");
+      if (!opts.dryRun && tests.files.length) {
+        process.stderr.write(`Wrote ${tests.files.length} files to ${shownDir}\n`);
+      }
+      let validation: ValidationResult | undefined;
+      if (opts.validate && opts.org && tests.tests.length) {
+        process.stderr.write(
+          "Running the generated tests with a check-only deployment (nothing is saved); this can take a few minutes...\n",
+        );
+        validation = validateTests({
+          org: opts.org,
+          projectDir: projectAbs,
+          sourceDirs,
+          testsDir: outForSf,
+          className: tests.className,
+          methods: tests.tests.map((t) => t.method),
+          waitMinutes: opts.wait,
+          allowProduction: opts.allowProduction,
+        });
+        if (validation.status === "failed") process.exitCode = 2;
+      }
+      if (opts.format === "json") {
+        const { files, ...rest } = tests;
+        const json = {
+          ...rest,
+          outDir: opts.dryRun ? undefined : shownDir,
+          files: files.map((f) => f.path),
+          validation,
+        };
+        process.stdout.write(`${JSON.stringify(json, null, 2)}\n`);
+      } else {
+        const results = validation ? validationToMarkdown(validation) : undefined;
+        process.stdout.write(
+          `${testsToMarkdown(tests, {
+            projectDir: shown(projectAbs),
+            sourceDirs,
+            outDir: outForSf,
+            results,
+            targetOrg: validation && validation.org !== GENERIC_ORG_LABEL ? validation.org : undefined,
+          })}\n`,
+        );
       }
     },
   );

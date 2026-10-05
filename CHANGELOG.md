@@ -7,6 +7,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-05
+
+Generated Apex tests for every change, and a way to run them in a sandbox. Verified against a
+real Developer Edition org with Person Accounts.
+
+### Added
+
+- **Test generation:** `preflight tests` writes Apex tests for what a change touches: bulk saves
+  of 200 records for each affected object and event, recursion along cross-object automation
+  cycles, idempotency of after-save flows that update their own record and create related
+  records, and invocable actions surfacing (not swallowing) validation errors. Tests use a
+  generated, describe-driven data factory (`PreflightDataFactory`) that fills required fields at
+  run time; the values a test needs are solved from flow entry criteria and validation-rule
+  formulas. Anything not generated is listed with the reason, and the summary prints the
+  check-only `sf project deploy validate` command to run them. See
+  [docs/TESTS.md](docs/TESTS.md).
+- `preflight tests --validate --org <alias>` runs the generated tests in a sandbox, scratch org or
+  Developer Edition org with a check-only deployment (nothing is saved) and reports each test's
+  outcome, compile errors and coverage problems; exit code 2 when anything fails. Production orgs
+  are refused unless `--allow-production` is passed.
+- MCP tool `generate_tests` returns the same tests as code for coding agents (read-only; nothing
+  is written to disk).
+- `runTests()`, `generateTests()`, `validateTests()` and the Markdown renderers in the library
+  API.
+- Flow parsing now keeps start-condition values, filter logic, formulas and "only when updated to
+  meet the criteria"; the field a flow uses to link records it creates or updates to the
+  triggering record; Apex method parameter types and `static`; and custom field `required` and
+  default values.
+
+### Fixed
+
+- Email addresses in org error messages are redacted with a linear-time scan instead of a
+  regular expression that could backtrack on unusual input.
+- The sample project's permission set grants Contact access alongside Account access, as orgs
+  with Person Accounts require.
+
 ## [0.2.0] - 2026-10-05
 
 Accurate Apex analysis on a real parse tree, and read-only org context (beta).
@@ -86,6 +122,7 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/visparashar/sf-preflight/releases/tag/v0.1.0

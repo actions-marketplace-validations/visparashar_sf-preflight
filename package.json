@@ -1,6 +1,6 @@
 {
   "name": "sf-preflight",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Preflight checks for Salesforce changes: follows a git diff through flows, triggers, validation rules, roll-ups and permissions to show what it will set off before it ships.",
   "license": "Apache-2.0",
   "author": "sf-preflight contributors",
@@ -47,6 +47,7 @@
     "test:watch": "vitest",
     "check": "npm run lint && npm run typecheck && npm test",
     "analyze:sample": "node dist/cli.js analyze --project fixtures/sample-org --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml",
+    "tests:sample": "node dist/cli.js tests --project fixtures/sample-org --files fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml --dry-run",
     "prepack": "npm run clean && npm run build",
     "docs:rules": "npm run build && node -e \"import('./dist/core/rules.js').then((m) => require('node:fs').writeFileSync('docs/RULES.md', m.renderRulesMarkdown()))\""
   },

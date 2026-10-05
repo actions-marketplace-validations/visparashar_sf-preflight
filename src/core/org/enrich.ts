@@ -10,7 +10,7 @@ import type {
   OrgModel,
   SaveEvent,
 } from "../types.js";
-import { key, uniq } from "../util.js";
+import { key, redactEmails, uniq } from "../util.js";
 import { assertSafeOrg, createSfRunner, field, query, SfError, type SfRunner, soqlList, soqlStringList } from "./sf.js";
 
 /**
@@ -80,8 +80,7 @@ export function orgLabel(input: string, alias?: unknown): string {
 /** "dev" → "dev"; the generic label reads as "the target org" inside sentences. */
 export const orgRef = (label: string) => (label === GENERIC_ORG_LABEL ? `the ${label}` : label);
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
-const redact = (message: string) => message.replace(EMAIL, "<username>");
+const redact = redactEmails;
 
 /**
  * Object → events this change reaches in its cascade, with the automation (or the change

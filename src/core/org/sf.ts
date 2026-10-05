@@ -10,7 +10,17 @@ import { execFileSync } from "node:child_process";
  */
 export type SfRunner = (args: string[]) => unknown;
 
-export class SfError extends Error {}
+export class SfError extends Error {
+  constructor(
+    message: string,
+    /** The error name sf reported, e.g. "FailedValidationError". */
+    readonly sfName?: string,
+    /** Extra data sf attached to the error, e.g. `{ deployId }`. */
+    readonly data?: unknown,
+  ) {
+    super(message);
+  }
+}
 
 /** Org aliases/usernames come from users and agents: allow only safe characters. */
 export function assertSafeOrg(org: string): string {
@@ -26,7 +36,13 @@ function cmdQuote(arg: string): string {
   return `"${arg}"`;
 }
 
-export function createSfRunner(opts: { timeoutMs?: number } = {}): SfRunner {
+export interface SfRunnerOptions {
+  timeoutMs?: number;
+  /** Working directory; project commands such as `project deploy` must run inside the project. */
+  cwd?: string;
+}
+
+export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
   return (args: string[]) => {
     const fullArgs = [...args, "--json"];
     const windows = process.platform === "win32";
@@ -36,6 +52,7 @@ export function createSfRunner(opts: { timeoutMs?: number } = {}): SfRunner {
         encoding: "utf8",
         maxBuffer: 256 * 1024 * 1024,
         timeout: opts.timeoutMs ?? 180_000,
+        cwd: opts.cwd,
         stdio: ["ignore", "pipe", "pipe"],
         shell: windows,
         env: { ...process.env, SF_SKIP_NEW_VERSION_CHECK: "true", SF_DISABLE_AUTOUPDATE: "true" },
@@ -50,14 +67,18 @@ export function createSfRunner(opts: { timeoutMs?: number } = {}): SfRunner {
       stdout = typeof e.stdout === "string" ? e.stdout : "";
       if (!stdout) throw new SfError(`sf ${args[0] ?? ""} failed: ${e.message}`);
     }
-    let parsed: { status?: number; result?: unknown; message?: string; name?: string };
+    let parsed: { status?: number; result?: unknown; message?: string; name?: string; data?: unknown };
     try {
       parsed = JSON.parse(stdout);
     } catch {
       throw new SfError(`Unexpected output from sf ${args.slice(0, 2).join(" ")}`);
     }
     if (parsed.status !== 0) {
-      throw new SfError(parsed.message ?? `sf ${args.slice(0, 2).join(" ")} failed (${parsed.name ?? "error"})`);
+      throw new SfError(
+        parsed.message ?? `sf ${args.slice(0, 2).join(" ")} failed (${parsed.name ?? "error"})`,
+        parsed.name,
+        parsed.data,
+      );
     }
     return parsed.result;
   };

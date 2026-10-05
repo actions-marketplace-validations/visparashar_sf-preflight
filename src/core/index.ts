@@ -6,19 +6,39 @@ import { enrichWithOrg } from "./org/enrich.js";
 import type { SfRunner } from "./org/sf.js";
 import { loadProject } from "./project.js";
 import { gitProvenance } from "./provenance.js";
-import type { AnalysisResult, ChangeType } from "./types.js";
+import { generateTests, type TestGenOptions, type TestGenResult } from "./testgen/generate.js";
+import type { AnalysisResult, ChangeType, OrgModel } from "./types.js";
 import { toPosix } from "./util.js";
 
 export { analyze, fieldReferences } from "./analyze.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
 export { saveProcedure } from "./orderOfExecution.js";
-export { applyOrgContext, collectOrgContext, enrichWithOrg } from "./org/enrich.js";
-export { assertSafeOrg, createSfRunner, type SfRunner } from "./org/sf.js";
+export { applyOrgContext, collectOrgContext, enrichWithOrg, GENERIC_ORG_LABEL } from "./org/enrich.js";
+export { assertSafeOrg, createSfRunner, SfError, type SfRunner } from "./org/sf.js";
+export {
+  type ComponentError,
+  type OrgKind,
+  readDeployResult,
+  type TestOutcome,
+  type ValidateTestsOptions,
+  type ValidationResult,
+  validateTests,
+  validationToMarkdown,
+} from "./org/validate.js";
 export { classifyPath, loadProject, sourceRoots } from "./project.js";
 export { detectAiTools, gitProvenance } from "./provenance.js";
 export { toMarkdown } from "./report/markdown.js";
 export { toSarif } from "./report/sarif.js";
 export { RULES, ruleInfo } from "./rules.js";
+export {
+  type GeneratedFile,
+  type GeneratedTest,
+  generateTests,
+  type SkippedTest,
+  type TestGenOptions,
+  type TestGenResult,
+} from "./testgen/generate.js";
+export { testsToMarkdown } from "./testgen/markdown.js";
 export * from "./types.js";
 
 export interface RunOptions {
@@ -38,6 +58,11 @@ export interface RunOptions {
 
 /** Load the project, work out what changed, and analyze it. */
 export function run(opts: RunOptions): AnalysisResult {
+  return analyzeChange(opts).result;
+}
+
+/** Like `run`, but also returns the parsed project (needed by test generation). */
+export function analyzeChange(opts: RunOptions): { model: OrgModel; result: AnalysisResult } {
   const projectDir = path.resolve(opts.projectDir);
   const model = loadProject(projectDir);
   let changedFiles: { file: string; changeType: ChangeType; previousFile?: string }[];
@@ -62,5 +87,11 @@ export function run(opts: RunOptions): AnalysisResult {
   });
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
   if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
-  return result;
+  return { model, result };
+}
+
+/** Analyze a change and generate Apex tests for it. Nothing is written to disk. */
+export function runTests(opts: RunOptions & TestGenOptions): { result: AnalysisResult; tests: TestGenResult } {
+  const { model, result } = analyzeChange(opts);
+  return { result, tests: generateTests(model, result, opts) };
 }

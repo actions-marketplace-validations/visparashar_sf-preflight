@@ -33,6 +33,12 @@ git diff / --files
 | `report/sarif.ts` | SARIF 2.1.0 for code scanning. |
 | `org/sf.ts` | Read-only wrapper around the Salesforce CLI (`sf ... --json`), with input validation. |
 | `org/enrich.ts` | Optional `--org` context: record counts, org-only automation, assignments, packages; turns it into findings and annotations. |
+| `org/validate.ts` | `preflight tests --validate`: check-only deployment of the project and generated tests (`sf project deploy validate`), org safety check, per-test results. |
+| `testgen/generate.ts` | `preflight tests`: turns the cascade and findings into an Apex test class (bulk, recursion, idempotency, validation errors surfacing). Every generated class is syntax-checked with the Apex parser. |
+| `testgen/solver.ts` | Parses and evaluates validation-rule and entry-criteria formulas (three-valued: a value can be unknown) and finds field values that satisfy or violate them. |
+| `testgen/schema.ts` | What the generator knows about standard objects (required, defaulted and read-only fields, standard relationships), plus project field definitions. |
+| `testgen/factory.ts` | Source of the generated `PreflightDataFactory`, which builds valid records at run time from the org's describe information. |
+| `testgen/markdown.ts` | Summary of generated and skipped tests, with the command to run them. |
 
 ## Key concepts
 
@@ -50,6 +56,11 @@ node is marked as a cycle and not expanded further.
 
 **Finding.** A rule result with a severity, a human-readable explanation and the files involved.
 Overall risk is the highest severity found.
+
+**Generated test.** A test method for a property any correct implementation should have (bulk
+safety, bounded recursion, idempotency, errors surfacing), with the field values it needs worked
+out from flow entry criteria and validation rules. The runtime data factory fills in everything
+else, so tests don't depend on org-specific required fields. See [TESTS.md](TESTS.md).
 
 ## Adding a metadata parser
 

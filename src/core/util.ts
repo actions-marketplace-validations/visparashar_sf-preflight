@@ -69,3 +69,28 @@ export type XmlNode = Record<string, unknown>;
 export function nodes(value: unknown): XmlNode[] {
   return asArray(value as XmlNode | XmlNode[]).filter((v): v is XmlNode => typeof v === "object" && v !== null);
 }
+
+const EMAIL_LOCAL = /[A-Za-z0-9._%+-]/;
+const EMAIL_DOMAIN = /[A-Za-z0-9.-]/;
+
+/**
+ * Replace email addresses (Salesforce usernames look like them) with "<username>". Scans from
+ * each "@" instead of using one regular expression, so the time stays linear in the input.
+ */
+export function redactEmails(text: string): string {
+  let out = "";
+  let copied = 0;
+  for (let at = text.indexOf("@"); at !== -1; at = text.indexOf("@", at + 1)) {
+    let start = at;
+    while (start > copied && EMAIL_LOCAL.test(text[start - 1]!)) start--;
+    let end = at + 1;
+    while (end < text.length && EMAIL_DOMAIN.test(text[end]!)) end++;
+    while (end > at + 1 && text[end - 1] === ".") end--; // a sentence's full stop isn't part of it
+    const domain = text.slice(at + 1, end);
+    if (start === at || !domain.includes(".") || domain.startsWith(".") || domain.includes("..")) continue;
+    out += `${text.slice(copied, start)}<username>`;
+    copied = end;
+    at = end - 1;
+  }
+  return out + text.slice(copied);
+}

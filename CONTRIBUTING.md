@@ -46,7 +46,9 @@ src/core/project.ts   finds and parses every metadata file in an SFDX project
 src/core/graph.ts     who writes what, who calls whom
 src/core/orderOfExecution.ts   the simplified Salesforce save procedure
 src/core/analyze.ts   roots → cascade → findings → suggested tests
-src/core/report/      Markdown and JSON output
+src/core/report/      Markdown, JSON and SARIF output
+src/core/testgen/     Apex test generation (preflight tests)
+src/core/org/         read-only org context via the sf CLI (--org)
 src/cli.ts            command-line entry point
 src/mcp.ts            MCP server (stdio) for coding agents
 action.yml            GitHub Action (composite)

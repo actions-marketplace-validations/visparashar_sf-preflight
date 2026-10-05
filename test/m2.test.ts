@@ -153,7 +153,12 @@ describe("MCP server", () => {
 
   it("advertises read-only tools and usage instructions", async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["analyze_change", "explain_save_order", "find_field_references"]);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "analyze_change",
+      "explain_save_order",
+      "find_field_references",
+      "generate_tests",
+    ]);
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(client.getInstructions()).toContain("analyze_change");
   });
