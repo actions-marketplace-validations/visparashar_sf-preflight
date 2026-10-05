@@ -62,8 +62,20 @@ export interface ValidationResult {
 
 const redact = redactEmails;
 const list = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
-const MAX_MESSAGE = 400;
-const clip = (s: string) => (s.length > MAX_MESSAGE ? `${s.slice(0, MAX_MESSAGE - 1)}…` : s);
+const MAX_MESSAGE = 500;
+/** Drop the boilerplate Salesforce wraps around flow errors so the cause fits in the report. */
+const tidy = (s: string) =>
+  s
+    .replace(
+      /We can['’]t save this record because the [“"]([^”"]{1,200})[”"] process failed\. Give your Salesforce admin these details\. ?/g,
+      "Flow “$1” failed. ",
+    )
+    .replace(/ ?You can look up ExceptionCode values in the SOAP API Developer Guide\.?/g, "")
+    .replace(/ ?Error ID: [0-9-]{6,40}(?: \([-0-9]{1,20}\))?/g, "");
+const clip = (s: string) => {
+  const t = tidy(s);
+  return t.length > MAX_MESSAGE ? `${t.slice(0, MAX_MESSAGE - 1)}…` : t;
+};
 
 /** Sandbox, scratch org, Developer Edition or production, from the Organization record. */
 export function orgKind(run: SfRunner, org: string): OrgKind {

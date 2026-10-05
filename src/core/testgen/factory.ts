@@ -77,15 +77,20 @@ public class ${className} {
         for (String key : fields.keySet()) {
             Schema.DescribeFieldResult field = fields.get(key).getDescribe();
             Boolean overridden = wanted.containsKey(key);
-            Boolean required = !field.isNillable() && !field.isDefaultedOnCreate();
-            // Name can be nillable yet still required, e.g. Account.Name with Person Accounts.
-            Boolean nameField = field.getName() == 'Name' && field.isNameField() && !field.isAutoNumber() && !field.isCalculated();
-            if (!field.isCreateable() || (!overridden && !required && !nameField)) {
-                continue;
+            if (!overridden) {
+                Boolean required = !field.isNillable() && !field.isDefaultedOnCreate();
+                // Name can be nillable yet still required, e.g. Account.Name with Person Accounts.
+                Boolean nameField = field.getName() == 'Name' && field.isNameField() && !field.isAutoNumber() && !field.isCalculated();
+                if (!field.isCreateable() || (!required && !nameField)) {
+                    continue;
+                }
+                if (personAccountField(describe.getName(), field.getName())) {
+                    continue; // the factory builds business accounts, which can't have person fields
+                }
             }
-            if (!overridden && personAccountField(describe.getName(), field.getName())) {
-                continue; // the factory builds business accounts, which can't have person fields
-            }
+            // Fields the test sets are always set, even when isCreateable() is false: it reflects the
+            // running user's field-level security (a field deployed together with the tests has none),
+            // which Apex DML doesn't enforce.
             plan.add(field);
             planValues.add(overridden ? wanted.get(key) : ANY_VALUE);
         }

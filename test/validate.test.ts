@@ -190,6 +190,29 @@ describe("validateTests", () => {
     expect(validationToMarkdown(v)).toContain("Failed to validate the deployment");
   });
 
+  it("keeps the cause of a flow error and drops the boilerplate", () => {
+    const flowError =
+      "System.AssertException: Assertion Failed: update of Account failed for 200 record(s). First error: CANNOT_EXECUTE_FLOW_TRIGGER: " +
+      "We can't save this record because the “Account: Sync Tier To Contacts” process failed. Give your Salesforce admin these details. " +
+      "This error occurred when the flow tried to update records: LIMIT_EXCEEDED: System.LimitException: Too many SOQL queries: 101. " +
+      "You can look up ExceptionCode values in the SOAP API Developer Guide. Error ID: 1234567890-12345 (-987654321)";
+    const v = readDeployResult(
+      {
+        success: false,
+        details: {
+          runTestResult: { failures: { name: CLASS, methodName: "recursionAccountContact", message: flowError } },
+        },
+      },
+      CLASS,
+      METHODS,
+    );
+    expect(v.tests[2]!.message).toBe(
+      "System.AssertException: Assertion Failed: update of Account failed for 200 record(s). First error: CANNOT_EXECUTE_FLOW_TRIGGER: " +
+        "Flow “Account: Sync Tier To Contacts” failed. This error occurred when the flow tried to update records: " +
+        "LIMIT_EXCEEDED: System.LimitException: Too many SOQL queries: 101.",
+    );
+  });
+
   it("tells failed setup apart from failed checks", () => {
     const v = readDeployResult(
       {

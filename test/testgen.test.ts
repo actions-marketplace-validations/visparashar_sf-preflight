@@ -191,6 +191,17 @@ describe("test generation", () => {
     expect(factory).toContain("personAccountField(describe.getName(), field.getName())");
   });
 
+  it("sets the fields a test asks for even when field-level security hides them", () => {
+    // A field deployed together with the tests has no FLS yet, so isCreateable() is false.
+    const factory = fileOf(g0(), "DataFactory.cls");
+    const plan = factory.slice(
+      factory.indexOf("for (String key : fields.keySet())"),
+      factory.indexOf("plan.add(field);"),
+    );
+    expect(plan).toContain("if (!overridden) {");
+    expect(plan.indexOf("!field.isCreateable()")).toBeGreaterThan(plan.indexOf("if (!overridden) {"));
+  });
+
   it("sets a business record type when the object has record types", () => {
     // Person Account orgs reject accounts without a record type when the profile has no default.
     const factory = fileOf(g0(), "DataFactory.cls");
