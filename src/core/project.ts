@@ -65,7 +65,10 @@ export function classifyPath(relPath: string): ComponentRef {
   if (base.endsWith(".workflow-meta.xml"))
     return { type: "WorkflowRule", name: strip(base, ".workflow-meta.xml"), file };
   const agentSuffix = AGENT_SUFFIXES.find((s) => base.endsWith(s) || parent?.endsWith(s.replace("-meta.xml", "")));
-  if (agentSuffix) return { type: "AgentMetadata", name: base.replace(/\..*$/, ""), file };
+  if (agentSuffix) {
+    const dot = base.indexOf(".");
+    return { type: "AgentMetadata", name: dot >= 0 ? base.slice(0, dot) : base, file };
+  }
   return { type: "Other", name: base, file };
 }
 

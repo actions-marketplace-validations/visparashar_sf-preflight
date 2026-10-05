@@ -11,7 +11,7 @@ const KIND_LABEL: Record<TestKind, string> = {
   boundary: "boundary",
 };
 
-const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 export interface TestsMarkdownOptions {
   /**
