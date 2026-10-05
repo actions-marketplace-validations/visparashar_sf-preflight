@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { redactEmails } from "../util.js";
 import { orgLabel, orgRef } from "./enrich.js";
 import { assertSafeOrg, createSfRunner, field, query, SfError, type SfRunner } from "./sf.js";
 
@@ -58,8 +59,7 @@ export interface ValidationResult {
   message?: string;
 }
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
-const redact = (s: string) => s.replace(EMAIL, "<username>");
+const redact = redactEmails;
 const list = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const MAX_MESSAGE = 400;
 const clip = (s: string) => (s.length > MAX_MESSAGE ? `${s.slice(0, MAX_MESSAGE - 1)}…` : s);

@@ -11,6 +11,7 @@ import {
   validateTests,
   validationToMarkdown,
 } from "../src/core/index.js";
+import { redactEmails } from "../src/core/util.js";
 
 const CLASS = "PreflightChangeTest";
 const METHODS = ["bulkUpdateOpportunity", "bulkInsertOpportunity", "recursionAccountContact"];
@@ -250,6 +251,20 @@ describe("validateTests", () => {
   it("validates the org and wait time", () => {
     expect(() => validateTests(options(fakeRunner(), { org: "--target-org" }))).toThrow(/Invalid org/);
     expect(() => validateTests(options(fakeRunner(), { waitMinutes: 0 }))).toThrow(/--wait/);
+  });
+});
+
+describe("redactEmails", () => {
+  it("replaces email addresses and usernames", () => {
+    expect(redactEmails("No authorization for jane.doe+uat@example.com.uat.")).toBe("No authorization for <username>.");
+    expect(redactEmails("a@b, x_y%z@corp-mail.co.uk and @mention")).toBe("a@b, <username> and @mention");
+    expect(redactEmails("user@host")).toBe("user@host");
+  });
+
+  it("stays fast on long inputs without an address", () => {
+    const started = Date.now();
+    redactEmails(`${"%".repeat(200_000)}@${".".repeat(200_000)}`);
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
 
