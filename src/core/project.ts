@@ -2,25 +2,27 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { applyCallGraph } from "./callGraph.js";
+import {
+  agentFileKind,
+  emptyAgentMetadata,
+  linkAgents,
+  parseAgentScript,
+  parseAgentTest,
+  parseBot,
+  parseBotVersion,
+  parseGenAiFunction,
+  parseGenAiPlugin,
+  parsePlanner,
+} from "./parsers/agents.js";
 import { parseApexClass, parseApexTrigger } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
 import type { ComponentRef, ObjectDef, OrgModel } from "./types.js";
-import { key, toPosix } from "./util.js";
+import { key, redactEmails, toPosix } from "./util.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".sfdx", ".sf", ".vscode", ".idea", "dist"]);
-
-const AGENT_SUFFIXES = [
-  ".genAiFunction-meta.xml",
-  ".genAiPlugin-meta.xml",
-  ".genAiPlannerBundle",
-  ".genAiPromptTemplate-meta.xml",
-  ".bot-meta.xml",
-  ".botVersion-meta.xml",
-  ".aiEvaluationDefinition-meta.xml",
-];
 
 function strip(name: string, suffix: string): string {
   return name.slice(0, name.length - suffix.length);
@@ -64,11 +66,8 @@ export function classifyPath(relPath: string): ComponentRef {
   if (base.endsWith(".profile-meta.xml")) return { type: "Profile", name: strip(base, ".profile-meta.xml"), file };
   if (base.endsWith(".workflow-meta.xml"))
     return { type: "WorkflowRule", name: strip(base, ".workflow-meta.xml"), file };
-  const agentSuffix = AGENT_SUFFIXES.find((s) => base.endsWith(s) || parent?.endsWith(s.replace("-meta.xml", "")));
-  if (agentSuffix) {
-    const dot = base.indexOf(".");
-    return { type: "AgentMetadata", name: dot >= 0 ? base.slice(0, dot) : base, file };
-  }
+  const agent = agentFileKind(parts);
+  if (agent) return { type: "AgentMetadata", agentKind: agent.kind, name: agent.name, file };
   return { type: "Other", name: base, file };
 }
 
@@ -125,6 +124,8 @@ export function loadProject(projectDirInput: string): OrgModel {
     triggers: new Map(),
     classes: new Map(),
     permissionContainers: new Map(),
+    agents: new Map(),
+    agentTests: [],
     components: new Map(),
     warnings: [],
   };
@@ -147,10 +148,20 @@ export function loadProject(projectDirInput: string): OrgModel {
     try {
       fn();
     } catch (err) {
-      model.warnings.push(`Could not parse ${ref.file}: ${(err as Error).message}`);
+      // Parser messages can quote the file (a "Context:" excerpt). Agent files can name the agent's
+      // runtime user, so they get no details; other messages lose the excerpt and any emails.
+      const message = (err as Error).message;
+      const context = message.indexOf("Context:");
+      const detail = redactEmails((context >= 0 ? message.slice(0, context) : message).trim());
+      model.warnings.push(
+        ref.type === "AgentMetadata" || !detail
+          ? `Could not parse ${ref.file}.`
+          : `Could not parse ${ref.file}: ${detail}`,
+      );
     }
   };
 
+  const agentMeta = emptyAgentMetadata();
   let legacyWorkflow = 0;
   let processBuilders = 0;
   for (const ref of refs) {
@@ -206,11 +217,46 @@ export function loadProject(projectDirInput: string): OrgModel {
       case "WorkflowRule":
         legacyWorkflow++;
         break;
+      case "AgentMetadata": {
+        const file = ref.file;
+        const base = file.slice(file.lastIndexOf("/") + 1);
+        safely(ref, () => {
+          switch (ref.agentKind) {
+            case "bot":
+              if (base.endsWith(".bot-meta.xml")) agentMeta.bots.push(parseBot(read(file), ref.name, file));
+              break;
+            case "botVersion":
+              agentMeta.botVersions.push({ bot: ref.name, planners: parseBotVersion(read(file)), file });
+              break;
+            case "planner":
+              if (base.endsWith(".genAiPlannerBundle") || base.endsWith(".genAiPlanner-meta.xml"))
+                agentMeta.planners.push(parsePlanner(read(file), ref.name, file));
+              break;
+            case "topic":
+              agentMeta.topics.push(parseGenAiPlugin(read(file), ref.name, file));
+              break;
+            case "action":
+              if (base.endsWith(".genAiFunction-meta.xml"))
+                agentMeta.actions.push(parseGenAiFunction(read(file), ref.name, file));
+              break;
+            case "script":
+              if (base.endsWith(".agent")) agentMeta.scripts.push(parseAgentScript(read(file), ref.name, file));
+              break;
+            case "test":
+              model.agentTests.push(parseAgentTest(read(file), ref.name, file));
+              break;
+            default:
+              break;
+          }
+        });
+        break;
+      }
       default:
         break;
     }
   }
 
+  model.agents = linkAgents(agentMeta, model.warnings);
   applyCallGraph(model);
   for (const def of [...model.classes.values(), ...model.triggers.values()]) {
     const first = def.parseErrors?.[0];

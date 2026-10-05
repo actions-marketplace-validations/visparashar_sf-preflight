@@ -9,6 +9,7 @@ Salesforce org a few read-only questions that source code can't answer:
 | Which active flows, triggers and validation rules on those objects exist **in the org but not in the project**? | Preflight can only follow automation it can read. Anything missing from the repo is a blind spot in the cascade. |
 | How many active users hold the permission sets or profiles you changed? | A Modify All grant on an unused permission set is a different risk from one held by 400 users or an agent's runtime user. |
 | Which packages are installed? | So automation from managed packages is labelled as such. It can't be retrieved as source, but it still runs. |
+| Does an affected agent's runtime user have the access its actions need, and no more? | An agent action fails when its user can't run the Apex class or save the records; a user with Modify All Data lets a conversation reach anything. See [AGENTS.md](AGENTS.md#runtime-user). |
 
 ## Usage
 
@@ -40,6 +41,14 @@ SELECT Id, Name FROM PermissionSet WHERE IsOwnedByProfile = false AND Name IN (.
 SELECT PermissionSetId, COUNT(Id) n FROM PermissionSetAssignment WHERE Assignee.IsActive = true AND ... GROUP BY PermissionSetId
 SELECT Id, Name FROM Profile WHERE Name IN (...)                                                          -- changed profiles only
 SELECT ProfileId, COUNT(Id) n FROM User WHERE IsActive = true AND ProfileId IN (...) GROUP BY ProfileId
+-- for each affected agent with its own runtime user:
+SELECT Id, IsActive FROM User WHERE Username = '...' LIMIT 1
+SELECT PermissionSetId, PermissionSet.PermissionsModifyAllData, PermissionSet.PermissionsViewAllData,
+  PermissionSet.PermissionsAuthorApex FROM PermissionSetAssignment WHERE AssigneeId = '...'
+SELECT SobjectType, PermissionsRead, PermissionsCreate, PermissionsEdit, PermissionsDelete, PermissionsModifyAllRecords
+  FROM ObjectPermissions WHERE ParentId IN (...) AND SobjectType IN (...)
+SELECT Id, Name FROM ApexClass WHERE NamespacePrefix = null AND Name IN (...)
+SELECT SetupEntityId FROM SetupEntityAccess WHERE SetupEntityType = 'ApexClass' AND ParentId IN (...) AND SetupEntityId IN (...)
 ```
 
 Nothing is written to the org. (The one command that deploys is
@@ -49,6 +58,8 @@ record data, user names or org IDs, so it is safe to post as a pull-request comm
 
 - If you pass a **username** to `--org`, the report names the org by its alias, or "target
   org" when it has none. Email addresses are removed from any error messages it includes.
+- An agent's runtime user is named in reports only as "<agent>'s runtime user". Its username
+  comes from the agent's metadata and is used in the query above, nothing else.
 - From the `sf org display` result, only the alias is read; everything else, including the
   access token, is discarded immediately.
 

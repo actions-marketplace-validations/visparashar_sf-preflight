@@ -1,0 +1,40 @@
+system:
+    instructions: "You help customers with questions about their account."
+
+config:
+    developer_name: "Service_Agent"
+    agent_label: "Service Agent"
+    description: "Answers account questions and updates service tiers."
+    default_agent_user: "service.agent@example.com.sample"
+
+start_agent agent_router:
+    label: "Agent Router"
+    description: "Welcome the customer and choose the right subagent."
+    reasoning:
+        instructions: -> |
+            Choose the subagent that fits the customer's request.
+        actions:
+            go_to_account_care: @utils.transition to @subagent.Account_Care
+
+subagent Account_Care:
+    label: "Account Care"
+    description: "Changes a customer's service tier."
+    actions:
+        Update_Tier:
+            label: "Update Tier"
+            description: "Sets the service tier on the customer's account."
+            target: "flow://Update_Customer_Tier"
+            inputs:
+                recordId: string
+                    description: "The customer's account."
+                tier: string
+                    description: "The new tier: Gold, Silver or Bronze."
+            outputs:
+                success: boolean
+    reasoning:
+        instructions: -> |
+            Confirm the new tier with the customer, then run Update Tier.
+        actions:
+            update_tier: @actions.Update_Tier
+                with recordId = ...
+                with tier = ...

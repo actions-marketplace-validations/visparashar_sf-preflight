@@ -7,6 +7,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Agentforce action verification:** preflight reads agents from source, both Agent Builder
+  metadata (bots, planner bundles, topics, actions) and Agent Script (`.agent` files), plus
+  Testing Center test definitions. Every analysis reports the agent actions a change reaches,
+  through the Apex class or flow they call and the save procedures that follow, in new findings
+  (`agent-action-affected`, `agent-action-untested`, `agent-action-no-confirmation`,
+  `agent-action-target-missing`) and an "Agent actions" table. Changing agent metadata roots the
+  cascade at what its actions save. Deleting a class or flow an action calls is reported as
+  `deleted-still-referenced`. See [docs/AGENTS.md](docs/AGENTS.md).
+- Runtime-user access: each affected action lists the access its user needs (flows run as the
+  user; Apex needs class access, and object access only in user mode). With `--org`, the agent's
+  runtime user is checked for missing access, inactivity and broad permissions
+  (`agent-runtime-access`, `agent-runtime-overprivileged`). The user is never named in reports.
+- `preflight agents [agent]` lists agents or explains one; MCP tool `explain_agent` does the same
+  for coding agents.
+- Suggested tests include `sf agent test run` commands for Testing Center tests that cover
+  affected actions, test cases to add, and a runtime-user permission test.
+
+### Changed
+
+- `agent-metadata-changed` (info) is now only reported for agent metadata that no agent action in
+  the project uses.
+
 ## [0.3.0] - 2026-10-05
 
 Generated Apex tests for every change, and a way to run them in a sandbox. Verified against a

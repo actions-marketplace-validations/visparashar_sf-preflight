@@ -133,6 +133,47 @@ function fakeRunner(overrides: Partial<Record<string, unknown | Error>> = {}): S
         records([rec("PermissionSet", { Id: "0PS000000000001AAA", Name: "Agent_Runtime_User" })]),
       );
     }
+    // Runtime user of the affected agent.
+    if (q.includes("FROM User WHERE Username")) {
+      return respond("agentUser", records([rec("User", { Id: "005000000000001AAA", IsActive: true })]));
+    }
+    if (q.includes("FROM PermissionSetAssignment WHERE AssigneeId")) {
+      return respond(
+        "agentAssignments",
+        records([
+          rec("PermissionSetAssignment", {
+            PermissionSetId: "0PS000000000002AAA",
+            PermissionSet: rec("PermissionSet", {
+              PermissionsModifyAllData: false,
+              PermissionsViewAllData: true,
+              PermissionsAuthorApex: false,
+            }),
+          }),
+        ]),
+      );
+    }
+    if (q.includes("FROM ObjectPermissions")) {
+      return respond(
+        "objectPerms",
+        records([
+          rec("ObjectPermissions", {
+            SobjectType: "Account",
+            PermissionsRead: true,
+            PermissionsCreate: false,
+            PermissionsEdit: true,
+            PermissionsDelete: false,
+            PermissionsModifyAllRecords: false,
+          }),
+        ]),
+      );
+    }
+    if (q.includes("FROM ApexClass WHERE")) {
+      return respond(
+        "apexClasses",
+        records([rec("ApexClass", { Id: "01p000000000001AAA", Name: "OpportunityCloser" })]),
+      );
+    }
+    if (q.includes("FROM SetupEntityAccess")) return respond("classAccess", records([]));
     if (q.includes("FROM PermissionSetAssignment")) {
       return respond(
         "assignments",
@@ -260,6 +301,93 @@ describe("org enrichment", () => {
       expect(JSON.stringify(r)).not.toContain(username);
       expect(toMarkdown(r)).not.toContain(username);
     }
+  });
+
+  it("checks the runtime user of each affected agent", () => {
+    const result = run({ projectDir: FIXTURE, files: [FIELD], org: "dev", sfRunner: fakeRunner() });
+    expect(result.org!.agentUsers).toEqual([
+      {
+        agent: "Sales_Agent",
+        agentLabel: "Sales Agent",
+        status: "checked",
+        missing: [],
+        missingClasses: ["OpportunityCloser"],
+        broad: ["View All Data"],
+      },
+    ]);
+    const access = result.findings.find((f) => f.rule === "agent-runtime-access")!;
+    expect(access.severity).toBe("high");
+    expect(access.title).toBe("Sales Agent's runtime user lacks access the affected actions need in dev");
+    expect(access.detail).toContain("Missing: access to Apex class OpportunityCloser (needed by Close Opportunity).");
+    const broad = result.findings.find((f) => f.rule === "agent-runtime-overprivileged")!;
+    expect(broad.title).toBe("Sales Agent's runtime user has broad access in dev: View All Data");
+    const md = toMarkdown(result);
+    expect(md).toContain(
+      "- Sales Agent's runtime user: **lacks** access to class OpportunityCloser; holds View All Data.",
+    );
+    // The runtime user's username is only used in the query.
+    for (const out of [JSON.stringify(result), md]) expect(out).not.toContain("sales.agent@example.com");
+  });
+
+  it("checks object access for flows, which run as the agent's user", () => {
+    const VR = path.join(
+      FIXTURE,
+      "force-app/main/default/objects/Account/validationRules/Tier_Required_For_Customers.validationRule-meta.xml",
+    );
+    const runner = fakeRunner({
+      classAccess: { records: [{ SetupEntityId: "01p000000000001AAA" }] },
+      agentAssignments: { records: [{ PermissionSetId: "0PS000000000002AAA", PermissionSet: {} }] },
+      objectPerms: { records: [] },
+    });
+    const result = run({ projectDir: FIXTURE, files: [VR], org: "dev", sfRunner: runner });
+    const service = result.org!.agentUsers!.find((u) => u.agent === "Service_Agent")!;
+    expect(service.missing).toEqual([{ object: "Account", access: ["read", "edit"] }]);
+    const sales = result.org!.agentUsers!.find((u) => u.agent === "Sales_Agent")!;
+    expect(sales).toMatchObject({ missing: [], missingClasses: [], broad: [] });
+    const finding = result.findings.find((f) => f.title.startsWith("Service Agent's runtime user lacks"))!;
+    expect(finding.detail).toContain("Missing: read/edit on Account (needed by Update Tier).");
+  });
+
+  it("keeps the runtime user's username out of query errors", () => {
+    const username = "sales.agent@example.com.sample";
+    const result = run({
+      projectDir: FIXTURE,
+      files: [FIELD],
+      org: "dev",
+      sfRunner: fakeRunner({
+        agentUser: new Error(
+          `sf data failed: Command failed: sf data query --query SELECT Id, IsActive FROM User WHERE Username = '${username}' LIMIT 1`,
+        ),
+      }),
+    });
+    expect(result.org!.errors).toEqual([
+      "runtime user of agent Sales Agent: sf data failed: Command failed: sf data query --query SELECT Id, IsActive FROM User WHERE Username = '<runtime user>' LIMIT 1",
+    ]);
+    expect(JSON.stringify(result)).not.toContain("sales.agent");
+    expect(toMarkdown(result)).not.toContain("sales.agent");
+  });
+
+  it("reports runtime users that are missing or inactive", () => {
+    const missing = run({
+      projectDir: FIXTURE,
+      files: [FIELD],
+      org: "dev",
+      sfRunner: fakeRunner({ agentUser: { records: [] } }),
+    });
+    expect(missing.findings.find((f) => f.rule === "agent-runtime-access")).toMatchObject({
+      severity: "medium",
+      title: "Sales Agent's runtime user is not found in dev",
+    });
+    const inactive = run({
+      projectDir: FIXTURE,
+      files: [FIELD],
+      org: "dev",
+      sfRunner: fakeRunner({ agentUser: { records: [{ Id: "005000000000001AAA", IsActive: false }] } }),
+    });
+    expect(inactive.findings.find((f) => f.rule === "agent-runtime-access")).toMatchObject({
+      severity: "high",
+      title: "Sales Agent's runtime user is inactive in dev",
+    });
   });
 
   it("keeps going when one query fails and reports it", () => {

@@ -33,6 +33,8 @@ git diff / --files
 | `report/sarif.ts` | SARIF 2.1.0 for code scanning. |
 | `org/sf.ts` | Read-only wrapper around the Salesforce CLI (`sf ... --json`), with input validation. |
 | `org/enrich.ts` | Optional `--org` context: record counts, org-only automation, assignments, packages; turns it into findings and annotations. |
+| `parsers/agents.ts` | Agentforce metadata: bots and versions, planner bundles, topics (GenAiPlugin), actions (GenAiFunction), Agent Script (`.agent`) and Testing Center definitions, linked into agents → topics → actions. |
+| `agentImpact.ts` | Which agent actions a change reaches (through the class or flow they call and the save procedures that follow), Testing Center coverage, runtime-user access needs; `preflight agents`. |
 | `org/validate.ts` | `preflight tests --validate`: check-only deployment of the project and generated tests (`sf project deploy validate`), org safety check, per-test results. |
 | `testgen/generate.ts` | `preflight tests`: turns the cascade and findings into an Apex test class (bulk, recursion, idempotency, validation errors surfacing). Every generated class is syntax-checked with the Apex parser. |
 | `testgen/solver.ts` | Parses and evaluates validation-rule and entry-criteria formulas (three-valued: a value can be unknown) and finds field values that satisfy or violate them. |

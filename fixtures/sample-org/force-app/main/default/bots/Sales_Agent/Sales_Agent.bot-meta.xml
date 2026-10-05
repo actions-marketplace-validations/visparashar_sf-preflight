@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bot xmlns="http://soap.sforce.com/2006/04/metadata">
+    <agentType>AgentforceServiceAgent</agentType>
+    <botUser>sales.agent@example.com.sample</botUser>
+    <description>Helps sales reps close deals and log customer calls.</description>
+    <label>Sales Agent</label>
+    <logPrivateConversationData>false</logPrivateConversationData>
+    <richContentEnabled>true</richContentEnabled>
+    <sessionTimeout>0</sessionTimeout>
+    <type>ExternalCopilot</type>
+</Bot>

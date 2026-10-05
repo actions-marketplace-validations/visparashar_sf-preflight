@@ -35,6 +35,10 @@ jobs:
       - run: npm run build
       - name: Smoke test CLI on sample org
         run: npm run analyze:sample
+      - name: Smoke test agent explanations on sample org
+        run: |
+          node dist/cli.js agents --project fixtures/sample-org
+          node dist/cli.js agents Sales_Agent --project fixtures/sample-org | grep -q "Close_Deals › Close Opportunity"
       - name: Smoke test test generation on sample org
         run: |
           node dist/cli.js tests --project fixtures/sample-org \

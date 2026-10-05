@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
+import {
+  actionsForAgentChange,
+  actionTarget,
+  actionWrites,
+  analyzeAgents,
+  stillReferenced,
+  targetRef,
+} from "./agentImpact.js";
 import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -304,16 +312,27 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         if (comp.object && !deleted) roots.push({ object: comp.object, event: "update", via: changeRef(change) });
         break;
 
-      case "AgentMetadata":
-        addFinding({
-          rule: "agent-metadata-changed",
-          severity: "info",
-          title: `Agentforce metadata changed: ${comp.name}`,
-          detail:
-            "Agent action verification (decision + execution layer) is planned for milestone M5. Run Agentforce Testing Center for the decision layer in the meantime.",
-          files: [comp.file],
-        });
+      case "AgentMetadata": {
+        if (comp.agentKind === "test") break;
+        const refs = deleted ? [] : actionsForAgentChange(model, comp);
+        for (const { action } of refs) {
+          const via = targetRef(actionTarget(model, action));
+          if (!via) continue;
+          for (const w of actionWrites(model, action)) roots.push({ object: w.object, event: opToEvent(w.op), via });
+        }
+        if (!refs.length && !(deleted && stillReferenced(model, comp))) {
+          addFinding({
+            rule: "agent-metadata-changed",
+            severity: "info",
+            title: `Agentforce metadata ${deleted ? "deleted" : "changed"}: ${comp.name}`,
+            detail: deleted
+              ? "Agents that used it lose it; check them in Agent Builder."
+              : "It isn't used by any agent action in the project, so preflight can't follow what it does.",
+            files: [comp.file],
+          });
+        }
         break;
+      }
 
       case "WorkflowRule":
         addFinding({
@@ -550,6 +569,11 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     });
   }
 
+  // Agent actions the change reaches.
+  const agentAnalysis = analyzeAgents({ model, changes, maxDepth, proc });
+  findings.push(...agentAnalysis.findings);
+  tests.push(...agentAnalysis.tests);
+
   // Bulk tests for every root.
   for (const r of uniqBy(uniqueRoots, (r) => `${key(r.object)}|${r.event}`)) {
     const p = proc(r.object, r.event);
@@ -584,6 +608,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     cycles,
     findings: finalFindings,
     suggestedTests: uniqBy(tests, (t) => `${t.kind}|${t.description}`),
+    agents: agentAnalysis.impacts,
     summary: {
       risk,
       changedComponents: changes.length,

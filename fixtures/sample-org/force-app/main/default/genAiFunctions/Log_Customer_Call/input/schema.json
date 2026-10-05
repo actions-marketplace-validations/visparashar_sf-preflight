@@ -1,0 +1,9 @@
+{
+  "required": ["recordId", "subject"],
+  "unevaluatedProperties": false,
+  "properties": {
+    "recordId": { "title": "Record ID", "description": "The account or opportunity the call was about.", "lightning:type": "lightning__textType", "lightning:isPII": false, "copilotAction:isUserInput": false },
+    "subject": { "title": "Subject", "description": "What the call was about.", "lightning:type": "lightning__textType", "lightning:isPII": false, "copilotAction:isUserInput": true }
+  },
+  "lightning:type": "lightning__objectType"
+}

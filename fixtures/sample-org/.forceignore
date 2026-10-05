@@ -1,0 +1,10 @@
+# Agentforce metadata in this sample is for preflight's analysis. It's excluded from deployments so
+# the sample (and `preflight tests --validate`) also works in orgs without Agentforce.
+**/bots/**
+**/genAiPlannerBundles/**
+**/genAiPlugins/**
+**/genAiFunctions/**
+**/aiAuthoringBundles/**
+**/aiEvaluationDefinitions/**
+**/flows/Log_Customer_Call.flow-meta.xml
+**/flows/Update_Customer_Tier.flow-meta.xml

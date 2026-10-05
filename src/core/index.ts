@@ -10,6 +10,13 @@ import { generateTests, type TestGenOptions, type TestGenResult } from "./testge
 import type { AnalysisResult, ChangeType, OrgModel } from "./types.js";
 import { toPosix } from "./util.js";
 
+export {
+  type AgentExplanation,
+  agentExplanationToMarkdown,
+  agentListToMarkdown,
+  allAgentActions,
+  explainAgent,
+} from "./agentImpact.js";
 export { analyze, fieldReferences } from "./analyze.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
 export { saveProcedure } from "./orderOfExecution.js";
