@@ -43,6 +43,7 @@ public class ${className} {
     private static Integer sequence = 0;
     private static Integer depth = 0;
     private static Map<String, Id> sharedParents = new Map<String, Id>();
+    private static Map<String, Id> recordTypes = new Map<String, Id>();
     private static Map<String, Schema.SObjectType> globalTypes;
     private static Map<Schema.SObjectField, Map<String, String>> picklistChoices = new Map<Schema.SObjectField, Map<String, String>>();
 
@@ -59,7 +60,8 @@ public class ${className} {
         if (sobjectType == null) {
             throw new PreflightException('Unknown object ' + objectName + ' in this org.');
         }
-        Map<String, Schema.SObjectField> fields = sobjectType.getDescribe().fields.getMap();
+        Schema.DescribeSObjectResult describe = sobjectType.getDescribe();
+        Map<String, Schema.SObjectField> fields = describe.fields.getMap();
         Map<String, Object> wanted = new Map<String, Object>();
         if (overrides != null) {
             for (String key : overrides.keySet()) {
@@ -84,9 +86,13 @@ public class ${className} {
             plan.add(field);
             planValues.add(overridden ? wanted.get(key) : ANY_VALUE);
         }
+        Id recordTypeId = wanted.containsKey('recordtypeid') ? null : recordTypeFor(describe);
         List<SObject> records = new List<SObject>();
         for (Integer i = 0; i < count; i++) {
             SObject record = sobjectType.newSObject();
+            if (recordTypeId != null) {
+                record.put('RecordTypeId', recordTypeId);
+            }
             for (Integer j = 0; j < plan.size(); j++) {
                 record.put(plan[j].getName(), resolve(plan[j], planValues[j], null));
             }
@@ -271,6 +277,39 @@ public class ${className} {
             }
         }
         return fallback;
+    }
+
+    /**
+     * A record type for new records of an object that has record types: the running user's
+     * default, else one they can use, else any active one (Apex can use record types a profile
+     * doesn't have). Person account record types are skipped: the factory builds business accounts.
+     */
+    private static Id recordTypeFor(Schema.DescribeSObjectResult describe) {
+        String objectName = describe.getName();
+        if (recordTypes.containsKey(objectName)) {
+            return recordTypes.get(objectName);
+        }
+        Set<Id> skipped = new Set<Id>();
+        if (objectName == 'Account' && describe.fields.getMap().containsKey('ispersonaccount')) {
+            String accountType = 'Account';
+            for (SObject personType : Database.query('SELECT Id FROM RecordType WHERE SobjectType = :accountType AND IsPersonType = true')) {
+                skipped.add(personType.Id);
+            }
+        }
+        Id chosen = null;
+        Integer best = 0;
+        for (Schema.RecordTypeInfo info : describe.getRecordTypeInfos()) {
+            if (info.isMaster() || !info.isActive() || skipped.contains(info.getRecordTypeId())) {
+                continue;
+            }
+            Integer rank = info.isAvailable() ? (info.isDefaultRecordTypeMapping() ? 3 : 2) : 1;
+            if (rank > best) {
+                best = rank;
+                chosen = info.getRecordTypeId();
+            }
+        }
+        recordTypes.put(objectName, chosen);
+        return chosen;
     }
 
     /**

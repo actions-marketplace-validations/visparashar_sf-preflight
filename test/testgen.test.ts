@@ -188,6 +188,13 @@ describe("test generation", () => {
     expect(fileOf(g0(), "DataFactory.cls")).toContain("field.isNameField() && !field.isAutoNumber()");
   });
 
+  it("sets a business record type when the object has record types", () => {
+    // Person Account orgs reject accounts without a record type when the profile has no default.
+    const factory = fileOf(g0(), "DataFactory.cls");
+    expect(factory).toContain("record.put('RecordTypeId', recordTypeId);");
+    expect(factory).toContain("SELECT Id FROM RecordType WHERE SobjectType = :accountType AND IsPersonType = true");
+  });
+
   it("qualifies system classes that an org's own classes could hide", () => {
     // Orgs often have a class named Test; a bare Test.startTest() then doesn't compile.
     for (const f of g0().files.filter((x) => x.path.endsWith(".cls"))) {
