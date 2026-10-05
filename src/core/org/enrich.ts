@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { summarizeFindings } from "../analyze.js";
-import type { AnalysisResult, Finding, OrgAutomation, OrgContext, OrgModel } from "../types.js";
+import type {
+  AnalysisResult,
+  AutomationRef,
+  CascadeNode,
+  Finding,
+  OrgAutomation,
+  OrgContext,
+  OrgModel,
+  SaveEvent,
+} from "../types.js";
 import { key, uniq } from "../util.js";
 import { assertSafeOrg, createSfRunner, field, query, SfError, type SfRunner, soqlList, soqlStringList } from "./sf.js";
 
@@ -14,7 +23,8 @@ import { assertSafeOrg, createSfRunner, field, query, SfError, type SfRunner, so
  * - installed packages (to label managed automation).
  *
  * Only counts and metadata names are collected — never record data or user names — so the
- * context is safe to include in pull-request comments.
+ * context is safe to include in pull-request comments. When `--org` is a username, reports use
+ * the org's alias instead (or a neutral label), and error messages have email addresses removed.
  */
 export interface OrgEnrichOptions {
   org: string;
@@ -54,14 +64,68 @@ const STANDARD_PROFILES: Record<string, string> = {
   standardaul: "Standard Platform User",
 };
 
+/** Report label for an org whose only identifier is a username and that has no alias. */
+export const GENERIC_ORG_LABEL = "target org";
+
+/**
+ * How the org is named in reports. Usernames identify a person (and usually their company), so
+ * they never reach a report: use the org's alias, or a neutral label when it has none.
+ */
+export function orgLabel(input: string, alias?: unknown): string {
+  if (!input.includes("@")) return input;
+  const a = typeof alias === "string" ? alias : "";
+  return /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/.test(a) ? a : GENERIC_ORG_LABEL;
+}
+
+/** "dev" → "dev"; the generic label reads as "the target org" inside sentences. */
+export const orgRef = (label: string) => (label === GENERIC_ORG_LABEL ? `the ${label}` : label);
+
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+const redact = (message: string) => message.replace(EMAIL, "<username>");
+
+/**
+ * Object → events this change reaches in its cascade, with the automation (or the change
+ * itself) that reaches each one. Empty when the result has no cascade.
+ */
+export function reachedEvents(result: Pick<AnalysisResult, "cascade">): Map<string, Map<SaveEvent, AutomationRef[]>> {
+  const reached = new Map<string, Map<SaveEvent, AutomationRef[]>>();
+  const walk = (n: CascadeNode) => {
+    const events = reached.get(key(n.object)) ?? new Map<SaveEvent, AutomationRef[]>();
+    reached.set(key(n.object), events);
+    const vias = events.get(n.event) ?? [];
+    if (n.via && !vias.some((v) => v.kind === n.via!.kind && v.name === n.via!.name)) vias.push(n.via);
+    events.set(n.event, vias);
+    for (const c of n.children) walk(c);
+  };
+  for (const root of result.cascade ?? []) walk(root);
+  return reached;
+}
+
+/** Does org automation fire for this DML event? Validation rules run on insert and update. */
+function firesOn(a: OrgAutomation, event: SaveEvent): boolean {
+  if (a.kind === "ValidationRule") return event === "insert" || event === "update";
+  if (!a.when.length) return true; // unknown: keep it
+  return a.when.some((w) => w.split(" ")[1] === event);
+}
+
 const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9]{15,18}$/.test(v);
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
 export function collectOrgContext(model: OrgModel, result: AnalysisResult, opts: OrgEnrichOptions): OrgContext {
   const org = assertSafeOrg(opts.org);
   const run = opts.runner ?? createSfRunner();
+
+  // Fail fast when the org isn't reachable: the user explicitly asked for org context.
+  // Only the alias is kept from the display result.
+  let alias: unknown;
+  try {
+    alias = (run(["org", "display", "--target-org", org]) as { alias?: unknown } | undefined)?.alias;
+  } catch (err) {
+    throw new SfError(`Could not use org "${org}": ${(err as Error).message}`);
+  }
+
   const ctx: OrgContext = {
-    org,
+    org: orgLabel(org, alias),
     queriedAt: new Date().toISOString(),
     recordCounts: {},
     assignments: [],
@@ -73,16 +137,9 @@ export function collectOrgContext(model: OrgModel, result: AnalysisResult, opts:
     try {
       fn();
     } catch (err) {
-      ctx.errors.push(`${label}: ${(err as Error).message}`);
+      ctx.errors.push(`${label}: ${redact((err as Error).message)}`);
     }
   };
-
-  // Fail fast when the org isn't reachable: the user explicitly asked for org context.
-  try {
-    run(["org", "display", "--target-org", org]);
-  } catch (err) {
-    throw new SfError(`Could not use org "${org}": ${(err as Error).message}`);
-  }
 
   const objects = uniq([
     ...result.impactedObjects,
@@ -279,6 +336,13 @@ export function collectOrgContext(model: OrgModel, result: AnalysisResult, opts:
     });
   }
 
+  // Keep only automation that fires for an event this change actually reaches.
+  const reached = reachedEvents(result);
+  ctx.orgOnlyAutomation = ctx.orgOnlyAutomation.filter((a) => {
+    const events = reached.get(key(a.object));
+    return !events || [...events.keys()].some((e) => firesOn(a, e));
+  });
+
   return ctx;
 }
 
@@ -297,6 +361,32 @@ const describe = (a: OrgAutomation) => {
   return `${kind} ${a.namespace ? `${a.namespace}__` : ""}${a.name}${when}${pkg}`;
 };
 
+const viaLabel = (v: AutomationRef) => {
+  switch (v.kind) {
+    case "Change":
+      return `the change to ${v.name}`;
+    case "Flow":
+      return `flow ${v.name}`;
+    case "ApexTrigger":
+      return `trigger ${v.name}`;
+    case "ApexClass":
+      return `class ${v.name}`;
+    case "RollUpSummary":
+      return `roll-up ${v.name}`;
+    default:
+      return v.name;
+  }
+};
+
+/** "This change reaches Contact (update) via flow X, so these run too." */
+function reachSentence(object: string, events: Map<SaveEvent, AutomationRef[]> | undefined, list: OrgAutomation[]) {
+  if (!events) return "";
+  const parts = [...events]
+    .filter(([event]) => list.some((a) => firesOn(a, event)))
+    .map(([event, vias]) => `${object} (${event}) via ${uniq(vias.map(viaLabel)).join(", ")}`);
+  return parts.length ? `This change reaches ${parts.join("; ")}, so these run too.` : "";
+}
+
 const metadataSpec = (a: OrgAutomation) =>
   a.kind === "ValidationRule" ? `ValidationRule:${a.object}.${a.name}` : `${a.kind}:${a.name}`;
 
@@ -310,23 +400,29 @@ export function applyOrgContext(result: AnalysisResult, ctx: OrgContext): Analys
     list.push(a);
     byObject.set(a.object, list);
   }
+  const reached = reachedEvents(result);
+  const where = orgRef(ctx.org);
   for (const [object, list] of byObject) {
     const managed = list.filter((a) => a.namespace);
     const unmanaged = list.filter((a) => !a.namespace);
+    const detail = [
+      `${list.map(describe).join("; ")}.`,
+      reachSentence(object, reached.get(key(object)), list),
+      "Their own effects are not in the cascade above.",
+      unmanaged.length
+        ? `Retrieve them so preflight can analyze them: \`sf project retrieve start ${unmanaged
+            .map((a) => `--metadata ${metadataSpec(a)}`)
+            .join(" ")}\`.`
+        : "",
+      managed.length
+        ? "Managed-package automation can't be retrieved as source but still runs: keep it enabled in tests."
+        : "",
+    ];
     findings.push({
       rule: "org-only-automation",
       severity: unmanaged.length ? "medium" : "low",
-      title: `${list.length} automation(s) on ${object} run in ${ctx.org} but aren't in this project`,
-      detail:
-        `${list.map(describe).join("; ")}. Their effects are not in the cascade above. ` +
-        (unmanaged.length
-          ? `Retrieve them so preflight can analyze them: \`sf project retrieve start ${unmanaged
-              .map((a) => `--metadata ${metadataSpec(a)}`)
-              .join(" ")}\`. `
-          : "") +
-        (managed.length
-          ? "Managed-package automation can't be retrieved as source but still runs: keep it enabled in tests."
-          : ""),
+      title: `${list.length} automation(s) on ${object} run in ${where} but aren't in this project`,
+      detail: detail.filter(Boolean).join(" "),
       object,
       files: [],
     });
@@ -337,7 +433,7 @@ export function applyOrgContext(result: AnalysisResult, ctx: OrgContext): Analys
       if (!f.rule.startsWith("permission-")) continue;
       const matches = f.title.includes(`${a.kind === "Profile" ? "Profile" : "Permission set"} ${a.name} `);
       if (!matches) continue;
-      f.detail += ` In ${ctx.org} it is assigned to ${a.activeUsers.toLocaleString("en-US")} active user(s).`;
+      f.detail += ` In ${where} it is assigned to ${a.activeUsers.toLocaleString("en-US")} active user(s).`;
     }
   }
 
@@ -345,9 +441,12 @@ export function applyOrgContext(result: AnalysisResult, ctx: OrgContext): Analys
     if (t.kind !== "bulk" || !t.object) continue;
     const count = ctx.recordCounts[t.object];
     if (count === undefined) continue;
+    const n = `${where} has ${count.toLocaleString("en-US")} ${t.object} record${count === 1 ? "" : "s"}`;
     t.description = t.description.replace(
       "(and at your expected production volume)",
-      `(${ctx.org} has ${count.toLocaleString("en-US")} ${t.object} records — test at a realistic share of that volume)`,
+      count < 200
+        ? `(${n}; 200 is still the minimum bulk size to test)`
+        : `(${n} — test at a realistic share of that volume)`,
     );
   }
 

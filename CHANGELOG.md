@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-05
+
+Accurate Apex analysis on a real parse tree, and read-only org context (beta).
+**Requires Node.js 22.13 or newer.**
+
 ### Changed
 
 - Apex is now analyzed on a real parse tree using
@@ -30,8 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   org authorized with the Salesforce CLI. It reports record volumes for impacted objects
   (used in bulk test suggestions), active flows/triggers/validation rules that exist in the
   org but not in the project (new `org-only-automation` rule), how many active users hold
-  changed permission sets and profiles, and installed packages. Reports contain only counts
-  and metadata names. Also available as the MCP `org` argument and the action's
+  changed permission sets and profiles, and installed packages. Each org-only finding says
+  how the change reaches that automation and gives the `sf project retrieve start` command to
+  pull it in; automation that never fires for the events reached is left out. Reports contain
+  only counts and metadata names: a username passed to `--org` is shown as the org's alias
+  (or "target org"). Also available as the MCP `org` argument and the action's
   `sfdx-auth-url` / `org` inputs. See [docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md).
 
 ### Fixed
@@ -78,5 +86,6 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/visparashar/sf-preflight/releases/tag/v0.1.0

@@ -43,7 +43,25 @@ SELECT ProfileId, COUNT(Id) n FROM User WHERE IsActive = true AND ProfileId IN (
 ```
 
 Nothing is written to the org. The report contains **only counts and metadata names**, never
-record data, user names or org IDs, so it is safe to post as a pull-request comment.
+record data, user names or org IDs, so it is safe to post as a pull-request comment:
+
+- If you pass a **username** to `--org`, the report names the org by its alias, or "target
+  org" when it has none. Email addresses are removed from any error messages it includes.
+- From the `sf org display` result, only the alias is read; everything else, including the
+  access token, is discarded immediately.
+
+## What you'll see
+
+- A table of every impacted object with its record count (`n/a` when Salesforce's
+  record-count API returns none, which it does for some objects) and any automation that runs
+  in the org but isn't in your project.
+- An `org-only-automation` finding per object, listing that automation, **how this change
+  reaches it** (for example "Contact (update) via flow Account_Sync_Tier_To_Contacts"), and the
+  exact `sf project retrieve start` command to pull it into the project.
+- Only automation that fires for an event the change actually reaches is listed: a
+  before-delete trigger is left out when the change only updates records.
+- Bulk test suggestions sized against the real record counts, and the number of active users
+  next to any permission finding for a changed permission set or profile.
 
 If one query fails, for example because the user lacks a permission, the rest of the context
 is still used and the failure is listed in the report. If the org can't be reached at all, the
@@ -59,6 +77,12 @@ mirrors production. It needs:
 - Read access to the impacted objects (record counts)
 
 It needs no edit or "Modify All" permissions.
+
+## Tested against
+
+All queries above except the permission set and profile assignment ones have been run
+against a real Developer Edition org. Assignment counts are covered by tests with recorded
+responses only, which is part of why this feature is labelled beta.
 
 ## Limitations
 
