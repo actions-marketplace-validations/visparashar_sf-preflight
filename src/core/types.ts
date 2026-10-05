@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { GateResult } from "./gate.js";
+
 /**
  * Core data model for the org graph and analysis results.
  *
@@ -542,6 +544,10 @@ export interface AnalysisResult {
   provenance?: Provenance;
   /** Present when analyzed with `--org`: read-only context from a Salesforce org. */
   org?: OrgContext;
+  /** The `.preflight.json` applied to the findings (project-relative path). */
+  config?: { file: string };
+  /** Present when the quality gate was evaluated (`--gate`). */
+  gate?: GateResult;
 }
 
 export interface OrgAutomation {

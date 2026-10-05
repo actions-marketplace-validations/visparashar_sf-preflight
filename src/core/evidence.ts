@@ -1,0 +1,313 @@
+// SPDX-License-Identifier: Apache-2.0
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { git, gitRoot, gitShow } from "./changes.js";
+import type { Approval, GateResult } from "./gate.js";
+import type { ValidationResult } from "./org/validate.js";
+import type { AnalysisResult, ChangeType, ComponentType, Severity, TestKind } from "./types.js";
+
+/**
+ * The evidence pack: one self-contained, verifiable record per change of what changed, who (or
+ * what) wrote it, what preflight found, which tests ran and how they did, who approved it, and the
+ * quality-gate decision. A SHA-256 digest over its canonical JSON makes tampering detectable; the
+ * GitHub Action can also sign it with an artifact attestation.
+ */
+
+export const EVIDENCE_PREDICATE_TYPE = "https://github.com/visparashar/sf-preflight/evidence/v1";
+
+export interface EvidenceComponent {
+  changeType: ChangeType;
+  type: ComponentType;
+  name: string;
+  file: string;
+  /** SHA-256 of the file at the head of the change; null when deleted or unreadable. */
+  sha256: string | null;
+}
+
+export interface EvidencePack {
+  evidenceVersion: 1;
+  predicateType: typeof EVIDENCE_PREDICATE_TYPE;
+  generatedAt: string;
+  tool: { name: "sf-preflight"; version: string };
+  repository?: { url?: string; projectPath?: string };
+  change: {
+    base?: { ref: string; sha?: string };
+    head: { ref: string; sha?: string; uncommitted?: boolean };
+    authorship?: {
+      commits: number;
+      aiAssistedCommits: number;
+      tools: string[];
+      details: { sha: string; subject: string; author: string; aiTools: string[] }[];
+    };
+    components: EvidenceComponent[];
+  };
+  analysis: {
+    risk: AnalysisResult["summary"]["risk"];
+    findingsBySeverity: Record<Severity, number>;
+    findings: { rule: string; severity: Severity; title: string; object?: string; files: string[] }[];
+    impactedObjects: string[];
+    cycles: number;
+    agentActions: { agent: string; topic?: string; action: string; tests: string[] }[];
+    warnings: number;
+  };
+  tests: {
+    suggested: number;
+    generated?: { method: string; kind: TestKind; title: string }[];
+    validation?: {
+      org: string;
+      status: "passed" | "failed";
+      passed: number;
+      failed: number;
+      setupFailed: number;
+      notRun: number;
+      componentErrors: number;
+      deployId?: string;
+    };
+  };
+  /** Approvals provided to the run (e.g. pull request reviews); absent when unknown. */
+  approvals?: Approval[];
+  gate: GateResult;
+  /** The policy file the gate used, with its digest. */
+  config?: { file: string; sha256: string };
+  /** SHA-256 over the canonical JSON of every other field. */
+  digest: { algorithm: "sha256"; value: string };
+}
+
+/** JSON with object keys sorted at every level, so the same content always hashes the same. */
+export function canonicalJson(value: unknown): string {
+  const sort = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sort);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(
+        Object.keys(v as Record<string, unknown>)
+          .filter((k) => (v as Record<string, unknown>)[k] !== undefined)
+          .sort()
+          .map((k) => [k, sort((v as Record<string, unknown>)[k])]),
+      );
+    }
+    return v;
+  };
+  return JSON.stringify(sort(value));
+}
+
+const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
+
+/** "Jane Doe <jane@example.com>" → "Jane Doe". */
+function withoutEmail(author: string): string {
+  const t = author.trim();
+  const lt = t.lastIndexOf("<");
+  return lt > 0 && t.endsWith(">") ? t.slice(0, lt).trim() : t;
+}
+
+/** The digest an evidence pack should carry; compare with `digest.value` to verify it. */
+export function evidenceDigest(pack: Omit<EvidencePack, "digest"> | EvidencePack): string {
+  const { digest: _digest, ...rest } = pack as EvidencePack;
+  return sha256(canonicalJson(rest));
+}
+
+export function verifyEvidence(pack: EvidencePack): boolean {
+  return pack.digest?.algorithm === "sha256" && pack.digest.value === evidenceDigest(pack);
+}
+
+/** Remote URL without credentials (`https://user:token@host/…` → `https://host/…`). */
+function cleanUrl(url: string): string {
+  return url.trim().replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, "$1");
+}
+
+const tryGit = (cwd: string, args: string[]) => {
+  try {
+    return git(cwd, args).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** What the `preflight tests --format json` output contains that evidence uses. */
+export interface TestsResultFile {
+  tests?: { method: string; kind: TestKind; title: string }[];
+  validation?: ValidationResult;
+}
+
+export interface EvidenceOptions {
+  result: AnalysisResult;
+  gate: GateResult;
+  version: string;
+  approvals?: Approval[];
+  tests?: TestsResultFile;
+  /** Path of the config file the gate used (absolute or project-relative). */
+  configFile?: string;
+}
+
+export function buildEvidence(opts: EvidenceOptions): EvidencePack {
+  const { result } = opts;
+  const projectDir = result.projectDir;
+  const root = gitRoot(projectDir);
+  const headRef = result.head ?? "HEAD";
+  const uncommitted =
+    !result.head && !!root && !!tryGit(root, ["status", "--porcelain", "--untracked-files=no", "--", projectDir]);
+
+  const digestOf = (file: string, changeType: ChangeType): string | null => {
+    if (changeType === "deleted") return null;
+    if (result.head) {
+      const content = gitShow(projectDir, result.head, file);
+      return content === undefined ? null : sha256(content);
+    }
+    const abs = path.join(projectDir, file);
+    return existsSync(abs) ? sha256(readFileSync(abs)) : null;
+  };
+
+  const v = opts.tests?.validation;
+  const count = (o: string) => v?.tests.filter((t) => t.outcome === o).length ?? 0;
+  const configFile = opts.configFile
+    ? path.isAbsolute(opts.configFile)
+      ? opts.configFile
+      : path.join(projectDir, opts.configFile)
+    : undefined;
+
+  const pack: Omit<EvidencePack, "digest"> = {
+    evidenceVersion: 1,
+    predicateType: EVIDENCE_PREDICATE_TYPE,
+    generatedAt: new Date().toISOString(),
+    tool: { name: "sf-preflight", version: opts.version },
+    repository: root
+      ? {
+          url: (() => {
+            const u = tryGit(root, ["remote", "get-url", "origin"]);
+            return u ? cleanUrl(u) : undefined;
+          })(),
+          projectPath: path.relative(root, projectDir).split(path.sep).join("/") || ".",
+        }
+      : undefined,
+    change: {
+      base: result.base
+        ? {
+            ref: result.base,
+            sha: root ? tryGit(root, ["rev-parse", "--verify", `${result.base}^{commit}`]) : undefined,
+          }
+        : undefined,
+      head: {
+        ref: result.head ?? "working tree",
+        sha: root ? tryGit(root, ["rev-parse", "--verify", `${headRef}^{commit}`]) : undefined,
+        ...(uncommitted ? { uncommitted: true } : {}),
+      },
+      authorship: result.provenance
+        ? {
+            commits: result.provenance.commits,
+            aiAssistedCommits: result.provenance.aiAssistedCommits,
+            tools: result.provenance.tools,
+            // Name only: the commit SHA already identifies the author's email in the repository.
+            details: result.provenance.details.map((d) => ({
+              sha: d.sha,
+              subject: d.subject,
+              author: withoutEmail(d.author),
+              aiTools: d.aiTools,
+            })),
+          }
+        : undefined,
+      components: result.changes.map((c) => ({
+        changeType: c.changeType,
+        type: c.component.type,
+        name: c.component.name,
+        file: c.component.file,
+        sha256: digestOf(c.component.file, c.changeType),
+      })),
+    },
+    analysis: {
+      risk: result.summary.risk,
+      findingsBySeverity: result.summary.findingsBySeverity,
+      findings: result.findings.map((f) => ({
+        rule: f.rule,
+        severity: f.severity,
+        title: f.title,
+        object: f.object,
+        files: f.files,
+      })),
+      impactedObjects: result.impactedObjects,
+      cycles: result.cycles.length,
+      agentActions: result.agents.map((a) => ({ agent: a.agent, topic: a.topic, action: a.action, tests: a.tests })),
+      warnings: result.warnings.length,
+    },
+    tests: {
+      suggested: result.suggestedTests.length,
+      generated: opts.tests?.tests?.map((t) => ({ method: t.method, kind: t.kind, title: t.title })),
+      validation: v
+        ? {
+            org: v.org,
+            status: v.status,
+            passed: count("pass"),
+            failed: count("fail"),
+            setupFailed: count("setup failed"),
+            notRun: count("not run"),
+            componentErrors: v.componentErrors.length,
+            deployId: v.deployId,
+          }
+        : undefined,
+    },
+    approvals: opts.approvals,
+    gate: opts.gate,
+    config:
+      configFile && existsSync(configFile)
+        ? {
+            file: root ? path.relative(root, configFile).split(path.sep).join("/") : path.basename(configFile),
+            sha256: sha256(readFileSync(configFile)),
+          }
+        : undefined,
+  };
+  return { ...pack, digest: { algorithm: "sha256", value: evidenceDigest(pack) } };
+}
+
+const short = (sha?: string) => (sha ? ` (${sha.slice(0, 7)})` : "");
+const cell = (s: string) => s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+
+/** Human summary of an evidence pack. */
+export function evidenceToMarkdown(e: EvidencePack): string {
+  const a = e.change.authorship;
+  const v = e.tests.validation;
+  const failed = e.gate.checks.filter((c) => c.status === "fail").length;
+  const rows: [string, string][] = [
+    [
+      "Change",
+      `${e.change.base ? `\`${e.change.base.ref}\`${short(e.change.base.sha)} → ` : ""}\`${e.change.head.ref}\`${short(e.change.head.sha)}${e.change.head.uncommitted ? ", with uncommitted changes" : ""}`,
+    ],
+    ["Components", `${e.change.components.length} changed`],
+    [
+      "Authorship",
+      a
+        ? `${a.commits} commit(s), ${a.aiAssistedCommits} AI-assisted${a.tools.length ? ` (${a.tools.join(", ")})` : ""}`
+        : "not from a commit range",
+    ],
+    [
+      "Risk",
+      `${e.analysis.risk} (${e.analysis.findingsBySeverity.high} high, ${e.analysis.findingsBySeverity.medium} medium)`,
+    ],
+    [
+      "Quality gate",
+      `${e.gate.status === "pass" ? "✅ passed" : `❌ failed (${failed} of ${e.gate.checks.length} checks)`}`,
+    ],
+    [
+      "Tests",
+      v
+        ? `${e.tests.generated?.length ?? v.passed + v.failed + v.setupFailed + v.notRun} generated; ${v.passed} passed, ${v.failed} failed${v.setupFailed ? `, ${v.setupFailed} setup failed` : ""} in ${v.org}`
+        : e.tests.generated
+          ? `${e.tests.generated.length} generated, not run`
+          : `${e.tests.suggested} suggested`,
+    ],
+    [
+      "Approvals",
+      e.approvals ? (e.approvals.length ? e.approvals.map((x) => x.reviewer).join(", ") : "none") : "not provided",
+    ],
+    ["Policy", e.config ? `\`${e.config.file}\`` : "defaults"],
+    ["Tool", `sf-preflight ${e.tool.version}`],
+    ["Digest", `\`sha256:${e.digest.value}\``],
+  ];
+  return [
+    "## Change evidence",
+    "",
+    "| | |",
+    "|---|---|",
+    ...rows.map(([k, val]) => `| ${k} | ${cell(val)} |`),
+    "",
+    `Verify the digest with \`preflight evidence --verify <file>\`.`,
+  ].join("\n");
+}

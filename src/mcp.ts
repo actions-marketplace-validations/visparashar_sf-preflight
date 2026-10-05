@@ -6,8 +6,10 @@ import { z } from "zod";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
+  evaluateGate,
   explainAgent,
   fieldReferences,
+  loadConfig,
   loadProject,
   run,
   runTests,
@@ -23,7 +25,8 @@ const INSTRUCTIONS = `sf-preflight analyzes Salesforce DX metadata changes befor
 Use it whenever you create or edit Salesforce metadata (flows, Apex, validation rules, fields,
 permission sets):
 1. After editing, call analyze_change (no arguments compares the working tree with HEAD).
-2. Treat high findings as blockers: fix them or explain to the user why they are acceptable.
+2. Treat high findings and a failed quality gate as blockers: fix them or explain to the user why
+   they are acceptable. (Approval checks in the gate can only pass once a person reviews.)
 3. Call generate_tests and add the generated Apex test classes (it returns the code; write the
    files yourself), then review their NOTE comments.
 Use explain_save_order to understand what already runs on an object before adding automation,
@@ -88,14 +91,17 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
     },
     async (args) => {
       try {
+        const dir = projectDir(args.project_dir);
         const result = run({
-          projectDir: projectDir(args.project_dir),
+          projectDir: dir,
           base: args.files?.length ? undefined : (args.base ?? "HEAD"),
           head: args.head,
           files: args.files,
           maxDepth: args.max_depth,
           org: args.org,
         });
+        // The project's quality gate, so agents know what CI will require (approvals aren't known here).
+        result.gate = evaluateGate({ result, config: loadConfig(dir).config.gate });
         return text(args.format === "json" ? JSON.stringify(result, null, 2) : toMarkdown(result));
       } catch (err) {
         return failure(err);

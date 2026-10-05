@@ -15,9 +15,9 @@ permissions — and reports the blast radius, the risks and the tests that matte
 
 It is open source, runs offline on your source code, and needs no org credentials.
 
-> **Status:** early (0.x). The CLI, MCP server, GitHub Action, test generation and Agentforce
-> action verification work today; org context is in beta. See the [roadmap](docs/ROADMAP.md).
-> Feedback and contributions are very welcome.
+> **Status:** early (0.x). The CLI, MCP server, GitHub Action, test generation, Agentforce
+> action verification, the quality gate and evidence packs work today; org context is in beta.
+> See the [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
 
 ## What it finds
 
@@ -69,6 +69,9 @@ preflight analyze --files force-app/main/default/objects/Opportunity/fields/Cont
 # JSON for machines; exit code 2 when risk is high
 preflight analyze --base origin/main --format json --out preflight.json --fail-on high
 
+# Quality gate from .preflight.json, plus JUnit for CI and the evidence pack
+preflight analyze --base origin/main --gate --junit-out preflight.xml --evidence-out evidence.json
+
 # What runs, in order, when an object is saved?
 preflight explain Opportunity --event update
 
@@ -82,8 +85,12 @@ preflight agents Sales_Agent
 | `-b, --base <ref>` | — | Git base ref |
 | `--head <ref>` | working tree | Git head ref |
 | `-f, --files <paths...>` | — | Analyze these files instead of a git diff |
-| `--format <md\|json\|sarif>` | `md` | Output format |
-| `--md-out`, `--json-out`, `--sarif-out <file>` | — | Also write the report in another format |
+| `--format <md\|json\|sarif\|junit>` | `md` | Output format |
+| `--md-out`, `--json-out`, `--sarif-out`, `--junit-out <file>` | — | Also write the report in another format |
+| `--gate` | — | Evaluate the quality gate from `.preflight.json`; exit with code 2 when it fails ([details](docs/CONFIG.md)) |
+| `--config <file>`, `--no-config` | `.preflight.json` | Policy file to use, or none |
+| `--approvals <file>`, `--tests-result <file>` | — | Approvals and test results for the gate and evidence |
+| `--evidence-out <file>` | — | Also write the evidence pack ([details](docs/EVIDENCE.md)) |
 | `-o, --out <file>` | stdout | Write the report to a file |
 | `--depth <n>` | `4` | Maximum cascade depth |
 | `--org <alias>` | — | Beta: add read-only context from an org authorized with `sf org login` ([details](docs/ORG_CONTEXT.md)) |
@@ -137,6 +144,23 @@ Every analysis then reports the agent actions a change reaches, whether Testing 
 cover them, and the access their runtime user needs. With `--org`, it checks that user's real
 permissions. See [docs/AGENTS.md](docs/AGENTS.md).
 
+### Quality gate and evidence
+
+```json
+{ "gate": { "failOn": "high", "aiAssistedApprovals": 1, "requireAgentTests": true } }
+```
+
+A `.preflight.json` sets rule severities, ignores and the **quality gate**: no findings at or
+above a severity, approvals for AI-assisted changes, Testing Center coverage for affected agent
+actions, passing generated tests. `preflight analyze --gate` exits with code 2 when it fails.
+Every run can also write an **evidence pack**: what changed (with file digests), who or what
+wrote it, findings, tests, approvals and the gate decision, with a tamper-evident digest, ready
+for change records and audits.
+
+See [docs/CONFIG.md](docs/CONFIG.md), [docs/EVIDENCE.md](docs/EVIDENCE.md), and
+[docs/PIPELINES.md](docs/PIPELINES.md) for DevOps Center, GitLab, Azure DevOps, Jenkins and
+Bitbucket (JUnit output included).
+
 ### On pull requests (GitHub Action)
 
 ```yaml
@@ -154,8 +178,9 @@ steps:
 ```
 
 The action comments the report on the PR (and keeps that comment updated), writes it to the job
-summary, can upload findings to code scanning as SARIF, and exposes `risk` and
-`ai-assisted-commits` outputs. See [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md).
+summary, evaluates the quality gate with the PR's approvals, uploads the evidence pack (optionally
+signed with a GitHub artifact attestation), and can upload findings to code scanning as SARIF.
+See [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md).
 
 ### From coding agents (MCP)
 

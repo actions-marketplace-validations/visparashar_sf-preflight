@@ -7,6 +7,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Policy file:** `.preflight.json` (in the project or at the repository root) changes rule
+  severities, turns rules off and ignores paths. Unknown settings are errors. A JSON schema is
+  published for editor support. See [docs/CONFIG.md](docs/CONFIG.md).
+- **Quality gate:** `preflight analyze --gate` evaluates findings against a severity threshold,
+  approvals for AI-assisted changes (`--approvals`), Testing Center coverage of affected agent
+  actions, and generated tests that passed in an org (`--tests-result`); exit code 2 when it
+  fails. The report starts with the gate's checks, and the MCP tool `analyze_change` includes it.
+- **Evidence pack:** `preflight evidence` and `analyze --evidence-out` write a JSON record of the
+  change (base/head SHAs, file digests, human/AI authorship), findings, affected agent actions,
+  tests and their results, approvals, the gate decision and the policy used, with a SHA-256
+  digest over its canonical JSON; `preflight evidence --verify` checks it. See
+  [docs/EVIDENCE.md](docs/EVIDENCE.md).
+- **JUnit output** (`--format junit`, `--junit-out`) for GitLab, Azure DevOps, Jenkins, Bitbucket
+  and other CI systems, and [docs/PIPELINES.md](docs/PIPELINES.md) with setups for them and for
+  DevOps Center.
+- **GitHub Action:** evaluates the quality gate with the pull request's approvals (also on
+  `pull_request_review` events, and for pushes from the merged pull request), uploads the
+  evidence pack as an artifact (`evidence`, `artifact-name`), and can sign it with a GitHub
+  artifact attestation (`attest`). New inputs `config`; new outputs `gate`, `evidence`,
+  `evidence-digest`, `attestation-url`.
+
+### Changed
+
+- GitHub Action: the check fails when the quality gate fails. Without a `.preflight.json` the
+  gate fails on high findings, as before. `fail-on` now defaults to the policy file's
+  `gate.failOn` (else `high`).
+
 ## [0.4.0] - 2026-10-06
 
 Agentforce action verification: which agent actions a change reaches, whether Testing Center

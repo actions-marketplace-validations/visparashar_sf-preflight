@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+
 import path from "node:path";
 import { analyze } from "./analyze.js";
 import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./changes.js";
+import { applyConfig, CONFIG_FILE, loadConfig } from "./config.js";
 import { enrichWithOrg } from "./org/enrich.js";
 import type { SfRunner } from "./org/sf.js";
 import { loadProject } from "./project.js";
@@ -19,6 +21,34 @@ export {
 } from "./agentImpact.js";
 export { analyze, fieldReferences } from "./analyze.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
+export {
+  applyConfig,
+  CONFIG_FILE,
+  type FailOn,
+  type GateConfig,
+  globMatch,
+  loadConfig,
+  type PreflightConfig,
+  parseConfig,
+} from "./config.js";
+export {
+  buildEvidence,
+  canonicalJson,
+  EVIDENCE_PREDICATE_TYPE,
+  type EvidencePack,
+  evidenceDigest,
+  evidenceToMarkdown,
+  type TestsResultFile,
+  verifyEvidence,
+} from "./evidence.js";
+export {
+  type Approval,
+  evaluateGate,
+  type GateCheck,
+  type GateResult,
+  gateToMarkdown,
+  parseApprovals,
+} from "./gate.js";
 export { saveProcedure } from "./orderOfExecution.js";
 export { applyOrgContext, collectOrgContext, enrichWithOrg, GENERIC_ORG_LABEL } from "./org/enrich.js";
 export { assertSafeOrg, createSfRunner, SfError, type SfRunner } from "./org/sf.js";
@@ -34,6 +64,7 @@ export {
 } from "./org/validate.js";
 export { classifyPath, loadProject, sourceRoots } from "./project.js";
 export { detectAiTools, gitProvenance } from "./provenance.js";
+export { toJunit } from "./report/junit.js";
 export { toMarkdown } from "./report/markdown.js";
 export { toSarif } from "./report/sarif.js";
 export { RULES, ruleInfo } from "./rules.js";
@@ -61,6 +92,11 @@ export interface RunOptions {
   org?: string;
   /** Override how `sf` is invoked (tests). */
   sfRunner?: SfRunner;
+  /**
+   * `.preflight.json` to apply (rule overrides and ignores): a path, or false to ignore any.
+   * By default the project directory and then the git root are searched.
+   */
+  config?: string | false;
 }
 
 /** Load the project, work out what changed, and analyze it. */
@@ -94,6 +130,14 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
   });
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
   if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
+  if (opts.config !== false) {
+    const { config, file } = loadConfig(projectDir, opts.config);
+    if (file) {
+      const configured = applyConfig(result, config);
+      configured.config = { file: toPosix(path.relative(projectDir, file)) || CONFIG_FILE };
+      return { model, result: configured };
+    }
+  }
   return { model, result };
 }
 

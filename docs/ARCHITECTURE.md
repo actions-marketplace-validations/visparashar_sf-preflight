@@ -33,6 +33,10 @@ git diff / --files
 | `report/sarif.ts` | SARIF 2.1.0 for code scanning. |
 | `org/sf.ts` | Read-only wrapper around the Salesforce CLI (`sf ... --json`), with input validation. |
 | `org/enrich.ts` | Optional `--org` context: record counts, org-only automation, assignments, packages; turns it into findings and annotations. |
+| `config.ts` | `.preflight.json`: validation, discovery (project, then git root), rule overrides and path ignores. |
+| `gate.ts` | The quality gate: findings threshold, approvals for AI-assisted changes, agent test coverage, generated tests passed. |
+| `evidence.ts` | The evidence pack: change identity and file digests, authorship, findings, tests, approvals, gate, and a SHA-256 over its canonical JSON. |
+| `report/junit.ts` | JUnit XML for CI test reports. |
 | `parsers/agents.ts` | Agentforce metadata: bots and versions, planner bundles, topics (GenAiPlugin), actions (GenAiFunction), Agent Script (`.agent`) and Testing Center definitions, linked into agents → topics → actions. |
 | `agentImpact.ts` | Which agent actions a change reaches (through the class or flow they call and the save procedures that follow), Testing Center coverage, runtime-user access needs; `preflight agents`. |
 | `org/validate.ts` | `preflight tests --validate`: check-only deployment of the project and generated tests (`sf project deploy validate`), org safety check, per-test results. |

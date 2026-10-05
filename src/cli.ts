@@ -3,24 +3,32 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, Option } from "commander";
-import type { AnalysisResult, SaveEvent } from "./core/index.js";
+import type { AnalysisResult, EvidencePack, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
   allAgentActions,
+  buildEvidence,
+  evaluateGate,
+  evidenceToMarkdown,
   explainAgent,
   GENERIC_ORG_LABEL,
+  gateToMarkdown,
+  loadConfig,
   loadProject,
+  parseApprovals,
   run,
   runTests,
   saveProcedure,
   sourceRoots,
   testsToMarkdown,
+  toJunit,
   toMarkdown,
   toSarif,
   type ValidationResult,
   validateTests,
   validationToMarkdown,
+  verifyEvidence,
 } from "./core/index.js";
 
 // `preflight analyze | head` closes stdout early; exit quietly instead of crashing on EPIPE.
@@ -34,12 +42,60 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
   version: string;
 };
 
-type Format = "md" | "json" | "sarif";
+type Format = "md" | "json" | "sarif" | "junit";
 
 function render(result: AnalysisResult, format: Format): string {
   if (format === "json") return JSON.stringify(result, null, 2);
   if (format === "sarif") return JSON.stringify(toSarif(result, { toolVersion: version }), null, 2);
+  if (format === "junit") return toJunit(result);
   return toMarkdown(result);
+}
+
+function readJson(file: string, what: string): unknown {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch (err) {
+    throw new Error(`Could not read ${what} ${file}: ${(err as Error).message}`);
+  }
+}
+
+interface PolicyOptions {
+  project: string;
+  base?: string;
+  head?: string;
+  files?: string[];
+  depth: number;
+  org?: string;
+  failOn?: FailOn;
+  /** Path, or false for --no-config. */
+  config?: string | false;
+  approvals?: string;
+  testsResult?: string;
+}
+
+/** Analyze, then evaluate the quality gate from `.preflight.json`, approvals and test results. */
+function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
+  const result = run({
+    projectDir: opts.project,
+    base: opts.base,
+    head: opts.head,
+    files: opts.files,
+    maxDepth: opts.depth,
+    org: opts.org,
+    config: opts.config,
+  });
+  const approvals = opts.approvals ? parseApprovals(readJson(opts.approvals, "approvals"), opts.approvals) : undefined;
+  const tests = opts.testsResult ? (readJson(opts.testsResult, "tests result") as TestsResultFile) : undefined;
+  if (withGate) {
+    const { config } = opts.config === false ? { config: {} } : loadConfig(path.resolve(opts.project), opts.config);
+    result.gate = evaluateGate({
+      result,
+      config: { ...config.gate, ...(opts.failOn ? { failOn: opts.failOn } : {}) },
+      approvals,
+      validation: tests?.validation,
+    });
+  }
+  return { result, approvals, tests };
 }
 
 const program = new Command();
@@ -48,62 +104,112 @@ program
   .description("Preflight checks for Salesforce changes: what will this change set off?")
   .version(version);
 
-program
-  .command("analyze")
-  .description("Analyze a change (git diff or explicit files) in an SFDX project")
-  .option("-p, --project <dir>", "SFDX project directory", ".")
-  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
-  .option("--head <ref>", "git head ref (default: working tree)")
-  .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
-  .addOption(new Option("--format <format>", "output format").choices(["md", "json", "sarif"]).default("md"))
+const policyOptions = (cmd: Command) =>
+  cmd
+    .option("-p, --project <dir>", "SFDX project directory", ".")
+    .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+    .option("--head <ref>", "git head ref (default: working tree)")
+    .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
+    .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
+    .option("--org <alias>", "add read-only context from an org authorized with `sf org login` (beta)")
+    .option("--config <file>", "policy file (default: .preflight.json in the project, then the git root)")
+    .option("--no-config", "ignore .preflight.json")
+    .option("--approvals <file>", "JSON list of approvals (reviewer names), for the gate and evidence")
+    .option("--tests-result <file>", "output of `preflight tests --validate --format json`, for the gate and evidence");
+
+policyOptions(
+  program.command("analyze").description("Analyze a change (git diff or explicit files) in an SFDX project"),
+)
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json", "sarif", "junit"]).default("md"))
   .option("-o, --out <file>", "write the report to a file instead of stdout")
   .option("--md-out <file>", "also write a Markdown report to this file")
   .option("--json-out <file>", "also write a JSON report to this file")
   .option("--sarif-out <file>", "also write a SARIF report to this file")
-  .option("--depth <n>", "max cascade depth", (v) => Number.parseInt(v, 10), 4)
-  .option("--org <alias>", "add read-only context from an org authorized with `sf org login` (beta)")
+  .option("--junit-out <file>", "also write JUnit XML (for CI test reports) to this file")
+  .option("--evidence-out <file>", "also write the change's evidence pack (JSON) to this file")
+  .option("--gate", "evaluate the quality gate from .preflight.json; exit with code 2 when it fails")
   .addOption(
-    new Option("--fail-on <level>", "exit with code 2 when risk is at or above this level")
-      .choices(["low", "medium", "high", "none"])
-      .default("none"),
+    new Option(
+      "--fail-on <level>",
+      "exit with code 2 when risk is at or above this level (with --gate: the gate's threshold)",
+    ).choices(["low", "medium", "high", "none"]),
   )
   .action(
-    (opts: {
-      project: string;
-      base?: string;
-      head?: string;
-      files?: string[];
-      format: Format;
-      out?: string;
-      mdOut?: string;
-      jsonOut?: string;
-      sarifOut?: string;
-      depth: number;
-      org?: string;
-      failOn: string;
-    }) => {
-      const result = run({
-        projectDir: opts.project,
-        base: opts.base,
-        head: opts.head,
-        files: opts.files,
-        maxDepth: opts.depth,
-        org: opts.org,
-      });
+    (
+      opts: PolicyOptions & {
+        format: Format;
+        out?: string;
+        mdOut?: string;
+        jsonOut?: string;
+        sarifOut?: string;
+        junitOut?: string;
+        evidenceOut?: string;
+        gate?: boolean;
+      },
+    ) => {
+      const { result, approvals, tests } = analyzeWithPolicy(opts, !!opts.gate || !!opts.evidenceOut);
       const output = render(result, opts.format);
       if (opts.out) writeFileSync(opts.out, `${output}\n`);
       else process.stdout.write(`${output}\n`);
       if (opts.mdOut) writeFileSync(opts.mdOut, `${render(result, "md")}\n`);
       if (opts.jsonOut) writeFileSync(opts.jsonOut, `${render(result, "json")}\n`);
       if (opts.sarifOut) writeFileSync(opts.sarifOut, `${render(result, "sarif")}\n`);
-      if (
-        opts.failOn !== "none" &&
-        RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn as keyof typeof RISK_RANK]
-      ) {
+      if (opts.junitOut) writeFileSync(opts.junitOut, `${render(result, "junit")}\n`);
+      if (opts.evidenceOut) {
+        const pack = buildEvidence({
+          result,
+          gate: result.gate!,
+          version,
+          approvals,
+          tests,
+          configFile: result.config?.file,
+        });
+        writeFileSync(opts.evidenceOut, `${JSON.stringify(pack, null, 2)}\n`);
+      }
+      if (opts.gate) {
+        if (result.gate?.status === "fail") process.exitCode = 2;
+      } else if (opts.failOn && opts.failOn !== "none" && RISK_RANK[result.summary.risk] >= RISK_RANK[opts.failOn]) {
         process.exitCode = 2;
       }
     },
   );
+
+policyOptions(
+  program
+    .command("evidence")
+    .description("Write the evidence pack for a change: what changed, who wrote it, findings, tests, approvals, gate"),
+)
+  .option("-o, --out <file>", "where to write the evidence JSON", "preflight-evidence.json")
+  .option("--gate", "exit with code 2 when the quality gate fails")
+  .addOption(
+    new Option("--fail-on <level>", "the gate's severity threshold").choices(["low", "medium", "high", "none"]),
+  )
+  .option("--verify <file>", "check an evidence file's digest instead of creating one")
+  .action((opts: PolicyOptions & { out: string; gate?: boolean; verify?: string }) => {
+    if (opts.verify) {
+      const pack = readJson(opts.verify, "evidence") as EvidencePack;
+      if (!verifyEvidence(pack)) {
+        process.stderr.write(`${opts.verify}: digest does not match its content (modified or not an evidence pack).\n`);
+        process.exitCode = 1;
+        return;
+      }
+      process.stdout.write(`${opts.verify}: digest OK (sha256:${pack.digest.value}).\n`);
+      return;
+    }
+    const { result, approvals, tests } = analyzeWithPolicy(opts, true);
+    const pack = buildEvidence({
+      result,
+      gate: result.gate!,
+      version,
+      approvals,
+      tests,
+      configFile: result.config?.file,
+    });
+    writeFileSync(opts.out, `${JSON.stringify(pack, null, 2)}\n`);
+    process.stdout.write(`${evidenceToMarkdown(pack)}\n\n${gateToMarkdown(pack.gate)}\n`);
+    process.stderr.write(`Wrote ${opts.out}\n`);
+    if (opts.gate && pack.gate.status === "fail") process.exitCode = 2;
+  });
 
 program
   .command("tests")
