@@ -1,0 +1,70 @@
+name: DCO
+
+# Every commit in a pull request must carry a "Signed-off-by:" line that matches its author
+# (Developer Certificate of Origin, see CONTRIBUTING.md). Bot commits and merge commits are exempt.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check that every commit is signed off by its author
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GUIDE: ${{ github.server_url }}/${{ github.repository }}/blob/main/CONTRIBUTING.md#developer-certificate-of-origin
+        run: |
+          set -euo pipefail
+          commits="$(git rev-list --no-merges "$HEAD_SHA" --not "$BASE_SHA" "origin/$BASE_REF")"
+          if [ -z "$commits" ]; then
+            echo "No commits to check."
+            exit 0
+          fi
+          failed=0
+          for sha in $commits; do
+            short="$(git rev-parse --short "$sha")"
+            email="$(git show -s --format='%ae' "$sha")"
+            case "$email" in
+              *"[bot]@users.noreply.github.com")
+                echo "  skip  $short (bot commit)"
+                continue
+                ;;
+            esac
+            if git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$sha" | grep -qiF "<$email>"; then
+              echo "  ok    $short"
+            else
+              echo "::error::Commit $short has no Signed-off-by line matching its author email."
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            {
+              echo "### DCO sign-off missing"
+              echo
+              echo "Every commit needs a \`Signed-off-by:\` line that matches its author. To fix it:"
+              echo
+              echo '```bash'
+              echo "git rebase --signoff origin/$BASE_REF"
+              echo "git push --force-with-lease"
+              echo '```'
+              echo
+              echo "See [CONTRIBUTING.md]($GUIDE)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "All commits are signed off."
