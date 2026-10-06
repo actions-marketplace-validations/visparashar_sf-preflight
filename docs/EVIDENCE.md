@@ -26,7 +26,7 @@ it as a workflow artifact on every run.
 | Tests | 5 generated; 3 passed, 2 failed in my-sandbox |
 | Approvals | alice |
 | Policy | `.preflight.json` |
-| Tool | sf-preflight 0.5.0 |
+| Tool | sf-preflight 0.6.0 |
 | Digest | `sha256:…` |
 ```
 
