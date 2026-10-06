@@ -8,6 +8,7 @@
 [![npm](https://img.shields.io/npm/v/sf-preflight.svg)](https://www.npmjs.com/package/sf-preflight)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)
+[![Website](https://img.shields.io/badge/website-visparashar.github.io%2Fsf--preflight-52E0A1)](https://visparashar.github.io/sf-preflight/)
 
 **Preflight checks for Salesforce changes: know what a change will set off — before it ships.**
 
@@ -21,6 +22,12 @@ It is open source, runs offline on your source code, and needs no org credential
 > **Status:** early (0.x). The CLI, MCP server, GitHub Action, test generation, Agentforce
 > action verification, the quality gate and evidence packs work today; org context is in beta.
 > See the [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
+
+**Website:** <https://visparashar.github.io/sf-preflight/>
+
+<p align="center">
+  <img alt="Demo: preflight analyze on the sample org finds two automation cycles, an affected agent action and validation-rule collisions" src="https://raw.githubusercontent.com/visparashar/sf-preflight/main/docs/assets/preflight-demo.gif">
+</p>
 
 ## What it finds
 
