@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-06
+
+The production feedback loop (M7): trace production errors to the change that caused them and
+plan a partial rollback. Also runs the Agentforce Testing Center tests that cover a change.
+
 ### Added
 
 - `preflight incidents` (M7): reads production errors from an org, read-only (failed flow
@@ -230,7 +235,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/visparashar/sf-preflight/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/visparashar/sf-preflight/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/visparashar/sf-preflight/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...v0.3.0
