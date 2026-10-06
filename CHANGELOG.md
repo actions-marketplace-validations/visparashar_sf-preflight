@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The `sf-preflight` agent skill (open [Agent Skills](https://agentskills.io) format): tells any
+  AI coding agent when to check a Salesforce change, how to act on findings, how to generate
+  tests and handle production errors, and the rules it must keep (never deploy, never pass
+  `--allow-production`, no credentials). Works with Codex, GitHub Copilot, Cursor, Gemini CLI,
+  Claude and other Agent Skills clients. It ships in the npm package; `preflight skill install`
+  copies it to `.agents/skills/` and `.claude/skills/` (`--global`, `--dir`, `--force`).
+- A Claude Code plugin and marketplace in the repository: the skill, the MCP server, and a hook
+  that analyzes each Salesforce metadata edit and tells Claude about high and medium findings.
+- [docs/AI_AGENTS.md](docs/AI_AGENTS.md): setup for each agent (skill locations, MCP
+  configuration for Claude Code, Codex, Copilot/VS Code, Cursor, Gemini CLI and others) and an
+  `AGENTS.md` snippet for agents without skills.
+
 ## [0.6.0] - 2026-10-06
 
 The production feedback loop (M7): trace production errors to the change that caused them and

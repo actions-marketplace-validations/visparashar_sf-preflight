@@ -1,0 +1,14 @@
+{
+  "name": "sf-preflight",
+  "description": "sf-preflight for Claude Code: a skill, MCP tools and an edit hook for checking Salesforce changes.",
+  "owner": { "name": "sf-preflight contributors", "url": "https://github.com/visparashar/sf-preflight" },
+  "plugins": [
+    {
+      "name": "sf-preflight",
+      "source": "./",
+      "description": "Checks Salesforce metadata changes before they ship, and traces production errors to the change that caused them.",
+      "category": "development",
+      "tags": ["salesforce", "sfdx", "agentforce"]
+    }
+  ]
+}

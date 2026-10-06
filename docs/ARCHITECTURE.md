@@ -50,6 +50,12 @@ git diff / --files
 | `testgen/schema.ts` | What the generator knows about standard objects (required, defaulted and read-only fields, standard relationships), plus project field definitions. |
 | `testgen/factory.ts` | Source of the generated `PreflightDataFactory`, which builds valid records at run time from the org's describe information. |
 | `testgen/markdown.ts` | Summary of generated and skipped tests, with the command to run them. |
+| `skill.ts` | `preflight skill install`: copies the agent skill (`skills/sf-preflight/`, shipped in the package) to the folders agents read. |
+
+Outside `src/`, `skills/sf-preflight/` is the agent skill (Agent Skills format), and
+`.claude-plugin/` with `hooks/` make the repository a Claude Code plugin and marketplace that
+bundle the skill, the MCP server (`src/mcp.ts`) and an edit hook. See
+[AI_AGENTS.md](AI_AGENTS.md).
 
 ## Key concepts
 

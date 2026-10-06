@@ -215,18 +215,26 @@ summary, evaluates the quality gate with the PR's approvals, uploads the evidenc
 signed with a GitHub artifact attestation), and can upload findings to code scanning as SARIF.
 See [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md).
 
-### From coding agents (MCP)
+### From AI coding agents (any model)
 
 ```bash
-claude mcp add sf-preflight -- npx -y sf-preflight mcp
+npx -y sf-preflight skill install   # the agent skill, in .agents/skills and .claude/skills
 ```
 
-`preflight mcp` is a read-only MCP server with six tools — `analyze_change`,
-`explain_save_order`, `find_field_references`, `explain_agent`, `generate_tests` and
-`plan_rollback` — so Claude
-Code, Cursor, VS Code agents and other MCP clients can check their own Salesforce changes, and
-write the tests for them, before committing. Setup for each
-client is in [docs/MCP.md](docs/MCP.md).
+Coding agents get two things. The **agent skill** (open [Agent Skills](https://agentskills.io)
+format, read by Codex, GitHub Copilot, Cursor, Gemini CLI, Claude Code and others) tells them
+when to check a change and what to do with the findings. The **MCP server** (`preflight mcp`,
+read-only) gives them the tools: `analyze_change`, `explain_save_order`,
+`find_field_references`, `explain_agent`, `generate_tests` and `plan_rollback`. For Claude Code
+there's also a plugin that bundles both and checks each metadata edit as it happens:
+
+```text
+/plugin marketplace add visparashar/sf-preflight
+/plugin install sf-preflight@sf-preflight
+```
+
+Setup for each agent, and an `AGENTS.md` snippet for agents without skills:
+[docs/AI_AGENTS.md](docs/AI_AGENTS.md). MCP tools: [docs/MCP.md](docs/MCP.md).
 
 ### With org context (beta)
 

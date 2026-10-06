@@ -1,0 +1,17 @@
+{
+  "name": "sf-preflight",
+  "displayName": "sf-preflight",
+  "version": "0.6.0",
+  "description": "Checks Salesforce metadata changes before they ship: what a change sets off (flows, triggers, validation rules, roll-ups, permissions, Agentforce actions), the risks, the tests that matter, and partial rollbacks for production errors.",
+  "author": { "name": "sf-preflight contributors", "url": "https://github.com/visparashar/sf-preflight" },
+  "homepage": "https://github.com/visparashar/sf-preflight",
+  "repository": "https://github.com/visparashar/sf-preflight",
+  "license": "Apache-2.0",
+  "keywords": ["salesforce", "sfdx", "flows", "apex", "agentforce", "devops", "mcp"],
+  "mcpServers": {
+    "sf-preflight": {
+      "command": "npx",
+      "args": ["-y", "sf-preflight@0.6.0", "mcp", "--root", "${CLAUDE_PROJECT_DIR}"]
+    }
+  }
+}

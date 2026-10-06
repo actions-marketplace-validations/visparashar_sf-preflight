@@ -66,6 +66,28 @@ claude mcp add sf-preflight -- npx -y sf-preflight mcp
 }
 ```
 
+### OpenAI Codex
+
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.sf-preflight]
+command = "npx"
+args = ["-y", "sf-preflight", "mcp"]
+```
+
+### Gemini CLI
+
+`.gemini/settings.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "sf-preflight": { "command": "npx", "args": ["-y", "sf-preflight", "mcp"] }
+  }
+}
+```
+
 ### Other MCP clients
 
 Any client that can launch a stdio server works. Command `npx`, arguments
@@ -80,6 +102,9 @@ or add `--root path/to/project`.
    add bulk, recursion and validation-error tests for the change to the project.
 4. It calls `analyze_change` again before committing, and reports any remaining findings to
    you with an explanation.
+
+For when and how agents should use these tools, install the sf-preflight agent skill too; see
+[AI_AGENTS.md](AI_AGENTS.md).
 
 Pair this with the [GitHub Action](GITHUB_ACTION.md) so the same checks run on the pull
 request, whether the change was written by a person or an agent.
