@@ -32,7 +32,7 @@ node dist/cli.js analyze --project fixtures/sample-org --base HEAD
 
 | Script | What it does |
 |---|---|
-| `npm run lint` | Biome lint + format check |
+| `npm run lint` | Biome lint + format check, and the license-header check |
 | `npm run format` | Apply Biome formatting and safe fixes |
 | `npm run typecheck` | TypeScript, no emit |
 | `npm test` | Vitest unit and fixture tests |
@@ -53,6 +53,7 @@ src/cli.ts            command-line entry point
 src/mcp.ts            MCP server (stdio) for coding agents
 action.yml            GitHub Action (composite)
 fixtures/sample-org/  SFDX project with deliberate failure modes
+scripts/              repository maintenance scripts (license-header check)
 test/                 vitest tests
 ```
 
@@ -77,6 +78,17 @@ feat(flows): resolve inputReference through assignment collections
 fix(apex): ignore DML keywords inside SOQL FOR UPDATE
 docs: explain cascade depth option
 ```
+
+### License headers
+
+Every TypeScript file in `src/`, `test/` and `scripts/` starts with an SPDX identifier (after the
+shebang, if any):
+
+```ts
+// SPDX-License-Identifier: Apache-2.0
+```
+
+`npm run lint` checks for it.
 
 ### Adding to the fixture org
 
