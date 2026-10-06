@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { FailOn, GateConfig } from "./config.js";
+import type { AgentTestsResult } from "./org/agentTests.js";
+import { orgRef } from "./org/enrich.js";
 import type { ValidationResult } from "./org/validate.js";
 import type { AnalysisResult, Severity } from "./types.js";
+import { key } from "./util.js";
 
 /**
  * The quality gate: one pass/fail decision per change, from the findings and the policy in
@@ -14,7 +17,7 @@ export interface Approval {
   submittedAt?: string;
 }
 
-export type GateCheckId = "findings" | "ai-approvals" | "agent-tests" | "tests-passed";
+export type GateCheckId = "findings" | "ai-approvals" | "agent-tests" | "tests-passed" | "agent-tests-passed";
 
 export interface GateCheck {
   id: GateCheckId;
@@ -38,11 +41,26 @@ export interface GateInput {
   validation?: ValidationResult;
   /** How many tests the change generates, when known (0 means there is nothing to run). */
   testsGenerated?: number;
+  /** Result of running the affected agents' Testing Center tests (`preflight agent-tests`). */
+  agentTests?: AgentTestsResult;
+  /**
+   * Testing Center tests that cover this change (`selectAgentTests`), when known. Each must be among
+   * the runs, so a result from another change or a narrower run doesn't pass the gate.
+   */
+  expectedAgentTests?: string[];
 }
 
 const RANK: Record<Severity, number> = { info: 0, low: 1, medium: 2, high: 3 };
 
-export function evaluateGate({ result, config = {}, approvals, validation, testsGenerated }: GateInput): GateResult {
+export function evaluateGate({
+  result,
+  config = {},
+  approvals,
+  validation,
+  testsGenerated,
+  agentTests,
+  expectedAgentTests,
+}: GateInput): GateResult {
   const failOn: FailOn = config.failOn ?? "high";
   const checks: GateCheck[] = [];
 
@@ -133,6 +151,49 @@ export function evaluateGate({ result, config = {}, approvals, validation, tests
         status: validation.status === "passed" ? "pass" : "fail",
         detail: `${passed} of ${validation.tests.length} passed in ${validation.org}${validation.componentErrors.length ? `; ${validation.componentErrors.length} component error(s)` : ""}.`,
       });
+    }
+  }
+
+  if (config.requireAgentTestsPassed) {
+    const label = "Testing Center tests passed";
+    const affected = result.agents ?? [];
+    if (!affected.length) {
+      checks.push({ id: "agent-tests-passed", label, status: "pass", detail: "No agent actions affected." });
+    } else if (!agentTests) {
+      checks.push({
+        id: "agent-tests-passed",
+        label,
+        status: "fail",
+        detail:
+          "The Testing Center tests weren't run: deploy the change to a sandbox, run `preflight agent-tests --org <sandbox> --format json` and pass its output with --agent-tests-result.",
+      });
+    } else {
+      const ran = new Set(agentTests.runs.map((r) => key(r.test)));
+      const missing = (expectedAgentTests ?? []).filter((t) => !ran.has(key(t)));
+      const passed = agentTests.runs.filter((r) => r.status === "passed").length;
+      const where = orgRef(agentTests.org);
+      if (missing.length) {
+        checks.push({
+          id: "agent-tests-passed",
+          label,
+          status: "fail",
+          detail: `Tests covering this change weren't in the result: ${missing.map((t) => `\`${t}\``).join(", ")}. Run \`preflight agent-tests\` for this change.`,
+        });
+      } else if (!agentTests.runs.length) {
+        checks.push({
+          id: "agent-tests-passed",
+          label,
+          status: "pass",
+          detail: "No Testing Center tests cover the affected actions (requireAgentTests checks coverage).",
+        });
+      } else {
+        checks.push({
+          id: "agent-tests-passed",
+          label,
+          status: agentTests.status === "passed" ? "pass" : "fail",
+          detail: `${passed} of ${agentTests.runs.length} test run(s) passed in ${where}.`,
+        });
+      }
     }
   }
 

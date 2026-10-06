@@ -52,6 +52,17 @@ export {
   parseApprovals,
 } from "./gate.js";
 export { saveProcedure } from "./orderOfExecution.js";
+export {
+  type AgentTestCase,
+  type AgentTestRun,
+  type AgentTestsResult,
+  agentTestsToMarkdown,
+  noAgentTests,
+  parseAgentTestsResult,
+  readAgentTestResult,
+  runAgentTests,
+  selectAgentTests,
+} from "./org/agentTests.js";
 export { applyOrgContext, collectOrgContext, enrichWithOrg, GENERIC_ORG_LABEL } from "./org/enrich.js";
 export { assertSafeOrg, createSfRunner, SfError, type SfRunner } from "./org/sf.js";
 export {

@@ -17,6 +17,7 @@ the quality gate. Every command, the MCP server and the GitHub Action pick it up
     "failOn": "high",
     "aiAssistedApprovals": 1,
     "requireAgentTests": true,
+    "requireAgentTestsPassed": false,
     "requireTestsPassed": false
   }
 }
@@ -50,6 +51,7 @@ It exits with code 2 when the gate fails, and the report starts with the checks:
 | AI-assisted approvals | `aiAssistedApprovals` (default 0, off) | The change has no AI-assisted commits, or at least that many people approved it. |
 | Agent test coverage | `requireAgentTests` | Every agent action the change affects is covered by a Testing Center test ([AGENTS.md](AGENTS.md)). |
 | Generated tests | `requireTestsPassed` | The generated Apex tests ran in an org and passed ([TESTS.md](TESTS.md)). |
+| Testing Center tests | `requireAgentTestsPassed` | The Testing Center tests that cover the affected agent actions ran in an org and passed ([AGENTS.md](AGENTS.md#running-testing-center-tests)). |
 
 ### Where the policy comes from
 
@@ -74,9 +76,13 @@ Approvals and test results come from the pipeline:
   reads them from the pull request's reviews.
 - `--tests-result <file>`: the output of
   `preflight tests --validate --org <sandbox> --format json`.
+- `--agent-tests-result <file>`: the output of
+  `preflight agent-tests --org <sandbox> --format json`, run after deploying the change.
 
-Both record what the caller provides; the gate can't check them itself. A change that generates
-no tests passes the "generated tests" check without a result. On a shallow clone, the
+These record what the caller provides; the gate can't check them itself. A change that generates
+no tests passes the "generated tests" check without a result, and a change that affects no agent
+actions passes the "Testing Center tests" check. The Testing Center check fails when a test that
+covers the change is missing from the result. On a shallow clone, the
 AI-assisted approvals check fails when it can't see the whole history (use `fetch-depth: 0`).
 
 When a check needs data that wasn't provided (approvals for an AI-assisted change, or test

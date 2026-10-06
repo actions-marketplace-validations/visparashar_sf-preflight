@@ -32,11 +32,15 @@ otherwise.
 sf-preflight reads Salesforce metadata from a local SFDX project and runs `git` locally. Only
 when you pass `--org` (or the action's `sfdx-auth-url`/`org` inputs) does it contact a
 Salesforce org, through the Salesforce CLI and read-only queries listed in
-[docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md). It never contacts any other external service.
+[docs/ORG_CONTEXT.md](docs/ORG_CONTEXT.md). The exceptions are the commands you run explicitly to
+test in an org (`preflight tests --validate`, a check-only deployment, and `preflight agent-tests`,
+which runs Testing Center tests); both refuse production orgs by default. It never contacts any other external service.
 Issues of particular interest include:
 
 - code execution or command injection via crafted metadata files, paths or git refs,
 - path traversal outside the project directory,
 - denial of service from crafted metadata (e.g. pathological XML or Apex input),
 - leaking sensitive metadata, record data or credentials into reports or logs,
-- any way to make `--org` write to an org or run commands other than the documented queries.
+- any way to make `--org` write to an org or run commands other than the documented ones,
+- any way to make `tests --validate` or `agent-tests` run in a production org without
+  `--allow-production`.

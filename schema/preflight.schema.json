@@ -43,6 +43,10 @@
         "requireTestsPassed": {
           "description": "The generated Apex tests must have run in an org (preflight tests --validate) and passed.",
           "type": "boolean"
+        },
+        "requireAgentTestsPassed": {
+          "description": "Testing Center tests for the affected agents must have run (preflight agent-tests) and passed.",
+          "type": "boolean"
         }
       }
     }

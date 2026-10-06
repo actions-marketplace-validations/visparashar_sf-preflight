@@ -17,6 +17,7 @@ sf-preflight reads your agents from source and, for every change, answers:
 preflight analyze --base origin/main      # agent findings and an "Agent actions" table
 preflight agents                          # list the agents in the project
 preflight agents Sales_Agent              # what each action calls, saves, needs and is tested by
+preflight agent-tests --base origin/main --org my-sandbox   # run the Testing Center tests that cover the change
 ```
 
 ## What it reads
@@ -61,6 +62,44 @@ saves, what its runtime user needs and its Testing Center coverage. The suggeste
 the `sf agent test run` commands for tests that cover affected actions, and test cases to add for
 those no test covers.
 
+## Running Testing Center tests
+
+Testing Center checks the agent as deployed in an org, so deploy the change to a sandbox (or
+scratch org, or Developer Edition org) first, then:
+
+```bash
+preflight agent-tests --base origin/main --dry-run                  # which tests cover the change
+preflight agent-tests --base origin/main --org my-sandbox           # run them and report each case
+preflight agent-tests --base origin/main --org my-sandbox --format json > agent-tests.json
+```
+
+Preflight picks the tests of affected agents that expect an affected action, or the topic it
+belongs to, and runs each with `sf agent test run` (Testing Center and Agentforce Studio tests
+both work). `--all` runs every test of the affected agents; `--test <names...>` runs the tests you
+name. The report shows each test, how many cases passed and, for the rest, which expectation
+didn't match:
+
+```markdown
+### Testing Center in my-sandbox
+
+❌ 1 of 1 test run(s) didn't pass.
+
+| Test | Agent | Result | Cases passed | Details |
+|---|---|---|---|---|
+| `Sales_Agent_Tests` | Sales_Agent | ❌ failed | 2/3 | #3 "Close the Acme deal": action_sequence_match: expected ['Close_Opportunity'], got ['Log_Customer_Call'] |
+```
+
+It exits with code 2 when a test fails. A test still running after `--wait` minutes (default 10)
+is reported with the command to check it later.
+
+Agent actions really run during a test: they can create and update records. Preflight refuses
+production orgs (and orgs it can't identify) unless you pass `--allow-production`.
+
+To make passing tests part of the [quality gate](CONFIG.md#quality-gate), set
+`requireAgentTestsPassed` and pass the JSON output with `--agent-tests-result`. The gate fails
+when a test that covers the change isn't in the result, so a result from another change or a
+narrower run doesn't count. The [evidence pack](EVIDENCE.md) records each run.
+
 ## Runtime user
 
 Service agents run as a dedicated user (`botUser` in the bot, `default_agent_user` in Agent
@@ -85,4 +124,5 @@ used in one query and never appears in a report.
 - Testing Center coverage matches expected actions by API name. A test that expects only a topic
   doesn't count as covering the topic's actions.
 - Preflight checks what an action does when it runs (the execution layer). Whether the agent
-  chooses the right action for a request (the decision layer) is what Testing Center tests check.
+  chooses the right action for a request (the decision layer) is what Testing Center tests check;
+  `preflight agent-tests` runs them, but the results reflect what's deployed in the org.

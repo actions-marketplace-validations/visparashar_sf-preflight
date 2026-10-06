@@ -31,14 +31,15 @@ git diff / --files
 | `analyze.ts` | Seeds roots from changes, expands the cascade, detects cycles, produces findings and suggested tests. |
 | `report/markdown.ts` | GitHub-flavoured Markdown for PR comments. JSON is the `AnalysisResult` object itself. |
 | `report/sarif.ts` | SARIF 2.1.0 for code scanning. |
-| `org/sf.ts` | Read-only wrapper around the Salesforce CLI (`sf ... --json`), with input validation. |
+| `org/sf.ts` | Wrapper around the Salesforce CLI (`sf ... --json`), with input validation. Everything is read-only except check-only deployments and Testing Center runs, which refuse production orgs by default. |
 | `org/enrich.ts` | Optional `--org` context: record counts, org-only automation, assignments, packages; turns it into findings and annotations. |
 | `config.ts` | `.preflight.json`: validation, discovery (project, then git root), rule overrides and path ignores. |
-| `gate.ts` | The quality gate: findings threshold, approvals for AI-assisted changes, agent test coverage, generated tests passed. |
+| `gate.ts` | The quality gate: findings threshold, approvals for AI-assisted changes, agent test coverage, generated tests passed, Testing Center tests passed. |
 | `evidence.ts` | The evidence pack: change identity and file digests, authorship, findings, tests, approvals, gate, and a SHA-256 over its canonical JSON. |
 | `report/junit.ts` | JUnit XML for CI test reports. |
 | `parsers/agents.ts` | Agentforce metadata: bots and versions, planner bundles, topics (GenAiPlugin), actions (GenAiFunction), Agent Script (`.agent`) and Testing Center definitions, linked into agents → topics → actions. |
 | `agentImpact.ts` | Which agent actions a change reaches (through the class or flow they call and the save procedures that follow), Testing Center coverage, runtime-user access needs; `preflight agents`. |
+| `org/agentTests.ts` | `preflight agent-tests`: picks the Testing Center tests that cover a change, runs them with `sf agent test run`, reads both result formats, and checks saved results for the gate. |
 | `org/validate.ts` | `preflight tests --validate`: check-only deployment of the project and generated tests (`sf project deploy validate`), org safety check, per-test results. |
 | `testgen/generate.ts` | `preflight tests`: turns the cascade and findings into an Apex test class (bulk, recursion, idempotency, validation errors surfacing). Every generated class is syntax-checked with the Apex parser. |
 | `testgen/solver.ts` | Parses and evaluates validation-rule and entry-criteria formulas (three-valued: a value can be unknown) and finds field values that satisfy or violate them. |

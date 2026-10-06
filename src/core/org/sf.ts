@@ -73,6 +73,9 @@ export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
     } catch {
       throw new SfError(`Unexpected output from sf ${args.slice(0, 2).join(" ")}`);
     }
+    // Some commands report their result but exit non-zero (e.g. `agent test run` when a test case
+    // errors); errors themselves carry no result.
+    if (parsed.status !== 0 && parsed.result !== undefined && parsed.result !== null) return parsed.result;
     if (parsed.status !== 0) {
       throw new SfError(
         parsed.message ?? `sf ${args.slice(0, 2).join(" ")} failed (${parsed.name ?? "error"})`,

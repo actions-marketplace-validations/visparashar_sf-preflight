@@ -39,7 +39,7 @@ it as a workflow artifact on every run.
 | `change.components` | Each changed component with its type, file and the SHA-256 of the file's bytes at the head (what `sha256sum` prints) |
 | `change.authorship` | Commits in the range, which are AI-assisted and which tools, with author names (not emails); `complete: false` when a shallow clone may hide earlier commits |
 | `analysis` | Risk, every finding (rule, severity, title, files), impacted objects, cycles, affected agent actions |
-| `tests` | Suggested tests, the generated tests and their results in an org (with `--tests-result`) |
+| `tests` | Suggested tests, the generated tests and their results in an org (with `--tests-result`), and Testing Center runs per test (with `--agent-tests-result`) |
 | `approvals` | Reviewers who approved (with `--approvals`, or from the pull request in the Action) |
 | `gate` | The gate decision and each check |
 | `config` | The policy file used (relative to the repository), the git ref it was read from (for example the base branch), and its SHA-256 |
@@ -51,8 +51,9 @@ Pass the inputs the gate and the record need:
 
 ```bash
 preflight tests --base origin/main --validate --org my-sandbox --format json > tests.json
-preflight evidence --base origin/main --head HEAD \
-  --tests-result tests.json --approvals approvals.json --out evidence.json
+preflight agent-tests --base origin/main --org my-sandbox --format json > agent-tests.json
+preflight evidence --base origin/main --head HEAD --tests-result tests.json \
+  --agent-tests-result agent-tests.json --approvals approvals.json --out evidence.json
 ```
 
 ## What the evidence proves
@@ -80,7 +81,7 @@ preflight evidence --base origin/main --head HEAD \
   Keeping the digest somewhere the change's author can't write (a change record, a ticket) works
   too.
 
-- **Inputs are as trustworthy as their source.** `--approvals` and `--tests-result` record what
+- **Inputs are as trustworthy as their source.** `--approvals`, `--tests-result` and `--agent-tests-result` record what
   the person running the command provides. In the GitHub Action, approvals come from the pull
   request's reviews, with the rules in [GITHUB_ACTION.md](GITHUB_ACTION.md#approvals).
 
