@@ -15,7 +15,9 @@ sf-preflight is pre-1.0. Security fixes are made on the latest released minor ve
 
 Report them privately through GitHub's
 [private vulnerability reporting](https://github.com/visparashar/sf-preflight/security/advisories/new)
-("Report a vulnerability" on the repository's **Security** tab).
+("Report a vulnerability" on the repository's **Security** tab). If you can't use it, email
+[vis.parashar@gmail.com](mailto:vis.parashar@gmail.com) with `[sf-preflight security]` in the
+subject.
 
 Please include:
 
@@ -26,6 +28,12 @@ Please include:
 You can expect an acknowledgement within **5 business days**. We will keep you informed while we
 investigate, agree a disclosure date with you, and credit you in the advisory unless you prefer
 otherwise.
+
+We follow coordinated disclosure: we aim to release a fix within 90 days of the report (sooner
+for severe issues), then publish a
+[GitHub security advisory](https://github.com/visparashar/sf-preflight/security/advisories)
+and request a CVE where one applies. Please keep the details private until the advisory is
+published.
 
 ## Scope
 

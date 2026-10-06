@@ -29,7 +29,8 @@
   "files": [
     "dist",
     "schema",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=22.13"
@@ -42,7 +43,7 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check .",
+    "lint": "biome check . && node scripts/check-license-headers.mjs",
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
