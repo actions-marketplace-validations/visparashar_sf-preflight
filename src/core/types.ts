@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { GateResult } from "./gate.js";
+
 /**
  * Core data model for the org graph and analysis results.
  *
@@ -380,6 +382,8 @@ export interface CommitProvenance {
 
 export interface Provenance {
   range: string;
+  /** The repository is a shallow clone, so commits before its cut-off are missing. */
+  shallow?: boolean;
   commits: number;
   aiAssistedCommits: number;
   tools: string[];
@@ -542,46 +546,9 @@ export interface AnalysisResult {
   provenance?: Provenance;
   /** Present when analyzed with `--org`: read-only context from a Salesforce org. */
   org?: OrgContext;
-}
-
-export interface OrgAutomation {
-  kind: "Flow" | "ApexTrigger" | "ValidationRule";
-  name: string;
-  object: string;
-  /** e.g. "after update", "before insert", "validation". */
-  when: string[];
-  namespace?: string;
-  /** Installed package that owns it, when known. */
-  packageName?: string;
-}
-
-export interface OrgContext {
-  /** Org alias or username passed to `--org`. */
-  org: string;
-  queriedAt: string;
-  /** Record counts for impacted objects. */
-  recordCounts: Record<string, number>;
-  /** Active users holding each changed permission set or profile. */
-  assignments: { kind: "PermissionSet" | "Profile"; name: string; activeUsers: number }[];
-  /** Active automation on impacted objects that exists in the org but not in the project. */
-  orgOnlyAutomation: OrgAutomation[];
-  packages: { namespace?: string; name: string; version: string }[];
-  /** Queries that failed; the rest of the context is still usable. */
-  errors: string[];
-}
-
-export interface CommitProvenance {
-  sha: string;
-  subject: string;
-  author: string;
-  /** AI tools detected from trailers, markers or bot authors; empty for human-only commits. */
-  aiTools: string[];
-}
-
-export interface Provenance {
-  range: string;
-  commits: number;
-  aiAssistedCommits: number;
-  tools: string[];
-  details: CommitProvenance[];
+  /** The `.preflight.json` applied to the findings (project-relative path). */
+  /** The policy file applied (project-relative), the git ref it came from, and its digest. */
+  config?: { file: string; ref?: string; sha256?: string };
+  /** Present when the quality gate was evaluated (`--gate`). */
+  gate?: GateResult;
 }

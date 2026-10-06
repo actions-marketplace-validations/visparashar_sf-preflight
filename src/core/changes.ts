@@ -103,6 +103,29 @@ export function gitShow(projectDir: string, ref: string, projectRelFile: string)
   }
 }
 
+/** A file's bytes at a git ref (path relative to the repository root); undefined when absent. */
+export function gitBlob(repoRoot: string, ref: string, repoRelFile: string): Buffer | undefined {
+  try {
+    assertSafeRef(ref);
+    return execFileSync("git", ["cat-file", "blob", `${ref}:${toPosix(repoRelFile)}`], {
+      cwd: repoRoot,
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/** Is the repository a shallow clone (history cut off)? */
+export function isShallow(repoRoot: string): boolean {
+  try {
+    return git(repoRoot, ["rev-parse", "--is-shallow-repository"]).trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Turn changed files into component changes. Companion files (`Foo.cls` + `Foo.cls-meta.xml`)
  * collapse into one change.

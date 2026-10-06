@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/visparashar/sf-preflight/main/schema/preflight.schema.json",
+  "title": "sf-preflight configuration (.preflight.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "rules": {
+      "description": "Rule id → severity override, or \"off\" to drop the rule's findings. Rule ids are listed in docs/RULES.md.",
+      "type": "object",
+      "additionalProperties": { "enum": ["high", "medium", "low", "info", "off"] }
+    },
+    "ignore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "description": "Project-relative glob patterns (*, **, ?). Findings whose files all match are dropped.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "gate": {
+      "description": "Quality gate policy, evaluated with --gate and by the GitHub Action.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "failOn": {
+          "description": "Fail when any finding is at or above this severity (default: high).",
+          "enum": ["none", "low", "medium", "high"]
+        },
+        "aiAssistedApprovals": {
+          "description": "Changes with AI-assisted commits need at least this many approvals (default: 0, not required).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "requireAgentTests": {
+          "description": "Agent actions the change affects must be covered by a Testing Center test.",
+          "type": "boolean"
+        },
+        "requireTestsPassed": {
+          "description": "The generated Apex tests must have run in an org (preflight tests --validate) and passed.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

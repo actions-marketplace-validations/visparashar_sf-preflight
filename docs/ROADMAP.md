@@ -27,7 +27,7 @@ AI-authored — before it ships:
 | **M3** | Accuracy & live-org enrichment | Full Apex parser with cross-class call graph; optional `--org` enrichment via the `sf` CLI: permission assignments, record volumes, org-only automation, managed packages (beta) | ✅ 0.2.0 |
 | **M4** | Test generation | `preflight tests` generates Apex tests from the blast radius — bulk, recursion, idempotency and validation errors surfacing from invocable actions — with a schema-aware data factory and values solved from flow entry criteria and validation rules — and runs them in a sandbox with a check-only deployment (`--validate --org`) | ✅ 0.3.0 |
 | **M5** | Agentforce action verification | Agent Builder metadata and Agent Script parsed into agents → topics → actions → targets; the agent actions each change reaches, with Testing Center coverage; runtime-user access needs, checked against the org with `--org`; `preflight agents` and MCP `explain_agent`. Next: run Testing Center tests from preflight | ✅ 0.4.0 |
-| **M6** | Evidence & pipeline integration | Evidence pack per change (author human/AI, findings, tests, approvals); DevOps Center Testing provider with quality-gate severities | planned |
+| **M6** | Evidence & pipeline integration | `.preflight.json` policy (rule severities, ignores) and a quality gate (severity threshold, approvals for AI-assisted changes, agent test coverage, passing generated tests); evidence pack per change with file digests, authorship, findings, tests, approvals and a tamper-evident digest, signed with GitHub artifact attestations in the Action; JUnit output and guides for DevOps Center, GitLab, Azure DevOps, Jenkins and Bitbucket. Next: a native DevOps Center test provider once Salesforce opens provider integrations | ✅ Unreleased |
 | **M7** | Production feedback loop | Map production Flow/Apex errors and agent session traces back to the change that introduced them; suggest partial rollback | exploring |
 
 ## Next up (M1 follow-ups)
@@ -38,7 +38,7 @@ AI-authored — before it ships:
 - [x] Apex: `Trigger.newMap` handlers and platform events (`EventBus.publish`)
 - [ ] Apex: detect ignored `Database.SaveResult` / `allOrNone=false` failures
 - [ ] Master-detail cascade delete edges
-- [ ] Configurable rule severities and ignores (`.preflight.json`)
+- [x] Configurable rule severities and ignores (`.preflight.json`)
 - [ ] Performance pass on large orgs (streaming profile parsing, caching)
 
 ## Out of scope (for now)

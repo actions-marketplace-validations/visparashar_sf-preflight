@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { gateToMarkdown } from "../gate.js";
 import { GENERIC_ORG_LABEL } from "../org/enrich.js";
 import type { AnalysisResult, CascadeNode, Severity } from "../types.js";
 
@@ -67,7 +68,12 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
         "The analysis is the same either way — but AI-generated changes deserve a deliberate look at the findings below.",
     );
   }
+  if (result.config) {
+    out.push("", `_Policy: \`${result.config.file}\`${result.config.ref ? ` at \`${result.config.ref}\`` : ""}_`);
+  }
   out.push("");
+
+  if (result.gate) out.push(gateToMarkdown(result.gate), "");
 
   // Changed components
   out.push("### Changed components", "");

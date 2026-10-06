@@ -35,6 +35,13 @@ jobs:
       - run: npm run build
       - name: Smoke test CLI on sample org
         run: npm run analyze:sample
+      - name: Smoke test gate, JUnit and evidence on sample org
+        run: |
+          FIELD=fixtures/sample-org/force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml
+          node dist/cli.js analyze --project fixtures/sample-org --files "$FIELD" --gate --fail-on none --format junit > "$RUNNER_TEMP/preflight.xml"
+          grep -q '<testsuite name="sf-preflight.gate"' "$RUNNER_TEMP/preflight.xml"
+          node dist/cli.js evidence --project fixtures/sample-org --files "$FIELD" --out "$RUNNER_TEMP/evidence.json"
+          node dist/cli.js evidence --verify "$RUNNER_TEMP/evidence.json"
       - name: Smoke test agent explanations on sample org
         run: |
           node dist/cli.js agents --project fixtures/sample-org
@@ -70,7 +77,14 @@ jobs:
         env:
           RISK: ${{ steps.preflight.outputs.risk }}
           HIGH: ${{ steps.preflight.outputs.high }}
+          GATE: ${{ steps.preflight.outputs.gate }}
+          EVIDENCE: ${{ steps.preflight.outputs.evidence }}
+          DIGEST: ${{ steps.preflight.outputs.evidence-digest }}
         run: |
-          echo "risk=$RISK high=$HIGH"
+          echo "risk=$RISK high=$HIGH gate=$GATE digest=$DIGEST"
           test "$RISK" = "high"
           test "$HIGH" -gt 0
+          test "$GATE" = "pass"
+          test -s "$EVIDENCE"
+          test "${#DIGEST}" -eq 64
+          node dist/cli.js evidence --verify "$EVIDENCE"

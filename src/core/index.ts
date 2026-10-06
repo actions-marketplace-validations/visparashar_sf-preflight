@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+
 import path from "node:path";
 import { analyze } from "./analyze.js";
 import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./changes.js";
+import { applyConfig, loadPolicy, type PreflightConfig } from "./config.js";
 import { enrichWithOrg } from "./org/enrich.js";
 import type { SfRunner } from "./org/sf.js";
 import { loadProject } from "./project.js";
@@ -19,6 +21,36 @@ export {
 } from "./agentImpact.js";
 export { analyze, fieldReferences } from "./analyze.js";
 export { assertSafeRef, filesFromArgs, gitChangedFiles, gitRoot, toChanges } from "./changes.js";
+export {
+  applyConfig,
+  CONFIG_FILE,
+  type FailOn,
+  type GateConfig,
+  globMatch,
+  type LoadedPolicy,
+  loadConfig,
+  loadPolicy,
+  type PreflightConfig,
+  parseConfig,
+} from "./config.js";
+export {
+  buildEvidence,
+  canonicalJson,
+  EVIDENCE_PREDICATE_TYPE,
+  type EvidencePack,
+  evidenceDigest,
+  evidenceToMarkdown,
+  type TestsResultFile,
+  verifyEvidence,
+} from "./evidence.js";
+export {
+  type Approval,
+  evaluateGate,
+  type GateCheck,
+  type GateResult,
+  gateToMarkdown,
+  parseApprovals,
+} from "./gate.js";
 export { saveProcedure } from "./orderOfExecution.js";
 export { applyOrgContext, collectOrgContext, enrichWithOrg, GENERIC_ORG_LABEL } from "./org/enrich.js";
 export { assertSafeOrg, createSfRunner, SfError, type SfRunner } from "./org/sf.js";
@@ -34,6 +66,7 @@ export {
 } from "./org/validate.js";
 export { classifyPath, loadProject, sourceRoots } from "./project.js";
 export { detectAiTools, gitProvenance } from "./provenance.js";
+export { toJunit } from "./report/junit.js";
 export { toMarkdown } from "./report/markdown.js";
 export { toSarif } from "./report/sarif.js";
 export { RULES, ruleInfo } from "./rules.js";
@@ -61,6 +94,13 @@ export interface RunOptions {
   org?: string;
   /** Override how `sf` is invoked (tests). */
   sfRunner?: SfRunner;
+  /**
+   * `.preflight.json` to apply (rule overrides and ignores): a path, or false to ignore any.
+   * By default the project directory and then the git root are searched.
+   */
+  config?: string | false;
+  /** Read the policy from git at this ref (e.g. the pull request's base) instead of the checkout. */
+  configRef?: string;
 }
 
 /** Load the project, work out what changed, and analyze it. */
@@ -68,8 +108,8 @@ export function run(opts: RunOptions): AnalysisResult {
   return analyzeChange(opts).result;
 }
 
-/** Like `run`, but also returns the parsed project (needed by test generation). */
-export function analyzeChange(opts: RunOptions): { model: OrgModel; result: AnalysisResult } {
+/** Like `run`, but also returns the parsed project (needed by test generation) and the policy used. */
+export function analyzeChange(opts: RunOptions): { model: OrgModel; result: AnalysisResult; policy: PreflightConfig } {
   const projectDir = path.resolve(opts.projectDir);
   const model = loadProject(projectDir);
   let changedFiles: { file: string; changeType: ChangeType; previousFile?: string }[];
@@ -94,7 +134,16 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
   });
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
   if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
-  return { model, result };
+  if (opts.config !== false) {
+    const policy = loadPolicy(projectDir, { explicit: opts.config, ref: opts.configRef });
+    if (policy.warning) result.warnings = [...result.warnings, policy.warning];
+    if (policy.file) {
+      const configured = applyConfig(result, policy.config);
+      configured.config = { file: policy.file, ref: policy.ref, sha256: policy.sha256 };
+      return { model, result: configured, policy: policy.config };
+    }
+  }
+  return { model, result, policy: {} };
 }
 
 /** Analyze a change and generate Apex tests for it. Nothing is written to disk. */

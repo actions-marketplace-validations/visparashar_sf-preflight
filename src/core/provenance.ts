@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import path from "node:path";
-import { assertSafeRef, git, gitRoot } from "./changes.js";
+import { assertSafeRef, git, gitRoot, isShallow } from "./changes.js";
 import type { CommitProvenance, Provenance } from "./types.js";
 import { uniq } from "./util.js";
 
@@ -86,6 +86,7 @@ export function gitProvenance(projectDir: string, base: string, head?: string): 
     const ai = details.filter((d) => d.aiTools.length);
     return {
       range,
+      ...(isShallow(root) ? { shallow: true } : {}),
       commits: details.length,
       aiAssistedCommits: ai.length,
       tools: uniq(ai.flatMap((d) => d.aiTools)).sort(),
