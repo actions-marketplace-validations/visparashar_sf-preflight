@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { git, gitRoot, gitShow } from "./changes.js";
+import { git, gitBlob, gitRoot, isShallow } from "./changes.js";
 import type { Approval, GateResult } from "./gate.js";
 import type { ValidationResult } from "./org/validate.js";
 import type { AnalysisResult, ChangeType, ComponentType, Severity, TestKind } from "./types.js";
@@ -35,6 +35,8 @@ export interface EvidencePack {
     base?: { ref: string; sha?: string };
     head: { ref: string; sha?: string; uncommitted?: boolean };
     authorship?: {
+      /** False when the repository is a shallow clone, so commits before its cut-off are missing. */
+      complete: boolean;
       commits: number;
       aiAssistedCommits: number;
       tools: string[];
@@ -147,11 +149,14 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
   const uncommitted =
     !result.head && !!root && !!tryGit(root, ["status", "--porcelain", "--untracked-files=no", "--", projectDir]);
 
+  const projectPath = root ? path.relative(root, projectDir).split(path.sep).join("/") : "";
+  // Hash the file's bytes (as `sha256sum` would), from git at the head ref or from disk.
   const digestOf = (file: string, changeType: ChangeType): string | null => {
     if (changeType === "deleted") return null;
     if (result.head) {
-      const content = gitShow(projectDir, result.head, file);
-      return content === undefined ? null : sha256(content);
+      if (!root) return null;
+      const bytes = gitBlob(root, result.head, projectPath ? `${projectPath}/${file}` : file);
+      return bytes === undefined ? null : sha256(bytes);
     }
     const abs = path.join(projectDir, file);
     return existsSync(abs) ? sha256(readFileSync(abs)) : null;
@@ -176,7 +181,7 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
             const u = tryGit(root, ["remote", "get-url", "origin"]);
             return u ? cleanUrl(u) : undefined;
           })(),
-          projectPath: path.relative(root, projectDir).split(path.sep).join("/") || ".",
+          projectPath: projectPath || ".",
         }
       : undefined,
     change: {
@@ -193,6 +198,7 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
       },
       authorship: result.provenance
         ? {
+            complete: !(root && isShallow(root)),
             commits: result.provenance.commits,
             aiAssistedCommits: result.provenance.aiAssistedCommits,
             tools: result.provenance.tools,
@@ -274,7 +280,7 @@ export function evidenceToMarkdown(e: EvidencePack): string {
     [
       "Authorship",
       a
-        ? `${a.commits} commit(s), ${a.aiAssistedCommits} AI-assisted${a.tools.length ? ` (${a.tools.join(", ")})` : ""}`
+        ? `${a.commits} commit(s), ${a.aiAssistedCommits} AI-assisted${a.tools.length ? ` (${a.tools.join(", ")})` : ""}${a.complete ? "" : "; shallow clone, so earlier commits may be missing (check out with fetch-depth: 0)"}`
         : "not from a commit range",
     ],
     [

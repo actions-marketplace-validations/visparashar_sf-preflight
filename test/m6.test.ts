@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -301,6 +301,37 @@ describe("evidence pack", () => {
     expect(md).toContain("| Tests | 1 generated; 2 passed, 0 failed in dev |");
     expect(md).toContain("| Approvals | alice |");
     expect(md).toContain("| Policy | `.preflight.json` |");
+  });
+
+  it("hashes file bytes from git and notes shallow clones", () => {
+    expect(make().change.authorship!.complete).toBe(true);
+    // A Latin-1 file (not valid UTF-8): the digest must match its bytes, not a decoded copy.
+    const bin = `${SRC}/classes/Legacy.cls`;
+    const bytes = Buffer.concat([
+      Buffer.from("public class Legacy { // caf"),
+      Buffer.from([0xe9]),
+      Buffer.from(" }\n"),
+    ]);
+    mkdirSync(path.join(project, `${SRC}/classes`), { recursive: true });
+    writeFileSync(path.join(project, bin), bytes);
+    git("add", ".");
+    git("-c", "user.name=Jane Doe", "-c", "user.email=jane@example.com", "commit", "-q", "-m", "Add logo");
+    const result = run({ projectDir: project, base: "HEAD~1", head: "HEAD" });
+    const e = buildEvidence({ result, gate: evaluateGate({ result }), version: "1" });
+    expect(e.change.components.find((c) => c.file === bin)?.sha256).toBe(
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+
+    const shallow = mkdtempSync(path.join(tmpdir(), "sf-preflight-shallow-"));
+    try {
+      execFileSync("git", ["clone", "-q", "--depth", "2", `file://${repo}`, shallow]);
+      const r = run({ projectDir: path.join(shallow, "sfdx"), base: "HEAD~1", head: "HEAD" });
+      const pack = buildEvidence({ result: r, gate: evaluateGate({ result: r }), version: "1" });
+      expect(pack.change.authorship!.complete).toBe(false);
+      expect(evidenceToMarkdown(pack)).toContain("shallow clone, so earlier commits may be missing");
+    } finally {
+      rmSync(shallow, { recursive: true, force: true });
+    }
   });
 });
 
