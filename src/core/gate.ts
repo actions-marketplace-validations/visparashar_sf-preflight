@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { FailOn, GateConfig } from "./config.js";
+import type { AgentTestsResult } from "./org/agentTests.js";
+import { orgRef } from "./org/enrich.js";
 import type { ValidationResult } from "./org/validate.js";
 import type { AnalysisResult, Severity } from "./types.js";
+import { key } from "./util.js";
 
 /**
  * The quality gate: one pass/fail decision per change, from the findings and the policy in
@@ -14,7 +17,7 @@ export interface Approval {
   submittedAt?: string;
 }
 
-export type GateCheckId = "findings" | "ai-approvals" | "agent-tests" | "tests-passed";
+export type GateCheckId = "findings" | "ai-approvals" | "agent-tests" | "tests-passed" | "agent-tests-passed";
 
 export interface GateCheck {
   id: GateCheckId;
@@ -38,11 +41,32 @@ export interface GateInput {
   validation?: ValidationResult;
   /** How many tests the change generates, when known (0 means there is nothing to run). */
   testsGenerated?: number;
+  /** Result of running the affected agents' Testing Center tests (`preflight agent-tests`). */
+  agentTests?: AgentTestsResult;
+  /**
+   * Testing Center tests that cover this change (`selectAgentTests`), when known. Each must be among
+   * the runs, so a result from another change or a narrower run doesn't pass the gate.
+   */
+  expectedAgentTests?: string[];
+  /**
+   * `changeFingerprint` of the change being gated, when known; the Testing Center result must
+   * have been run for the same change.
+   */
+  changeFingerprint?: string;
 }
 
 const RANK: Record<Severity, number> = { info: 0, low: 1, medium: 2, high: 3 };
 
-export function evaluateGate({ result, config = {}, approvals, validation, testsGenerated }: GateInput): GateResult {
+export function evaluateGate({
+  result,
+  config = {},
+  approvals,
+  validation,
+  testsGenerated,
+  agentTests,
+  expectedAgentTests,
+  changeFingerprint,
+}: GateInput): GateResult {
   const failOn: FailOn = config.failOn ?? "high";
   const checks: GateCheck[] = [];
 
@@ -136,7 +160,54 @@ export function evaluateGate({ result, config = {}, approvals, validation, tests
     }
   }
 
+  if (config.requireAgentTestsPassed)
+    checks.push(agentTestsCheck(result, agentTests, expectedAgentTests, changeFingerprint));
+
   return { status: checks.some((c) => c.status === "fail") ? "fail" : "pass", failOn, checks };
+}
+
+function agentTestsCheck(
+  result: AnalysisResult,
+  agentTests: AgentTestsResult | undefined,
+  expected: string[] | undefined,
+  fingerprint: string | undefined,
+): GateCheck {
+  const check = (status: "pass" | "fail", detail: string): GateCheck => ({
+    id: "agent-tests-passed",
+    label: "Testing Center tests passed",
+    status,
+    detail,
+  });
+  const rerun =
+    "Run `preflight agent-tests --base <base> --org <sandbox> --format json` for this change and pass its output with --agent-tests-result.";
+  if (!(result.agents ?? []).length) return check("pass", "No agent actions affected.");
+  if (expected && !expected.length) {
+    return check("pass", "No Testing Center tests cover the affected actions (requireAgentTests checks coverage).");
+  }
+  if (!agentTests)
+    return check("fail", `The Testing Center tests weren't run: deploy the change to a sandbox. ${rerun}`);
+  if (fingerprint !== undefined) {
+    if (!agentTests.change)
+      return check("fail", `The Testing Center result doesn't say which change it's for. ${rerun}`);
+    if (agentTests.change.fingerprint !== fingerprint) {
+      return check("fail", `The Testing Center result is for a different change (other files or contents). ${rerun}`);
+    }
+  }
+  const ran = new Set(agentTests.runs.map((r) => key(r.test)));
+  const missing = (expected ?? []).filter((t) => !ran.has(key(t)));
+  if (missing.length) {
+    return check(
+      "fail",
+      `Tests covering this change weren't in the result: ${missing.map((t) => `\`${t}\``).join(", ")}. ${rerun}`,
+    );
+  }
+  // Without the expected tests, an empty result can't show the change is covered.
+  if (!agentTests.runs.length) return check("fail", `The Testing Center result has no test runs. ${rerun}`);
+  const passed = agentTests.runs.filter((r) => r.status === "passed").length;
+  return check(
+    agentTests.status === "passed" ? "pass" : "fail",
+    `${passed} of ${agentTests.runs.length} test run(s) passed in ${orgRef(agentTests.org)}.`,
+  );
 }
 
 const cell = (s: string) => s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");

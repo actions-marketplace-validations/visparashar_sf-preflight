@@ -77,6 +77,9 @@ preflight explain Opportunity --event update
 
 # What can an Agentforce agent do, and what do its actions save?
 preflight agents Sales_Agent
+
+# Run the Testing Center tests that cover the change (after deploying it to a sandbox)
+preflight agent-tests --base origin/main --org my-sandbox
 ```
 
 | Option | Default | Description |
@@ -89,7 +92,7 @@ preflight agents Sales_Agent
 | `--md-out`, `--json-out`, `--sarif-out`, `--junit-out <file>` | — | Also write the report in another format |
 | `--gate` | — | Evaluate the quality gate from `.preflight.json`; exit with code 2 when it fails ([details](docs/CONFIG.md)) |
 | `--config <file>`, `--no-config` | `.preflight.json` | Policy file to use, or none |
-| `--approvals <file>`, `--tests-result <file>` | — | Approvals and test results for the gate and evidence |
+| `--approvals <file>`, `--tests-result <file>`, `--agent-tests-result <file>` | — | Approvals, generated test results and Testing Center results for the gate and evidence |
 | `--evidence-out <file>` | — | Also write the evidence pack ([details](docs/EVIDENCE.md)) |
 | `-o, --out <file>` | stdout | Write the report to a file |
 | `--depth <n>` | `4` | Maximum cascade depth |
@@ -142,7 +145,8 @@ Preflight reads agents from source, both Agent Builder metadata and Agent Script
 files), and follows each action to the Apex class or flow it calls and the records that saves.
 Every analysis then reports the agent actions a change reaches, whether Testing Center tests
 cover them, and the access their runtime user needs. With `--org`, it checks that user's real
-permissions. See [docs/AGENTS.md](docs/AGENTS.md).
+permissions, and `preflight agent-tests` runs the Testing Center tests that cover the change. See
+[docs/AGENTS.md](docs/AGENTS.md).
 
 ### Quality gate and evidence
 

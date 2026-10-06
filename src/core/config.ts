@@ -28,6 +28,8 @@ export interface GateConfig {
   requireAgentTests?: boolean;
   /** The generated tests must have run in an org (`preflight tests --validate`) and passed. */
   requireTestsPassed?: boolean;
+  /** Testing Center tests for the affected agents must have run (`preflight agent-tests`) and passed. */
+  requireAgentTestsPassed?: boolean;
 }
 
 export interface PreflightConfig {
@@ -89,7 +91,11 @@ export function parseConfig(json: unknown, file = CONFIG_FILE): PreflightConfig 
   if (json.gate !== undefined) {
     if (!isObject(json.gate)) fail(file, `"gate" must be an object`);
     const g = json.gate;
-    known(g, ["failOn", "aiAssistedApprovals", "requireAgentTests", "requireTestsPassed"], "gate.");
+    known(
+      g,
+      ["failOn", "aiAssistedApprovals", "requireAgentTests", "requireTestsPassed", "requireAgentTestsPassed"],
+      "gate.",
+    );
     if (g.failOn !== undefined && (typeof g.failOn !== "string" || !FAIL_ON.has(g.failOn))) {
       fail(file, `"gate.failOn" must be one of none, low, medium or high`);
     }
@@ -101,7 +107,7 @@ export function parseConfig(json: unknown, file = CONFIG_FILE): PreflightConfig 
     ) {
       fail(file, `"gate.aiAssistedApprovals" must be a whole number of approvals`);
     }
-    for (const k of ["requireAgentTests", "requireTestsPassed"] as const) {
+    for (const k of ["requireAgentTests", "requireTestsPassed", "requireAgentTestsPassed"] as const) {
       if (g[k] !== undefined && typeof g[k] !== "boolean") fail(file, `"gate.${k}" must be true or false`);
     }
     config.gate = {
@@ -109,6 +115,7 @@ export function parseConfig(json: unknown, file = CONFIG_FILE): PreflightConfig 
       aiAssistedApprovals: g.aiAssistedApprovals as number | undefined,
       requireAgentTests: g.requireAgentTests as boolean | undefined,
       requireTestsPassed: g.requireTestsPassed as boolean | undefined,
+      requireAgentTestsPassed: g.requireAgentTestsPassed as boolean | undefined,
     };
   }
   return config;

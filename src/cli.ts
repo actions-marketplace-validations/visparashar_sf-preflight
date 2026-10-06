@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Command, Option } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import type { AnalysisResult, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
+  agentTestsToMarkdown,
   allAgentActions,
   analyzeChange,
   assertSafeRef,
   buildEvidence,
+  changeFingerprint,
   evaluateGate,
   evidenceToMarkdown,
   explainAgent,
@@ -18,10 +20,13 @@ import {
   gateToMarkdown,
   generateTests,
   loadProject,
+  noAgentTests,
+  parseAgentTestsResult,
   parseApprovals,
-  run,
+  runAgentTests,
   runTests,
   saveProcedure,
+  selectAgentTests,
   sourceRoots,
   testsToMarkdown,
   toJunit,
@@ -53,6 +58,17 @@ function render(result: AnalysisResult, format: Format, failOn?: FailOn): string
   return toMarkdown(result);
 }
 
+/** Parser for a whole number of minutes in a range; rejects "5.9" and "10m" rather than truncating. */
+function minutes(min: number, max: number) {
+  return (v: string): number => {
+    const n = /^\d+$/.test(v.trim()) ? Number(v) : Number.NaN;
+    if (!Number.isInteger(n) || n < min || n > max) {
+      throw new InvalidArgumentError(`Expected a whole number of minutes from ${min} to ${max}.`);
+    }
+    return n;
+  };
+}
+
 function readJson(file: string, what: string): unknown {
   try {
     return JSON.parse(readFileSync(file, "utf8"));
@@ -74,6 +90,7 @@ interface PolicyOptions {
   configRef?: string;
   approvals?: string;
   testsResult?: string;
+  agentTestsResult?: string;
   prNumber?: number;
   prHeadSha?: string;
   prUrl?: string;
@@ -97,6 +114,9 @@ function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
   });
   const approvals = opts.approvals ? parseApprovals(readJson(opts.approvals, "approvals"), opts.approvals) : undefined;
   const tests = opts.testsResult ? (readJson(opts.testsResult, "tests result") as TestsResultFile) : undefined;
+  const agentTests = opts.agentTestsResult
+    ? parseAgentTestsResult(readJson(opts.agentTestsResult, "agent tests result"), opts.agentTestsResult)
+    : undefined;
   if (withGate) {
     // When the policy needs passing tests but none were run, check whether the change has any.
     let testsGenerated = Array.isArray(tests?.tests) ? tests.tests.length : undefined;
@@ -113,9 +133,14 @@ function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
       approvals,
       validation: tests?.validation,
       testsGenerated,
+      agentTests,
+      expectedAgentTests: policy.gate?.requireAgentTestsPassed
+        ? selectAgentTests(model, result).map((t) => t.name)
+        : undefined,
+      changeFingerprint: policy.gate?.requireAgentTestsPassed && agentTests ? changeFingerprint(result) : undefined,
     });
   }
-  return { result, approvals, tests };
+  return { result, approvals, tests, agentTests };
 }
 
 const program = new Command();
@@ -137,6 +162,7 @@ const policyOptions = (cmd: Command) =>
     .option("--config-ref <ref>", "read the policy from git at this ref, e.g. the pull request's base branch")
     .option("--approvals <file>", "JSON list of approvals (reviewer names), for the gate and evidence")
     .option("--tests-result <file>", "output of `preflight tests --validate --format json`, for the gate and evidence")
+    .option("--agent-tests-result <file>", "output of `preflight agent-tests --format json`, for the gate and evidence")
     .option("--pr-number <n>", "pull request number, recorded in the evidence", (v) => Number.parseInt(v, 10))
     .option("--pr-head-sha <sha>", "pull request head commit, recorded in the evidence")
     .option("--pr-url <url>", "pull request URL, recorded in the evidence");
@@ -171,7 +197,7 @@ policyOptions(
         gate?: boolean;
       },
     ) => {
-      const { result, approvals, tests } = analyzeWithPolicy(opts, !!opts.gate || !!opts.evidenceOut);
+      const { result, approvals, tests, agentTests } = analyzeWithPolicy(opts, !!opts.gate || !!opts.evidenceOut);
       const output = render(result, opts.format, opts.failOn);
       if (opts.out) writeFileSync(opts.out, `${output}\n`);
       else process.stdout.write(`${output}\n`);
@@ -186,6 +212,7 @@ policyOptions(
           version,
           approvals,
           tests,
+          agentTests,
           pullRequest: pullRequestOf(opts),
         });
         writeFileSync(opts.evidenceOut, `${JSON.stringify(pack, null, 2)}\n`);
@@ -224,13 +251,14 @@ policyOptions(
       );
       return;
     }
-    const { result, approvals, tests } = analyzeWithPolicy(opts, true);
+    const { result, approvals, tests, agentTests } = analyzeWithPolicy(opts, true);
     const pack = buildEvidence({
       result,
       gate: result.gate!,
       version,
       approvals,
       tests,
+      agentTests,
       pullRequest: pullRequestOf(opts),
     });
     writeFileSync(opts.out, `${JSON.stringify(pack, null, 2)}\n`);
@@ -255,7 +283,7 @@ program
   .option("--validate", "run the tests in --org with a check-only deployment (nothing is saved)")
   .option("--org <alias>", "org for --validate: a sandbox, scratch org or Developer Edition org")
   .option("--allow-production", "allow --validate in a production org")
-  .option("--wait <minutes>", "minutes to wait for --validate", (v) => Number.parseInt(v, 10), 33)
+  .option("--wait <minutes>", "minutes to wait for --validate (1-600)", minutes(1, 600), 33)
   .addOption(new Option("--format <format>", "summary format").choices(["md", "json"]).default("md"))
   .action(
     (opts: {
@@ -392,6 +420,90 @@ program
     }
     process.stdout.write(`${opts.format === "json" ? JSON.stringify(e, null, 2) : agentExplanationToMarkdown(e)}\n`);
   });
+
+program
+  .command("agent-tests")
+  .description(
+    "Run the Testing Center tests that cover the agent actions a change affects (in an org the change is deployed to)",
+  )
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("-b, --base <ref>", "git base ref (e.g. origin/main)")
+  .option("--head <ref>", "git head ref (default: working tree)")
+  .option("-f, --files <paths...>", "explicit changed files instead of a git diff")
+  .option("--org <alias>", "sandbox, scratch org or Developer Edition org with the change deployed")
+  .option("--test <names...>", "run these Testing Center tests instead of picking them from the change")
+  .option("--all", "run every test of the affected agents, not only those expecting an affected action or topic")
+  .option("--allow-production", "allow running in a production org")
+  .option("--wait <minutes>", "minutes to wait for each test run (1-120)", minutes(1, 120), 10)
+  .option("--dry-run", "list the tests that would run, without running them")
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .option("-o, --out <file>", "write the output to a file instead of stdout")
+  .action(
+    (opts: {
+      project: string;
+      base?: string;
+      head?: string;
+      files?: string[];
+      org?: string;
+      test?: string[];
+      all?: boolean;
+      allowProduction?: boolean;
+      wait: number;
+      dryRun?: boolean;
+      format: "md" | "json";
+      out?: string;
+    }) => {
+      if (!opts.org && !opts.dryRun) throw new Error("agent-tests needs --org <alias> (or --dry-run).");
+      if (opts.all && opts.test?.length) throw new Error("Use either --all or --test, not both.");
+      const changed = !!(opts.base || opts.files?.length);
+      if (!changed && !opts.test?.length)
+        throw new Error("Provide --base or --files to pick tests from a change, or --test <names...>.");
+      const { model, result } = changed
+        ? analyzeChange({ projectDir: opts.project, base: opts.base, head: opts.head, files: opts.files })
+        : { model: loadProject(opts.project), result: undefined };
+      const tests = selectAgentTests(model, result ?? ({ agents: [] } as unknown as AnalysisResult), {
+        all: opts.all,
+        names: opts.test,
+      });
+      const write = (text: string) => {
+        if (opts.out) writeFileSync(opts.out, `${text}\n`);
+        else process.stdout.write(`${text}\n`);
+      };
+      // With a change, the result records it so the gate can tell results from other changes.
+      const change = result ? { fingerprint: changeFingerprint(result), files: result.changes.length } : undefined;
+      if (!opts.dryRun && !tests.length && opts.format === "json") {
+        // A result the gate and evidence can read: nothing to run, so nothing failed.
+        write(JSON.stringify(noAgentTests(opts.org!, change), null, 2));
+        return;
+      }
+      if (opts.dryRun || !tests.length) {
+        if (opts.format === "json") {
+          write(
+            JSON.stringify({ tests: tests.map((t) => ({ name: t.name, agent: t.subject, file: t.file })) }, null, 2),
+          );
+        } else if (!tests.length) {
+          write(
+            result?.agents.length
+              ? "No Testing Center tests in the project cover the affected agent actions. Add test cases for them (see `preflight analyze`)."
+              : "The change affects no agent actions, so there are no Testing Center tests to run.",
+          );
+        } else {
+          write(["Testing Center tests to run:", ...tests.map((t) => `- \`${t.name}\` (${t.subject})`)].join("\n"));
+        }
+        return;
+      }
+      process.stderr.write(`Running ${tests.length} Testing Center test(s); each can take a few minutes...\n`);
+      const r = runAgentTests({
+        org: opts.org!,
+        tests,
+        waitMinutes: opts.wait,
+        allowProduction: opts.allowProduction,
+        change,
+      });
+      write(opts.format === "json" ? JSON.stringify(r, null, 2) : agentTestsToMarkdown(r));
+      if (r.status === "failed") process.exitCode = 2;
+    },
+  );
 
 program
   .command("explain")

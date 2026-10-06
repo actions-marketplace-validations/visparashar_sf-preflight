@@ -8,7 +8,16 @@ import { execFileSync } from "node:child_process";
  * A runner takes `sf` arguments (without `--json`) and returns the parsed `result` field.
  * Tests inject a fake runner with recorded responses.
  */
-export type SfRunner = (args: string[]) => unknown;
+export type SfRunner = (args: string[], opts?: SfCallOptions) => unknown;
+
+export interface SfCallOptions {
+  /**
+   * Return the result of a command that exits non-zero but still reports one, such as
+   * `agent test run` when a test case errors. Off by default, so a deployment that partly fails
+   * or is still running is never mistaken for success.
+   */
+  resultOnError?: boolean;
+}
 
 export class SfError extends Error {
   constructor(
@@ -43,7 +52,7 @@ export interface SfRunnerOptions {
 }
 
 export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
-  return (args: string[]) => {
+  return (args: string[], call: SfCallOptions = {}) => {
     const fullArgs = [...args, "--json"];
     const windows = process.platform === "win32";
     let stdout: string;
@@ -72,6 +81,9 @@ export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
       parsed = JSON.parse(stdout);
     } catch {
       throw new SfError(`Unexpected output from sf ${args.slice(0, 2).join(" ")}`);
+    }
+    if (call.resultOnError && parsed.status !== 0 && parsed.result !== undefined && parsed.result !== null) {
+      return parsed.result;
     }
     if (parsed.status !== 0) {
       throw new SfError(

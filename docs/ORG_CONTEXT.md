@@ -51,10 +51,17 @@ SELECT Id, Name FROM ApexClass WHERE NamespacePrefix = null AND Name IN (...)
 SELECT SetupEntityId FROM SetupEntityAccess WHERE SetupEntityType = 'ApexClass' AND ParentId IN (...) AND SetupEntityId IN (...)
 ```
 
-Nothing is written to the org. (The one command that deploys is
-[`preflight tests --validate`](TESTS.md#running-them), and only check-only: Salesforce rolls the
-deployment back.) The report contains **only counts and metadata names**, never
-record data, user names or org IDs, so it is safe to post as a pull-request comment:
+Nothing is written to the org. Two separate commands do more, and both refuse production orgs
+unless you pass `--allow-production`:
+
+- [`preflight tests --validate`](TESTS.md#running-them) deploys, but only check-only: Salesforce
+  rolls the deployment back.
+- [`preflight agent-tests`](AGENTS.md#running-testing-center-tests) runs Testing Center tests,
+  and the agent actions they exercise can create and update records. Its report shows expected
+  and actual topics and actions, but never the agent's responses, which can contain record data.
+
+Reports contain **only counts and metadata names**, never record data, user names or org IDs, so
+they are safe to post as a pull-request comment:
 
 - If you pass a **username** to `--org`, the report names the org by its alias, or "target
   org" when it has none. Email addresses are removed from any error messages it includes.

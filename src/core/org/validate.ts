@@ -199,13 +199,15 @@ export function readFailureMessage(
   };
 }
 
-/** Deploy the project and the generated tests check-only, run the tests, and report each one. */
-export function validateTests(opts: ValidateTestsOptions): ValidationResult {
-  const org = assertSafeOrg(opts.org);
-  const wait = opts.waitMinutes ?? 33;
-  if (!Number.isInteger(wait) || wait < 1 || wait > 600) throw new SfError("--wait must be between 1 and 600 minutes.");
-  const run = opts.runner ?? createSfRunner({ cwd: opts.projectDir, timeoutMs: (wait + 5) * 60_000 });
-
+/**
+ * Resolve the org's report label (alias, never username) and refuse production orgs unless
+ * allowed. `production` and `unknown` complete the refusal messages.
+ */
+export function checkTestOrg(
+  run: SfRunner,
+  org: string,
+  opts: { allowProduction?: boolean; production: string; unknown: string },
+): { label: string; kind: OrgKind } {
   let alias: unknown;
   try {
     alias = (run(["org", "display", "--target-org", org]) as { alias?: unknown } | undefined)?.alias;
@@ -217,10 +219,25 @@ export function validateTests(opts: ValidateTestsOptions): ValidationResult {
   if ((kind === "production" || kind === "unknown") && !opts.allowProduction) {
     throw new SfError(
       kind === "production"
-        ? `${orgRef(label)} is a production org. Run generated tests in a sandbox, scratch org or Developer Edition org, or pass --allow-production (the deployment is check-only either way).`
-        : `Couldn't tell whether ${orgRef(label)} is a sandbox. Pass --allow-production to run the check-only deployment anyway.`,
+        ? `${orgRef(label)} is a production org. ${opts.production}`
+        : `Couldn't tell whether ${orgRef(label)} is a sandbox. ${opts.unknown}`,
     );
   }
+  return { label, kind };
+}
+
+/** Deploy the project and the generated tests check-only, run the tests, and report each one. */
+export function validateTests(opts: ValidateTestsOptions): ValidationResult {
+  const org = assertSafeOrg(opts.org);
+  const wait = opts.waitMinutes ?? 33;
+  if (!Number.isInteger(wait) || wait < 1 || wait > 600) throw new SfError("--wait must be between 1 and 600 minutes.");
+  const run = opts.runner ?? createSfRunner({ cwd: opts.projectDir, timeoutMs: (wait + 5) * 60_000 });
+  const { label, kind } = checkTestOrg(run, org, {
+    allowProduction: opts.allowProduction,
+    production:
+      "Run generated tests in a sandbox, scratch org or Developer Edition org, or pass --allow-production (the deployment is check-only either way).",
+    unknown: "Pass --allow-production to run the check-only deployment anyway.",
+  });
 
   const args = ["project", "deploy", "validate"];
   for (const d of opts.sourceDirs) args.push("--source-dir", d);

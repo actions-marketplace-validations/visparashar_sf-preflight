@@ -56,13 +56,21 @@ describe("config file", () => {
     expect(() => parseConfig({ gate: { aiAssistedApprovals: 1.5 } })).toThrow("whole number");
     expect(() => parseConfig({ ignore: { paths: "x" } })).toThrow("list of glob patterns");
     expect(() => parseConfig([])).toThrow("expected a JSON object");
+    expect(parseConfig({ gate: { requireAgentTestsPassed: true } }).gate).toEqual({ requireAgentTestsPassed: true });
+    expect(() => parseConfig({ gate: { requireAgentTestsPassed: "yes" } })).toThrow("requireAgentTestsPassed");
   });
 
   it("keeps the published JSON schema in line with the parser", () => {
     const schema = JSON.parse(readFileSync(path.resolve(__dirname, "../schema/preflight.schema.json"), "utf8"));
     expect(Object.keys(schema.properties).sort()).toEqual(["$schema", "gate", "ignore", "rules"]);
     const gateKeys = Object.keys(schema.properties.gate.properties);
-    expect(gateKeys.sort()).toEqual(["aiAssistedApprovals", "failOn", "requireAgentTests", "requireTestsPassed"]);
+    expect(gateKeys.sort()).toEqual([
+      "aiAssistedApprovals",
+      "failOn",
+      "requireAgentTests",
+      "requireAgentTestsPassed",
+      "requireTestsPassed",
+    ]);
     expect(schema.properties.gate.properties.failOn.enum).toEqual(["none", "low", "medium", "high"]);
     expect(schema.properties.rules.additionalProperties.enum).toEqual(["high", "medium", "low", "info", "off"]);
   });

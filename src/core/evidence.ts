@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { git, gitBlob, gitRoot, isShallow } from "./changes.js";
 import type { Approval, GateResult } from "./gate.js";
+import type { AgentTestsResult } from "./org/agentTests.js";
 import type { ValidationResult } from "./org/validate.js";
 import type { AnalysisResult, ChangeType, ComponentType, Severity, TestKind } from "./types.js";
 import { redactEmails } from "./util.js";
@@ -59,6 +60,11 @@ export interface EvidencePack {
   tests: {
     suggested: number;
     generated?: { method: string; kind: TestKind; title: string }[];
+    agentTests?: {
+      org: string;
+      status: "passed" | "failed";
+      runs: { test: string; agent: string; status: string; passed: number; failed: number }[];
+    };
     validation?: {
       org: string;
       status: "passed" | "failed";
@@ -177,20 +183,16 @@ export interface EvidenceOptions {
   version: string;
   approvals?: Approval[];
   tests?: TestsResultFile;
+  agentTests?: AgentTestsResult;
   pullRequest?: { number: number; headSha?: string; url?: string };
 }
 
-export function buildEvidence(opts: EvidenceOptions): EvidencePack {
-  const { result } = opts;
+/** Hashes a changed file's bytes (as `sha256sum` would), from git at the head ref or from disk. */
+function fileDigester(result: AnalysisResult): (file: string, changeType: ChangeType) => string | null {
   const projectDir = result.projectDir;
   const root = gitRoot(projectDir);
-  const headRef = result.head ?? "HEAD";
-  const uncommitted =
-    !result.head && !!root && !!tryGit(root, ["status", "--porcelain", "--untracked-files=no", "--", projectDir]);
-
   const projectPath = root ? path.relative(root, projectDir).split(path.sep).join("/") : "";
-  // Hash the file's bytes (as `sha256sum` would), from git at the head ref or from disk.
-  const digestOf = (file: string, changeType: ChangeType): string | null => {
+  return (file, changeType) => {
     if (changeType === "deleted") return null;
     if (result.head) {
       if (!root) return null;
@@ -200,6 +202,33 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
     const abs = path.join(projectDir, file);
     return existsSync(abs) ? sha256(readFileSync(abs)) : null;
   };
+}
+
+/**
+ * Identifies a change by its changed files and their contents, independent of commit SHAs (CI
+ * merge commits differ between jobs). Used to tie saved test results to the change they're for.
+ */
+export function changeFingerprint(result: AnalysisResult): string {
+  const digestOf = fileDigester(result);
+  const files = result.changes
+    .map((c) => ({
+      file: c.component.file,
+      changeType: c.changeType,
+      sha256: digestOf(c.component.file, c.changeType),
+    }))
+    .sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  return `sha256:${sha256(canonicalJson(files))}`;
+}
+
+export function buildEvidence(opts: EvidenceOptions): EvidencePack {
+  const { result } = opts;
+  const projectDir = result.projectDir;
+  const root = gitRoot(projectDir);
+  const headRef = result.head ?? "HEAD";
+  const uncommitted =
+    !result.head && !!root && !!tryGit(root, ["status", "--porcelain", "--untracked-files=no", "--", projectDir]);
+  const projectPath = root ? path.relative(root, projectDir).split(path.sep).join("/") : "";
+  const digestOf = fileDigester(result);
 
   const v = opts.tests?.validation;
   const count = (o: string) => (Array.isArray(v?.tests) ? v.tests.filter((t) => t.outcome === o).length : 0);
@@ -280,6 +309,19 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
     tests: {
       suggested: result.suggestedTests.length,
       generated: opts.tests?.tests?.map((t) => ({ method: t.method, kind: t.kind, title: t.title })),
+      agentTests: opts.agentTests
+        ? {
+            org: orgName(opts.agentTests.org),
+            status: opts.agentTests.status === "passed" ? "passed" : "failed",
+            runs: (Array.isArray(opts.agentTests.runs) ? opts.agentTests.runs : []).map((r) => ({
+              test: String(r.test),
+              agent: String(r.agent),
+              status: String(r.status),
+              passed: Array.isArray(r.cases) ? r.cases.filter((c) => c.outcome === "pass").length : 0,
+              failed: Array.isArray(r.cases) ? r.cases.filter((c) => c.outcome !== "pass").length : 0,
+            })),
+          }
+        : undefined,
       validation: v
         ? {
             org: orgName(v.org),
@@ -342,6 +384,14 @@ export function evidenceToMarkdown(e: EvidencePack): string {
           ? `${e.tests.generated.length} generated, not run`
           : `${e.tests.suggested} suggested`,
     ],
+    ...(e.tests.agentTests
+      ? ([
+          [
+            "Testing Center",
+            `${e.tests.agentTests.runs.filter((r) => r.status === "passed").length} of ${e.tests.agentTests.runs.length} test run(s) passed in ${e.tests.agentTests.org}`,
+          ],
+        ] as [string, string][])
+      : []),
     [
       "Approvals",
       e.approvals ? (e.approvals.length ? e.approvals.map((x) => x.reviewer).join(", ") : "none") : "not provided",

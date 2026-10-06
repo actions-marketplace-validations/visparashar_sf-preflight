@@ -7,6 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `preflight agent-tests` runs the Agentforce Testing Center tests that cover a change (tests of
+  affected agents that expect an affected action or its topic; `--all` or `--test` to choose), in
+  an org the change is deployed to, and reports each test case and the expectation that didn't
+  match. Testing Center and Agentforce Studio tests both work. Production orgs are refused unless
+  `--allow-production`. Reports show expected and actual topics and actions, never the agent's
+  responses, which can contain record data.
+- Quality gate setting `requireAgentTestsPassed` with `--agent-tests-result <file>`: the Testing
+  Center tests covering the change must have run and passed. The result records a fingerprint of
+  the change it was run for, so a result from another change, or one that leaves out a covering
+  test, fails the check.
+- The evidence pack records Testing Center runs (`tests.agentTests`).
+
+### Changed
+
+- `--wait` options take a whole number of minutes and reject values such as `5.9` or `10m`
+  instead of truncating them.
+
 ## [0.5.0] - 2026-10-06
 
 Quality gates, an evidence pack per change, and pipeline integration (GitHub, GitLab, Azure
