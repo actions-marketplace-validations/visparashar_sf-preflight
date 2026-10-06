@@ -81,7 +81,7 @@ const clip = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 const scrub = (s: string) =>
   redactEmails(s)
     .replace(/\/services\/\S*/g, "<url>")
-    .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?\b/g, "<id>");
+    .replace(/\b[A-Za-z0-9]{15,18}\b/g, (t) => (t.length !== 16 && t.length !== 17 && /\d/.test(t) ? "<id>" : t));
 const noteOf = (err: unknown) => clip(scrub((err as Error).message ?? String(err)));
 const ROW_CAP = 2000;
 const capped = (rows: unknown[], what: string) =>

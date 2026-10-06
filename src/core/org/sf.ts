@@ -87,7 +87,7 @@ export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
           .find(Boolean);
         const clean = detail
           ?.replace(/\/services\/\S*/g, "<url>")
-          .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?\b/g, "<id>")
+          .replace(/\b[A-Za-z0-9]{15,18}\b/g, (t) => (t.length !== 16 && t.length !== 17 && /\d/.test(t) ? "<id>" : t))
           .slice(0, 300);
         throw new SfError(
           `sf ${args.slice(0, 3).join(" ")} failed${clean ? `: ${clean}` : e.status !== undefined ? ` (exit code ${e.status})` : ""}`,

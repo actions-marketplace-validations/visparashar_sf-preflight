@@ -82,9 +82,11 @@ const clip = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` :
  * ("Merge pull request #12 from alice/fix" → "Merge pull request #12").
  */
 export function cleanSubject(subject: string): string {
-  return redactEmails(subject)
-    .replace(/^(Merge pull request #\d+) from \S+.*$/, "$1")
-    .replace(/^Merge (?:remote-tracking )?branch\b.*$/, "Merge branch");
+  const text = redactEmails(subject);
+  const merge = /^Merge pull request #\d+/.exec(text)?.[0];
+  if (merge && text.startsWith(" from ", merge.length)) return merge;
+  if (/^Merge (?:remote-tracking )?branch\b/.test(text)) return "Merge branch";
+  return text;
 }
 
 /**
