@@ -1,5 +1,5 @@
 name: "sf-preflight"
-description: "Preflight checks for Salesforce changes: what a PR sets off through flows, triggers, validation rules, roll-ups and permissions."
+description: "Preflight checks for Salesforce changes: what a PR sets off through flows, triggers etc."
 author: "sf-preflight contributors"
 branding:
   icon: "crosshair"
