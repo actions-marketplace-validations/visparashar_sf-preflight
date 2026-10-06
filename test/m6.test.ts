@@ -446,14 +446,15 @@ describe("policy from a git ref, and evidence hygiene", () => {
     expect(shadowed).toMatchObject({ config: { gate: { failOn: "low" } }, file: "../.preflight.json", ref: "HEAD" });
     expect(shadowed.warning).toBe("This change adds .preflight.json; it takes effect once merged.");
     // A policy outside the repository isn't part of the change, so it's read from disk.
-    const central = path.join(tmpdir(), `sf-preflight-central-${process.pid}.json`);
+    const centralDir = mkdtempSync(path.join(tmpdir(), "sf-preflight-central-"));
+    const central = path.join(centralDir, "policy.json");
     writeFileSync(central, JSON.stringify({ gate: { aiAssistedApprovals: 2 } }));
     try {
       expect(loadPolicy(project, { explicit: central, ref: "HEAD" }).config).toEqual({
         gate: { aiAssistedApprovals: 2 },
       });
     } finally {
-      rmSync(central);
+      rmSync(centralDir, { recursive: true, force: true });
     }
     rmSync(rootPolicy);
     git("rm", "-q", "--cached", ".preflight.json");
