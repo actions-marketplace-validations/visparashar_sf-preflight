@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-06
+
+sf-preflight for AI coding agents of any kind: an agent skill in the open Agent Skills format,
+`preflight skill install`, and a Claude Code plugin.
+
 ### Added
 
 - The `sf-preflight` agent skill (open [Agent Skills](https://agentskills.io) format): tells any
@@ -249,7 +254,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/visparashar/sf-preflight/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/visparashar/sf-preflight/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/visparashar/sf-preflight/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/visparashar/sf-preflight/compare/v0.3.0...v0.4.0
