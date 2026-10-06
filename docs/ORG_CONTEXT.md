@@ -51,6 +51,9 @@ SELECT Id, Name FROM ApexClass WHERE NamespacePrefix = null AND Name IN (...)
 SELECT SetupEntityId FROM SetupEntityAccess WHERE SetupEntityType = 'ApexClass' AND ParentId IN (...) AND SetupEntityId IN (...)
 ```
 
+`preflight incidents` reads production errors, also read-only; its queries are listed in
+[INCIDENTS.md](INCIDENTS.md#where-the-errors-come-from).
+
 Nothing is written to the org. Two separate commands do more, and both refuse production orgs
 unless you pass `--allow-production`:
 

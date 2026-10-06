@@ -52,6 +52,7 @@ export {
   gateToMarkdown,
   parseApprovals,
 } from "./gate.js";
+export * from "./incidents/index.js";
 export { saveProcedure } from "./orderOfExecution.js";
 export {
   type AgentTestCase,

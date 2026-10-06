@@ -17,6 +17,11 @@ export interface SfCallOptions {
    * or is still running is never mistaken for success.
    */
   resultOnError?: boolean;
+  /**
+   * Return the command's standard output as text instead of parsing `--json` output (for
+   * commands such as `api request rest` that print a response body). `--json` isn't added.
+   */
+  raw?: boolean;
 }
 
 export class SfError extends Error {
@@ -53,7 +58,7 @@ export interface SfRunnerOptions {
 
 export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
   return (args: string[], call: SfCallOptions = {}) => {
-    const fullArgs = [...args, "--json"];
+    const fullArgs = call.raw ? [...args] : [...args, "--json"];
     const windows = process.platform === "win32";
     let stdout: string;
     try {
@@ -74,8 +79,9 @@ export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
         );
       }
       stdout = typeof e.stdout === "string" ? e.stdout : "";
-      if (!stdout) throw new SfError(`sf ${args[0] ?? ""} failed: ${e.message}`);
+      if (!stdout || call.raw) throw new SfError(`sf ${args.slice(0, 3).join(" ")} failed: ${e.message}`);
     }
+    if (call.raw) return stdout;
     let parsed: { status?: number; result?: unknown; message?: string; name?: string; data?: unknown };
     try {
       parsed = JSON.parse(stdout);
