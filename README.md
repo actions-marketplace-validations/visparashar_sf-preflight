@@ -84,7 +84,7 @@ preflight agent-tests --base origin/main --org my-sandbox
 
 # Which recent change broke production? And a partial rollback of just that part
 preflight incidents --org prod --since 24h
-preflight rollback 9c607ea --component Opportunity.Require_Close_Reason
+preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_Reason
 ```
 
 | Option | Default | Description |

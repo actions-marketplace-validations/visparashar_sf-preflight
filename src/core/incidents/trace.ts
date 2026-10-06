@@ -526,13 +526,14 @@ function dataStart(collection: IncidentCollection, incident: Incident): string {
 
 /**
  * Did the errors clearly begin inside the data, rather than already being there when it starts?
- * Errors that recur every few hours and first show up minutes into the data can't be dated.
+ * Errors that recur every few hours and first show up minutes into the data can't be dated; for a
+ * single error, the first quarter of the data is too early to tell.
  */
-function onsetKnown(incident: Incident, start: string): boolean {
+function onsetKnown(incident: Incident, start: string, end: string): boolean {
   const gap = Date.parse(incident.firstSeen) - Date.parse(start);
   const span = Date.parse(incident.lastSeen) - Date.parse(incident.firstSeen);
-  const interval = incident.count > 1 ? span / (incident.count - 1) : 24 * HOUR;
-  return gap > Math.max(HOUR, 3 * interval);
+  const interval = incident.count > 1 ? (3 * span) / (incident.count - 1) : (Date.parse(end) - Date.parse(start)) / 4;
+  return gap > Math.max(HOUR, interval);
 }
 
 export function traceIncidents(opts: TraceOptions): IncidentReport {
@@ -559,7 +560,8 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
   const incidents = collection.incidents.map((incident): TracedIncident => {
     const suspects: Suspect[] = [];
     const start = dataStart(collection, incident);
-    const known = onsetKnown(incident, start);
+    const known = onsetKnown(incident, start, collection.until);
+    const started = incident.count === 1 ? "The error happened" : "The errors started";
     for (const h of history.changes) {
       if (h.date > incident.lastSeen) continue; // merged after the last error: not the cause
       const scored = impactsOf(h)
@@ -602,19 +604,21 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
         );
       } else if (!known) {
         reasons.push(
-          `The errors show up from the start of the data read (${day(start)}), so when they began isn't known.`,
+          incident.count === 1
+            ? `The error happened early in the data read (from ${day(start)}), too early to tell whether it's new.`
+            : `The errors show up from the start of the data read (${day(start)}), so when they began isn't known.`,
         );
       } else if (dates.length) {
         const latest = dates.sort((a, b) => (a.at < b.at ? 1 : -1))[0]!;
         if (incident.firstSeen >= latest.at && latest.at >= start) {
           score += 10;
           reasons.push(
-            `The errors started ${since(latest.at, incident.firstSeen)} after ${describeComponent(latest.c.type, latest.c.name)} changed in the org (${day(latest.at)}).`,
+            `${started} ${since(latest.at, incident.firstSeen)} after ${describeComponent(latest.c.type, latest.c.name)} changed in the org (${day(latest.at)}).`,
           );
         }
       } else if (Date.parse(incident.firstSeen) - Date.parse(h.date) <= 72 * HOUR) {
         score += 10;
-        reasons.push(`The errors started ${since(h.date, incident.firstSeen)} after it was merged.`);
+        reasons.push(`${started} ${since(h.date, incident.firstSeen)} after it was merged.`);
       }
       score = Math.round(Math.min(100, score));
       if (score < 15) continue;

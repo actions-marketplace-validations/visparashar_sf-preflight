@@ -91,7 +91,8 @@ const ident = (v: unknown, max = 120): string | undefined =>
   typeof v === "string" && new RegExp(`^[A-Za-z][A-Za-z0-9_.]{0,${max}}$`).test(v) ? v : undefined;
 const iso = (v: unknown): string | undefined => {
   if (typeof v !== "string" || !v) return undefined;
-  const d = new Date(v);
+  // A date and time without an offset is UTC (as Salesforce and the reports use), not local time.
+  const d = new Date(/^\d{4}-\d{2}-\d{2}T[\d:.]+$/.test(v.trim()) ? `${v.trim()}Z` : v);
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 };
 const soqlDateTime = (d: Date) => `${d.toISOString().slice(0, 19)}Z`;
@@ -388,31 +389,44 @@ function apexErrors(ctx: Ctx): Collected {
   if (daily.length >= MAX_LOG_FILES || hourly.length >= MAX_LOG_FILES) {
     notes.push(`only the newest ${MAX_LOG_FILES} event log files were read`);
   }
-  if (!files.length) {
-    notes.push(
-      "no event log files cover the window yet: Salesforce publishes the daily file the next day (hourly files need Event Monitoring)",
-    );
-    return { events, notes };
-  }
-  const from = new Date(Math.min(...files.map(({ f }) => Date.parse(iso(f.LogDate) ?? "")).filter(Number.isFinite)));
-  const to = new Date(
-    Math.max(...files.map(({ f, length }) => Date.parse(iso(f.LogDate) ?? "") + length).filter(Number.isFinite)),
-  );
+  // Files exist only for periods with errors, so where the data starts and ends comes from the
+  // org's event log as a whole (logins produce files nearly every day).
+  const bounds = eventLogBounds(ctx, intervals);
+  if (!bounds) return { events, notes };
   const coverage = {
-    from: new Date(Math.max(from.getTime(), ctx.since.getTime())).toISOString(),
-    to: to.toISOString(),
+    from: new Date(Math.max(bounds.from, ctx.since.getTime())).toISOString(),
+    to: new Date(Math.min(bounds.to, ctx.until.getTime())).toISOString(),
   };
-  if (to.getTime() < ctx.until.getTime() - 2 * HOUR) {
-    notes.push(
-      `the event log covers errors up to ${coverage.to.slice(0, 16).replace("T", " ")} UTC; newer ones appear when Salesforce publishes the next file`,
-    );
-  }
+  const utc = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
   if (Date.parse(coverage.from) > ctx.since.getTime() + HOUR) {
+    notes.push(`the org keeps event log files from ${utc(coverage.from)}, so earlier errors can't be seen`);
+  }
+  if (Date.parse(coverage.to) < ctx.until.getTime() - 2 * HOUR) {
     notes.push(
-      `the event log starts ${coverage.from.slice(0, 16).replace("T", " ")} UTC (the org keeps it for a limited time)`,
+      `errors after ${utc(coverage.to)} aren't in the event log yet (Salesforce publishes the daily file the next day; hourly files need Event Monitoring)`,
     );
   }
   return { events, notes, coverage };
+}
+
+/** The span the org's event log files cover, any event type: [first file's start, last file's end). */
+function eventLogBounds(ctx: Ctx, intervals: boolean): { from: number; to: number } | undefined {
+  const edge = (order: "ASC" | "DESC") =>
+    query(
+      ctx.run,
+      ctx.org,
+      `SELECT LogDate${intervals ? ", Interval" : ""} FROM EventLogFile WHERE LogDate >= ${`${ctx.since.toISOString().slice(0, 10)}T00:00:00Z`} ORDER BY LogDate ${order} LIMIT 1`,
+    )[0];
+  try {
+    const first = edge("ASC");
+    const last = edge("DESC");
+    const start = Date.parse(iso(first?.LogDate) ?? "");
+    const end = Date.parse(iso(last?.LogDate) ?? "");
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
+    return { from: start, to: end + (last?.Interval === "Hourly" ? HOUR : DAY) };
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------

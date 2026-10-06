@@ -8,8 +8,8 @@ involved.
 ```bash
 preflight incidents --org prod                     # errors from the last 7 days, traced to changes
 preflight incidents --org prod --since 24h --ref origin/main
-preflight rollback 9c607ea --component Opportunity.Require_Close_Reason          # the plan
-preflight rollback 9c607ea --component Opportunity.Require_Close_Reason --restore  # apply it locally
+preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_Reason            # the plan
+preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_Reason --restore  # apply it locally
 ```
 
 Everything `incidents` does in the org is read-only, so it's safe to run against production.
@@ -36,7 +36,7 @@ Not available: Agentforce action errors (beta) (needs Agentforce session tracing
   - It added validation rule `Opportunity.Require_Close_Reason`, and the error is that rule's message.
   - Preflight flagged it for this change: New validation rule Opportunity.Require_Close_Reason applies to 3 automation(s) that write Opportunity.
   - The errors started 2 hours after validation rule `Opportunity.Require_Close_Reason` changed in the org (2026-10-03).
-  - Partial rollback: `preflight rollback 9c607ea --component Opportunity.Require_Close_Reason`
+  - Partial rollback: `preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_Reason`
 ```
 
 ## Where the errors come from
@@ -54,8 +54,10 @@ integration user with View Setup and Configuration and View Event Log Files). A 
 available is reported as such and the others still run. `--source flow apex`
 reads only some of them. Retention differs per source, so a short `--since` is more complete
 than a long one: the free Apex event log covers about a day, failed jobs about a week. When a
-source covers less than the window (the event log hasn't caught up yet, or starts later than
-`--since`), or a query hits its 2,000-row cap, the report says so.
+source covers less than the window, or a query hits its 2,000-row cap, the report says so. For
+the event log, preflight reads where the org's event log files of any type start and end (login
+files exist nearly every day), because exception files exist only for hours or days with
+exceptions: so it can tell "no exceptions" from "not published yet" or "no longer kept".
 
 ### What it runs
 
@@ -71,6 +73,8 @@ SELECT Id, LogDate, LogFile FROM EventLogFile
 SELECT Id, LogDate, LogFile FROM EventLogFile
   WHERE EventType = 'ApexUnexpectedException' AND Interval = 'Hourly' AND LogDate >= <end of the last daily file>
 -- sf api request rest <LogFile URL> to download each log file
+SELECT LogDate, Interval FROM EventLogFile WHERE LogDate >= ... ORDER BY LogDate ASC LIMIT 1   -- where the
+SELECT LogDate, Interval FROM EventLogFile WHERE LogDate >= ... ORDER BY LogDate DESC LIMIT 1  -- log starts and ends
 SELECT ApexClass.Name, ApexClass.NamespacePrefix, JobType, ExtendedStatus, CreatedDate, CompletedDate
   FROM AsyncApexJob WHERE CreatedDate >= ... AND JobType IN ('Future', 'Queueable', 'BatchApex', 'ScheduledApex')
   AND (Status = 'Failed' OR NumberOfErrors > 0)
@@ -122,7 +126,8 @@ Timing then weighs in. A change merged after the last error is never a suspect; 
 already happening before a change was merged count heavily against it. Preflight only says when
 errors *started* if they clearly began inside the data it read: errors that show up from the
 start of the window (or of a source's retention) at their usual rate were probably there before,
-so their start is reported as unknown and earns no timing weight. With `--org`, preflight also
+so their start is reported as unknown and earns no timing weight. A single error early in the
+data read can't be dated either. With `--org`, preflight also
 reads when the suspected classes, triggers, flows and validation rules last changed in the org,
 so it can say the errors started two hours after a rule was deployed, or that the org's version
 predates the change (so it may not be deployed there yet). A pipeline that redeploys every
@@ -145,9 +150,12 @@ configuration changed directly in the org, or from a change older than the histo
 
 | The change | Rollback |
 |---|---|
-| Changed or deleted a component | Restore all its files (a class and its `-meta.xml`, a bot and its versions) as they were before the change; files the change added to it are removed |
-| Renamed a component | Restore the old name; deactivate the new one (validation rule, flow, trigger) so they don't both run, or keep it beside the old one |
+| Changed or deleted a component | Restore all its files (a class and its `-meta.xml`, a bot and its versions, an agent action and its schemas) as they were before the change; files the change added to it are removed |
+| Moved a component to another folder or package directory | Put it back where it was; nothing is deactivated |
+| Renamed a component | Restore the old name; deactivate the new one (validation rule, flow, trigger) so they don't both run, or keep it beside the old one (classes) |
+| Renamed a field or object | Rename it back in Setup, which keeps its data; the old file replaces the new one in the project but isn't deployed, which would create an empty field or object |
 | Deleted a field | Undelete it in Setup (Deleted Fields keeps it and its data for 15 days); its file is restored but left out of the deployment, which would create an empty field |
+| Deleted an object | Undelete it in Setup (Deleted Objects keeps it with its fields and records for 15 days); its files, and its fields' and rules', are restored but not deployed |
 | Added a validation rule | Set `active` to false |
 | Added a flow | Deploy a FlowDefinition with no active version (`flowDefinitions/<Flow>.flowDefinition-meta.xml`, `activeVersionNumber` 0): a flow's own status doesn't deactivate it when deployed. Or deactivate it in Setup → Flows |
 | Added a trigger | Set its status to `Inactive` |
@@ -166,14 +174,18 @@ A partial rollback has to stay consistent, so preflight brings along what it dep
   `Case.Status__c` isn't mistaken for `Account.Status__c`.
 - When the previous version uses something the change modified and the rollback keeps, the plan
   warns that they may no longer fit together.
-- Deactivating a new flow restores the changed flows, classes and agent actions in the change
-  that run it; ones outside the change are flagged, since they'd fail.
+- Deactivating a new or renamed flow restores the changed flows, classes and agent actions in
+  the change that run it; ones outside the change are flagged, since they'd fail.
 - Components the rollback leaves alone but that use a restored component are flagged.
 - When later commits also changed the files being restored, the plan says so: restoring the
   version before the change undoes them too.
 
+`--component` takes `Type:name` (as the incidents report suggests) or a name, which may match
+components of different types with the same name. When `.forceignore` would make `sf project
+deploy` skip a file the rollback needs to deploy, the plan says so.
+
 `--restore` applies the plan to your working tree (it refuses to touch files with uncommitted
-changes): restored files, removed files and edits show up in `git status` and `git diff`, and
+changes, or anything outside the project, symbolic links included): restored files, removed files and edits show up in `git status` and `git diff`, and
 nothing is staged, committed or deployed. An edit whose file changed since the plan is skipped
 and reported. The plan ends with the commands to ship it the way
 any change ships, through a pull request, so the rollback gets the same review, quality gate and
@@ -181,7 +193,7 @@ evidence:
 
 ```bash
 git checkout -b rollback/9c607ea
-preflight rollback 9c607ea --component Opportunity.Require_Close_Reason --restore
+preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_Reason --restore
 preflight analyze --base HEAD --gate
 sf project deploy validate --target-org prod --source-dir force-app/main/default/objects/Opportunity/validationRules/Require_Close_Reason.validationRule-meta.xml
 sf project deploy quick --job-id <id from validate> --target-org prod

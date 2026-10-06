@@ -14,9 +14,9 @@ const where = (c: FailingComponent) => {
 };
 const changeLabel = (s: Suspect) => `\`${s.change.shortSha}\`${s.change.pr ? ` #${s.change.pr}` : ""}`;
 
-/** The components a partial rollback would cover, as `--component` arguments. */
+/** The components a partial rollback would cover, as `--component Type:name` arguments (unambiguous). */
 function rollbackCommand(s: Suspect): string {
-  return `preflight rollback ${s.change.shortSha} --component ${s.components.map((c) => c.name).join(" ")}`;
+  return `preflight rollback ${s.change.shortSha} --component ${s.components.map((c) => `${c.type}:${c.name}`).join(" ")}`;
 }
 
 export function incidentsToMarkdown(r: IncidentReport): string {

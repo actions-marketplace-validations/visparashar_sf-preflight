@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -234,6 +244,12 @@ function fakeOrg(overrides: Partial<Record<string, unknown>> = {}) {
         if (overrides.noTooling) throw new SfError("sObject type 'Flow' is not supported");
         return records([{ Id: "301000000000001AAA", Definition: { DeveloperName: "Opportunity_Set_Defaults" } }]);
       }
+      if (soql.startsWith("SELECT LogDate, Interval FROM EventLogFile")) {
+        // Where the org's event log as a whole starts and ends (any event type).
+        return soql.includes("ASC")
+          ? records([{ LogDate: "2026-10-04T00:00:00.000+0000", Interval: "Daily" }])
+          : records([{ LogDate: "2026-10-06T01:00:00.000+0000", Interval: "Hourly" }]);
+      }
       if (soql.includes("FROM EventLogFile")) {
         expect(soql).not.toMatch(/LIMIT 60\b/);
         if (soql.includes("Interval = 'Daily'")) {
@@ -315,9 +331,10 @@ describe("collecting errors from an org", () => {
     ]);
     // The event log covers less than the window, and says so.
     const apex = r.sources.find((s) => s.source === "apex")!;
-    expect(apex.coverage).toEqual({ from: "2026-10-05T00:00:00.000Z", to: "2026-10-06T02:00:00.000Z" });
-    expect(apex.note).toContain("the event log covers errors up to 2026-10-06 02:00 UTC");
-    expect(apex.note).toContain("the event log starts 2026-10-05 00:00 UTC");
+    // The org's retention, not the first file with errors, sets where the data starts.
+    expect(apex.coverage).toEqual({ from: "2026-10-04T00:00:00.000Z", to: "2026-10-06T02:00:00.000Z" });
+    expect(apex.note).toContain("the org keeps event log files from 2026-10-04 00:00 UTC");
+    expect(apex.note).toContain("errors after 2026-10-06 02:00 UTC aren't in the event log yet");
     expect(r.sources.find((s) => s.source === "agent")?.note).toBe("needs Agentforce session tracing in Data 360");
     const byWhere = Object.fromEntries(r.incidents.map((i) => [`${i.source}:${i.component.name}`, i]));
     expect(byWhere["flow:Opportunity_Set_Defaults"]).toMatchObject({
@@ -421,6 +438,15 @@ describe("collecting errors from an org", () => {
       ["Opportunity_Set_Defaults", 1, []],
     ]);
     expect(() => importErrors({ nope: 1 }, vocab)).toThrow("expected a JSON list");
+    // Times without an offset are UTC, whatever the machine's time zone.
+    const tz = process.env.TZ;
+    process.env.TZ = "Asia/Kolkata";
+    try {
+      const [e] = importErrors([{ component: "Flow:X", at: "2026-10-03T08:00:00" }], vocab).events;
+      expect(e!.firstSeen).toBe("2026-10-03T08:00:00.000Z");
+    } finally {
+      process.env.TZ = tz;
+    }
     expect(groupIncidents([...events, ...events]).map((i) => i.count)).toEqual([6, 2]);
   });
 });
@@ -586,13 +612,14 @@ describe("tracing errors to changes and rolling back", () => {
     expect(handler.suspects[0]!.reasons[0]).toBe(
       "It changed Apex class `ContactTriggerHandler`, where the error happens.",
     );
+    expect(handler.suspects[0]!.reasons).toContain("The error happened 26 hours after it was merged.");
     // #14 was merged after the last error, so it's never a suspect.
     expect(r.incidents.flatMap((i) => i.suspects).some((s) => s.change.pr === 14)).toBe(false);
     expect(unrelated.suspects.every((s) => s.confidence !== "high")).toBe(true);
     const md = incidentsToMarkdown(r);
     expect(md).toContain("**3 problems, 2 traced to recent changes.**");
     expect(md).toContain("`preflight rollback");
-    expect(md).toContain("--component Opportunity.Require_Close_Reason`");
+    expect(md).toContain("--component ValidationRule:Opportunity.Require_Close_Reason`");
     expect(md).not.toMatch(LEAKS);
   });
 
@@ -805,6 +832,15 @@ describe("rolling back renames, companion files and added files", () => {
   beforeAll(() => {
     repo = mkdtempSync(path.join(tmpdir(), "sf-preflight-rollback-"));
     cpSync(FIXTURE, repo, { recursive: true });
+    mkdirSync(at("objects/Invoice__c/fields"), { recursive: true });
+    writeFileSync(
+      at("objects/Invoice__c/Invoice__c.object-meta.xml"),
+      '<?xml version="1.0" encoding="UTF-8"?>\n<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata"><label>Invoice</label></CustomObject>\n',
+    );
+    writeFileSync(
+      at("objects/Invoice__c/fields/Amount__c.field-meta.xml"),
+      '<?xml version="1.0" encoding="UTF-8"?>\n<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Amount__c</fullName><type>Currency</type></CustomField>\n',
+    );
     git("init", "-q", "-b", "main");
     commit("base");
     // A class renamed with heavy edits: git pairs only the identical -meta.xml files as a rename.
@@ -846,6 +882,46 @@ describe("rolling back renames, companion files and added files", () => {
     );
     writeFileSync(at("classes/Notifier.cls-meta.xml"), readFileSync(at("classes/OpportunityCloser.cls-meta.xml")));
     commit("Notify from Apex (#24)");
+    // Components moved to another package directory, unchanged.
+    const sales = (rel: string) => path.join(repo, "force-app/sales", rel);
+    mkdirSync(sales("flows"), { recursive: true });
+    mkdirSync(sales("objects/Opportunity/validationRules"), { recursive: true });
+    git(
+      "mv",
+      `${SRC}/flows/Update_Customer_Tier.flow-meta.xml`,
+      "force-app/sales/flows/Update_Customer_Tier.flow-meta.xml",
+    );
+    git(
+      "mv",
+      `${SRC}/objects/Opportunity/validationRules/Require_Contract_Signed_Date.validationRule-meta.xml`,
+      "force-app/sales/objects/Opportunity/validationRules/Require_Contract_Signed_Date.validationRule-meta.xml",
+    );
+    shas.move = commit("Move sales automation (#25)");
+    // A field renamed, and an object deleted with its field.
+    git(
+      "mv",
+      `${SRC}/objects/Account/fields/Customer_Tier__c.field-meta.xml`,
+      `${SRC}/objects/Account/fields/Customer_Level__c.field-meta.xml`,
+    );
+    rmSync(at("objects/Invoice__c"), { recursive: true });
+    shas.data = commit("Rename tier, drop invoices (#26)");
+    // An agent action whose input schema changed and that gained an output schema.
+    writeFileSync(at("genAiFunctions/Log_Customer_Call/input/schema.json"), '{"type":"object","properties":{}}\n');
+    mkdirSync(at("genAiFunctions/Log_Customer_Call/output"), { recursive: true });
+    writeFileSync(at("genAiFunctions/Log_Customer_Call/output/schema.json"), '{"type":"object"}\n');
+    shas.bundle = commit("Reshape call logging (#27)");
+    // A flow renamed, then run from code added later.
+    git("mv", `${SRC}/flows/Notify_Owner.flow-meta.xml`, `${SRC}/flows/Notify_Owners.flow-meta.xml`);
+    shas.flowRename = commit("Rename the notification flow (#28)");
+    writeFileSync(
+      at("classes/OwnersNotifier.cls"),
+      "public with sharing class OwnersNotifier {\n    public static void run() {\n        new Flow.Interview.Notify_Owners(new Map<String, Object>()).start();\n    }\n}\n",
+    );
+    writeFileSync(
+      at("classes/OwnersNotifier.cls-meta.xml"),
+      readFileSync(at("classes/OpportunityCloser.cls-meta.xml")),
+    );
+    commit("Notify owners from Apex (#29)");
   });
   afterAll(() => rmSync(repo, { recursive: true, force: true }));
   const reset = () => {
@@ -920,6 +996,8 @@ describe("rolling back renames, companion files and added files", () => {
       remove: [`${SRC}/bots/Sales_Agent/v2.botVersion-meta.xml`],
     });
     expect(plan.warnings.join("\n")).toContain("doesn't remove it from the org");
+    // The sample's .forceignore excludes bots, and sf would skip them silently.
+    expect(plan.warnings.join("\n")).toContain(".forceignore excludes");
     const applied = applyRollback(repo, plan);
     expect(applied.removed).toEqual([`${SRC}/bots/Sales_Agent/v2.botVersion-meta.xml`]);
     expect(() => readFileSync(at("bots/Sales_Agent/v2.botVersion-meta.xml"))).toThrow();
@@ -932,6 +1010,80 @@ describe("rolling back renames, companion files and added files", () => {
     expect(plan.warnings).toContain(
       "Apex class `Notifier` runs flow `Notify_Owner` and isn't part of this change: deactivating it makes that fail. Roll it back too, or keep the flow.",
     );
+  });
+
+  it("puts moved components back where they were, without deactivating them", () => {
+    const plan = planRollback({ projectDir: repo, model: loadProject(repo), change: changeAt(repo, shas.move!) });
+    expect(plan.steps.map((s) => [s.component.name, s.action, s.edits.length])).toEqual([
+      ["Update_Customer_Tier", "restore", 0],
+      ["Opportunity.Require_Contract_Signed_Date", "restore", 0],
+    ]);
+    expect(plan.steps[0]).toMatchObject({
+      restore: [`${SRC}/flows/Update_Customer_Tier.flow-meta.xml`],
+      remove: ["force-app/sales/flows/Update_Customer_Tier.flow-meta.xml"],
+    });
+    expect(plan.steps[0]!.how).toContain("Back to its version and place before the change.");
+    expect(plan.deploy.every((f) => f.startsWith(SRC))).toBe(true);
+  });
+
+  it("renames fields back and undeletes objects in Setup, instead of deploying empty ones", () => {
+    const plan = planRollback({ projectDir: repo, model: loadProject(repo), change: changeAt(repo, shas.data!) });
+    const byName = Object.fromEntries(plan.steps.map((s) => [s.component.name, s]));
+    expect(byName["Account.Customer_Tier__c"]).toMatchObject({
+      action: "restore",
+      restore: [`${SRC}/objects/Account/fields/Customer_Tier__c.field-meta.xml`],
+      remove: [`${SRC}/objects/Account/fields/Customer_Level__c.field-meta.xml`],
+    });
+    expect(byName["Account.Customer_Tier__c"]!.how).toContain("Rename it back in Setup");
+    expect(byName.Invoice__c!.how).toContain("Deleted Objects");
+    expect(byName["Invoice__c.Amount__c"]!.how).toContain("comes back when the object is undeleted");
+    expect(plan.deploy).toEqual([]);
+    expect(plan.warnings).toEqual(
+      expect.arrayContaining([
+        "Undelete object `Invoice__c` in Setup before deploying the rollback; the deployment leaves it out.",
+        "Rename field `Account.Customer_Level__c` back to `Account.Customer_Tier__c` in Setup; the deployment leaves it out.",
+      ]),
+    );
+  });
+
+  it("restores a whole bundle, whichever of its files changed", () => {
+    const plan = planRollback({ projectDir: repo, model: loadProject(repo), change: changeAt(repo, shas.bundle!) });
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0]).toMatchObject({
+      component: { type: "AgentMetadata", name: "Log_Customer_Call" },
+      restore: [
+        `${SRC}/genAiFunctions/Log_Customer_Call/Log_Customer_Call.genAiFunction-meta.xml`,
+        `${SRC}/genAiFunctions/Log_Customer_Call/input/schema.json`,
+      ],
+      remove: [`${SRC}/genAiFunctions/Log_Customer_Call/output/schema.json`],
+    });
+  });
+
+  it("warns about code that runs a renamed flow's new name, which the rollback deactivates", () => {
+    const plan = planRollback({ projectDir: repo, model: loadProject(repo), change: changeAt(repo, shas.flowRename!) });
+    expect(plan.steps.map((s) => [s.component.name, s.action])).toEqual([
+      ["Notify_Owner", "restore"],
+      ["Notify_Owners", "deactivate"],
+    ]);
+    expect(plan.warnings).toContain(
+      "Apex class `OwnersNotifier` runs flow `Notify_Owners` and isn't part of this change: deactivating it makes that fail. Roll it back too, or keep the flow.",
+    );
+  });
+
+  it.skipIf(process.platform === "win32")("refuses to write through a link that leads outside the project", () => {
+    const outside = mkdtempSync(path.join(tmpdir(), "preflight-outside-"));
+    symlinkSync(outside, path.join(repo, "linked"));
+    try {
+      const plan = planRollback({ projectDir: repo, model: loadProject(repo), change: changeAt(repo, shas.newFlow!) });
+      const tampered = {
+        ...plan,
+        steps: [{ ...plan.steps[0]!, edits: [{ file: "linked/evil.xml", to: "x" }] }],
+      };
+      expect(() => applyRollback(repo, tampered)).toThrow("outside the project");
+    } finally {
+      unlinkSync(path.join(repo, "linked"));
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("skips an edit that no longer applies", () => {

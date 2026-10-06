@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from "node:child_process";
-import { closeSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  ftruncateSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeSync,
+} from "node:fs";
 import path from "node:path";
 import { allAgentActions } from "../agentImpact.js";
 import { assertSafeRef, git, gitChangedFiles, gitRoot, gitShow, toChanges } from "../changes.js";
+import { globMatch } from "../config.js";
 import { callersOfClass, callersOfFlow } from "../graph.js";
 import { classifyPath } from "../project.js";
 import type { Change, ComponentRef, OrgModel } from "../types.js";
@@ -209,6 +220,33 @@ function deactivation(
   }
 }
 
+/**
+ * Files `.forceignore` keeps `sf project deploy` from deploying (gitignore-style patterns; negated
+ * patterns are ignored, so this can only over-report).
+ */
+function forceIgnored(projectDir: string, files: string[]): string[] {
+  let text: string;
+  try {
+    text = readFileSync(path.join(projectDir, ".forceignore"), "utf8");
+  } catch {
+    return [];
+  }
+  const patterns = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && !l.startsWith("!"))
+    .flatMap((l) => {
+      const p = l.replace(/\/+$/, "");
+      if (!p) return [];
+      if (p.replace(/^\//, "").includes("/")) {
+        const anchored = p.replace(/^\//, "");
+        return [anchored, `${anchored}/**`];
+      }
+      return [`**/${p}`, `**/${p}/**`];
+    });
+  return files.filter((f) => patterns.some((p) => globMatch(p, toPosix(f))));
+}
+
 export interface PlanRollbackOptions {
   projectDir: string;
   model: OrgModel;
@@ -234,10 +272,19 @@ export function planRollback(opts: PlanRollbackOptions): RollbackPlan {
   const before = (c: Change) => gitShow(projectDir, change.parent, c.previousFile ?? c.component.file);
 
   // A component's files at a commit, from the commit's tree: a class and its -meta.xml, a
-  // trigger and its -meta.xml, a bot and its versions.
+  // trigger and its -meta.xml, a bot and its versions, an agent action and its schemas. Bundles
+  // live in a folder named after the component, listed whole whichever of its files changed.
+  const componentDir = (hint: string, name: string) => {
+    const parts = repoRel(hint).split("/");
+    const folder = simpleName(name).toLowerCase();
+    for (let i = parts.length - 2; i >= 0; i--) {
+      if (parts[i]!.toLowerCase() === folder) return parts.slice(0, i + 1).join("/");
+    }
+    return parts.slice(0, -1).join("/");
+  };
   const listed = new Map<string, string[]>();
   const filesAt = (ref: string, id: Identity, hint: string): string[] => {
-    const dir = path.posix.dirname(repoRel(hint));
+    const dir = componentDir(hint, id.name);
     const k = `${ref}:${dir}`;
     let all = listed.get(k);
     if (!all) {
@@ -274,6 +321,12 @@ export function planRollback(opts: PlanRollbackOptions): RollbackPlan {
   const steps: RollbackStep[] = [];
   const warnings: string[] = [];
   const noDeploy = new Set<string>();
+  // Deleted objects come back from Setup with their fields, rules and records.
+  const deletedObjects = new Set(
+    change.changes
+      .filter((c) => c.changeType === "deleted" && c.component.type === "CustomObject")
+      .map((c) => key(c.component.name)),
+  );
   const queued = new Set<Change>();
   const queue: { c: Change; because?: string }[] = selected.map((c) => ({ c }));
   for (const q of queue) queued.add(q.c);
@@ -297,36 +350,63 @@ export function planRollback(opts: PlanRollbackOptions): RollbackPlan {
     const label = describeComponent(c.component.type, c.component.name);
     const why = because ? { because } : {};
 
-    if (c.changeType !== "added") {
-      const oldFile = c.previousFile ?? c.component.file;
-      const oldId: Identity = c.changeType === "renamed" ? { ...classifyPath(oldFile) } : { ...c.component };
+    // A rename of a component into itself (moved to another folder, or a bundle file renamed) is a
+    // modification; a file moved in from outside any component is an addition.
+    const oldFile = c.previousFile ?? c.component.file;
+    let kind = c.changeType;
+    let oldId: Identity = { ...c.component };
+    if (kind === "renamed") {
+      oldId = { ...classifyPath(oldFile) };
+      if (oldId.type !== c.component.type) kind = "added";
+      else if (sameComponent(oldId, c.component)) kind = "modified";
+    }
+
+    if (kind !== "added") {
       const oldLabel = describeComponent(oldId.type, oldId.name);
       const restore = filesAt(change.parent, oldId, oldFile);
       const atChange = filesAt(change.sha, c.component, c.component.file);
-      // Files the change added to the component (e.g. a new bot version) go, so it matches its
-      // earlier version; a renamed component's new files are handled below.
+      const renamedData =
+        kind === "renamed" && (c.component.type === "CustomField" || c.component.type === "CustomObject");
+      // Files the change added to the component (a new bot version, its new folder after a move)
+      // go, so it matches its earlier version; a renamed component's new name is handled below.
       const remove =
-        c.changeType === "renamed" ? [] : atChange.filter((f) => !restore.includes(f) && read(f) !== undefined);
+        kind === "renamed" && !renamedData ? [] : atChange.filter((f) => !restore.includes(f) && read(f) !== undefined);
       if (!restore.length)
         warnings.push(`Couldn't find the files of ${oldLabel} before the change: restore it by hand.`);
 
       let how =
-        c.changeType === "deleted"
+        kind === "deleted"
           ? "The change deleted it; bring it back."
-          : c.changeType === "renamed"
+          : kind === "renamed"
             ? `Bring back its previous name, \`${oldId.name}\`.`
-            : "Back to its version before the change.";
+            : c.changeType === "renamed"
+              ? "Back to its version and place before the change."
+              : "Back to its version before the change.";
       if (c.component.type === "Flow" || oldId.type === "Flow") {
         how +=
           " Deploying adds it as a new flow version, which production keeps inactive unless the org deploys flows as active: activate it in Setup → Flows (or activate its previous version there instead of deploying).";
       }
-      if (c.changeType === "deleted" && c.component.type === "CustomField") {
+      const parentObject = c.component.type === "CustomObject" ? undefined : (oldId.object ?? c.component.object);
+      if (kind === "deleted" && parentObject && deletedObjects.has(key(parentObject))) {
+        how = `The change deleted it with object \`${parentObject}\`; it comes back when the object is undeleted in Setup. Its file is restored so the project matches.`;
+        for (const f of restore) noDeploy.add(f);
+      } else if (kind === "deleted" && c.component.type === "CustomObject") {
+        how =
+          "The change deleted it. A deleted custom object stays under Deleted Objects for 15 days with its fields and records: undelete it there (Setup → Object Manager → Deleted Objects). Its files are restored so the project matches; deploying them instead would create an empty object.";
+        for (const f of restore) noDeploy.add(f);
+        warnings.push(`Undelete ${label} in Setup before deploying the rollback; the deployment leaves it out.`);
+      } else if (kind === "deleted" && c.component.type === "CustomField") {
         how =
           "The change deleted it. A deleted field and its data stay under Deleted Fields for 15 days: undelete it there (Setup → Object Manager → the object → Fields & Relationships → Deleted Fields). Its file is restored so the project matches; deploying the file instead would create an empty field.";
         for (const f of restore) noDeploy.add(f);
         warnings.push(`Undelete ${label} in Setup before deploying the rollback; the deployment leaves it out.`);
+      } else if (renamedData) {
+        const what = c.component.type === "CustomField" ? "field" : "object";
+        how = `The change renamed it from \`${oldId.name}\`. Rename it back in Setup, which keeps its data (if the org has both, \`${oldId.name}\` holds the older data); deploying the old file would create a new, empty ${what}. Its previous file replaces the new one in the project.`;
+        for (const f of restore) noDeploy.add(f);
+        warnings.push(`Rename ${label} back to \`${oldId.name}\` in Setup; the deployment leaves it out.`);
       }
-      if (remove.length) {
+      if (remove.length && !renamedData && c.changeType !== "renamed") {
         how += ` Remove what the change added to it (${remove.map((f) => `\`${path.posix.basename(f)}\``).join(", ")}).`;
         warnings.push(
           `Removing ${remove.map((f) => `\`${f}\``).join(", ")} from the project doesn't remove ${remove.length === 1 ? "it" : "them"} from the org: delete ${remove.length === 1 ? "it" : "them"} there too if needed.`,
@@ -334,7 +414,7 @@ export function planRollback(opts: PlanRollbackOptions): RollbackPlan {
       }
       step({ component: asSuspect(c, oldId, oldFile), action: "restore", how, restore, remove, ...why });
 
-      if (c.changeType === "renamed") {
+      if (kind === "renamed" && !renamedData) {
         // Both names would be live: deactivate the new one where possible.
         const off = deactivation({ ...c.component, file: c.component.file }, read);
         if (off) {
@@ -346,6 +426,7 @@ export function planRollback(opts: PlanRollbackOptions): RollbackPlan {
             edits: off.edits,
             because: `the rollback brings back ${oldLabel}, which it was renamed from`,
           });
+          if (c.component.type === "Flow") flowCallers(c, label);
         } else {
           step({
             component: asSuspect(c),
@@ -501,6 +582,12 @@ export function planRollback(opts: PlanRollbackOptions): RollbackPlan {
   const deploy = [
     ...new Set([...restored.filter((f) => !noDeploy.has(f)), ...steps.flatMap((s) => s.edits.map((e) => e.file))]),
   ];
+  const ignored = forceIgnored(projectDir, deploy);
+  if (ignored.length) {
+    warnings.push(
+      `.forceignore excludes ${ignored.map((f) => `\`${f}\``).join(", ")}, so \`sf project deploy\` would skip ${ignored.length === 1 ? "it" : "them"}: deploy ${ignored.length === 1 ? "it" : "them"} another way, or adjust .forceignore for the rollback.`,
+    );
+  }
   const apex = steps.some(
     (s) =>
       (s.component.type === "ApexClass" || s.component.type === "ApexTrigger") && (s.restore.length || s.edits.length),
@@ -593,11 +680,19 @@ export function applyRollback(projectDir: string, plan: RollbackPlan): AppliedRo
   const touched = [...new Set([...restore, ...remove, ...edits.map((e) => e.file)])];
   const applied: AppliedRollback = { restored: [], removed: [], edited: [], created: [], skipped: [] };
   if (!touched.length) return applied;
+  // Inside the project, also after following symbolic links in the folders on the way.
+  const realProject = realpathSync(path.resolve(projectDir));
+  const inside = (base: string, abs: string) => {
+    const rel = path.relative(base, abs);
+    return !(rel.startsWith("..") || path.isAbsolute(rel));
+  };
   const inProject = (f: string) => {
     const abs = path.resolve(projectDir, f);
-    const rel = path.relative(path.resolve(projectDir), abs);
-    if (rel.startsWith("..") || path.isAbsolute(rel))
+    let dir = path.dirname(abs);
+    while (!existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+    if (!inside(path.resolve(projectDir), abs) || !inside(realProject, realpathSync(dir))) {
       throw new Error(`Refusing to touch a file outside the project: ${f}`);
+    }
     return abs;
   };
   const repoRel = (f: string) => toPosix(path.relative(root, inProject(f)));
@@ -607,10 +702,16 @@ export function applyRollback(projectDir: string, plan: RollbackPlan): AppliedRo
   }
   if (restore.length) {
     // The working tree only: nothing is staged, so `git status` and `git diff` show the rollback.
-    execFileSync("git", ["restore", `--source=${parent}`, "--worktree", "--", ...restore.map(repoRel)], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const paths = restore.map(repoRel);
+    const run = (args: string[]) => execFileSync("git", args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+    try {
+      run(["restore", `--source=${parent}`, "--worktree", "--", ...paths]);
+    } catch (err) {
+      // git before 2.23 has no `restore`: check out the files, then unstage them.
+      if (!/restore|usage|not a git command/i.test(String((err as { stderr?: unknown }).stderr ?? err))) throw err;
+      run(["checkout", parent, "--", ...paths]);
+      run(["reset", "-q", "--", ...paths]);
+    }
     applied.restored = restore;
   }
   for (const f of remove) {
