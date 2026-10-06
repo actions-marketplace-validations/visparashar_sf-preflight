@@ -83,6 +83,10 @@ preflight agents Sales_Agent
 
 # Run the Testing Center tests that cover the change (after deploying it to a sandbox)
 preflight agent-tests --base origin/main --org my-sandbox
+
+# Which recent change broke production? And a partial rollback of just that part
+preflight incidents --org prod --since 24h
+preflight rollback 9c607ea --component ValidationRule:Opportunity.Require_Close_Reason
 ```
 
 | Option | Default | Description |
@@ -168,6 +172,21 @@ See [docs/CONFIG.md](docs/CONFIG.md), [docs/EVIDENCE.md](docs/EVIDENCE.md), and
 [docs/PIPELINES.md](docs/PIPELINES.md) for DevOps Center, GitLab, Azure DevOps, Jenkins and
 Bitbucket (JUnit output included).
 
+### After it ships: production errors and partial rollback
+
+```bash
+preflight incidents --org prod
+```
+
+Preflight reads recent failed flow interviews, unhandled Apex exceptions, failed async jobs and
+Agentforce action errors from the org (read-only), and traces each one back to the merged change
+most likely to have caused it, with the evidence: the change touched the failing component, the
+error is the message of a rule it added, the failing flow is in its blast radius, and the errors
+started right after it was deployed. `preflight rollback` then plans a partial rollback of just
+those components (restore, or deactivate what the change added) that stays consistent and ships
+as a pull request. Messages are reduced to metadata, never record data. See
+[docs/INCIDENTS.md](docs/INCIDENTS.md).
+
 ### On pull requests (GitHub Action)
 
 ```yaml
@@ -195,8 +214,9 @@ See [docs/GITHUB_ACTION.md](docs/GITHUB_ACTION.md).
 claude mcp add sf-preflight -- npx -y sf-preflight mcp
 ```
 
-`preflight mcp` is a read-only MCP server with five tools — `analyze_change`,
-`explain_save_order`, `find_field_references`, `explain_agent` and `generate_tests` — so Claude
+`preflight mcp` is a read-only MCP server with six tools — `analyze_change`,
+`explain_save_order`, `find_field_references`, `explain_agent`, `generate_tests` and
+`plan_rollback` — so Claude
 Code, Cursor, VS Code agents and other MCP clients can check their own Salesforce changes, and
 write the tests for them, before committing. Setup for each
 client is in [docs/MCP.md](docs/MCP.md).

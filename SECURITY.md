@@ -51,4 +51,8 @@ Issues of particular interest include:
 - leaking sensitive metadata, record data or credentials into reports or logs,
 - any way to make `--org` write to an org or run commands other than the documented ones,
 - any way to make `tests --validate` or `agent-tests` run in a production org without
-  `--allow-production`.
+  `--allow-production`,
+- any way for `incidents` to write to an org, or to put error message text, record data or user
+  names into its report,
+- any way for `rollback --restore` to write outside the project's tracked files or over
+  uncommitted changes.

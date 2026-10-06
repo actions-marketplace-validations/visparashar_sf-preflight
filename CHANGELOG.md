@@ -9,6 +9,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `preflight incidents` (M7): reads production errors from an org, read-only (failed flow
+  interviews, unhandled Apex exceptions from the event log, failed asynchronous Apex, and
+  Agentforce action errors from Data 360 session tracing in beta), or imports them from a JSON
+  file, and traces each one to the merged change most likely to have caused it. Evidence: the
+  change touched the failing component or its call stack, the error is the message of a
+  validation rule it added or changed or names a field it changed, the failing component is in
+  its blast radius, or preflight's findings predicted the failure; weighed by when the change was
+  merged and when its components changed in the org, claiming a start time only when the errors
+  clearly began inside the data read. Messages are reduced to metadata and never stored.
+- `preflight rollback <commit>` and MCP `plan_rollback`: a partial rollback of the components you
+  name, restoring all their files as they were before the change, deactivating what the change
+  added or renamed (validation rules, triggers, and flows through a FlowDefinition), pointing to
+  Setup's Deleted Fields for deleted fields, bringing along what keeps it consistent, and warning
+  about later commits it would undo. `--restore` applies it to the working tree, unstaged, for a
+  rollback pull request.
 - `preflight agent-tests` runs the Agentforce Testing Center tests that cover a change (tests of
   affected agents that expect an affected action or its topic; `--all` or `--test` to choose), in
   an org the change is deployed to, and reports each test case and the expectation that didn't

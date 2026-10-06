@@ -6,11 +6,14 @@ import { z } from "zod";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
+  changeAt,
   evaluateGate,
   explainAgent,
   fieldReferences,
   loadConfig,
   loadProject,
+  planRollback,
+  rollbackToMarkdown,
   run,
   runTests,
   type SaveEvent,
@@ -31,7 +34,8 @@ permission sets):
    files yourself), then review their NOTE comments.
 Use explain_save_order to understand what already runs on an object before adding automation,
 find_field_references before renaming, retyping or deleting a field, and explain_agent before
-changing anything an Agentforce agent action calls.`;
+changing anything an Agentforce agent action calls. When a recent change broke something in
+production, use plan_rollback to undo only the components that need it.`;
 
 export interface McpServerOptions {
   /** Directory the server may analyze; tool calls cannot reach outside it. */
@@ -243,6 +247,40 @@ export function createMcpServer(opts: McpServerOptions): McpServer {
           ]
             .filter(Boolean)
             .join("\n\n"),
+        );
+      } catch (err) {
+        return failure(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "plan_rollback",
+    {
+      title: "Plan a partial rollback",
+      description:
+        "Plan a partial rollback of a commit or merged pull request: which of its components to restore to " +
+        "their previous version, which new flows, validation rules or triggers to deactivate, what must come " +
+        "along to keep the rollback consistent, and the commands to ship it as a pull request. Nothing is " +
+        "changed: it returns the plan.",
+      inputSchema: {
+        commit: z.string().describe("Commit or merge commit to roll back, e.g. a SHA or HEAD~2"),
+        components: z
+          .array(z.string())
+          .optional()
+          .describe('Components to roll back, e.g. ["Opportunity.Require_Close_Reason"] (default: all it changed)'),
+        project_dir: projectDirSchema,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const dir = projectDir(args.project_dir);
+        const change = changeAt(dir, args.commit);
+        return text(
+          rollbackToMarkdown(
+            planRollback({ projectDir: dir, model: loadProject(dir), change, components: args.components }),
+          ),
         );
       } catch (err) {
         return failure(err);

@@ -3,15 +3,18 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, InvalidArgumentError, Option } from "commander";
-import type { AnalysisResult, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
+import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
   agentTestsToMarkdown,
   allAgentActions,
   analyzeChange,
+  applyRollback,
+  assertSafeOrg,
   assertSafeRef,
   buildEvidence,
+  changeAt,
   changeFingerprint,
   evaluateGate,
   evidenceToMarkdown,
@@ -19,10 +22,15 @@ import {
   GENERIC_ORG_LABEL,
   gateToMarkdown,
   generateTests,
+  incidentsToMarkdown,
+  investigateIncidents,
   loadProject,
   noAgentTests,
   parseAgentTestsResult,
   parseApprovals,
+  parseSince,
+  planRollback,
+  rollbackToMarkdown,
   runAgentTests,
   runTests,
   saveProcedure,
@@ -58,16 +66,20 @@ function render(result: AnalysisResult, format: Format, failOn?: FailOn): string
   return toMarkdown(result);
 }
 
-/** Parser for a whole number of minutes in a range; rejects "5.9" and "10m" rather than truncating. */
-function minutes(min: number, max: number) {
+/** Parser for a whole number in a range; rejects "5.9" and "10m" rather than truncating. */
+function wholeNumber(min: number, max: number, unit = "") {
   return (v: string): number => {
     const n = /^\d+$/.test(v.trim()) ? Number(v) : Number.NaN;
     if (!Number.isInteger(n) || n < min || n > max) {
-      throw new InvalidArgumentError(`Expected a whole number of minutes from ${min} to ${max}.`);
+      throw new InvalidArgumentError(`Expected a whole number${unit ? ` of ${unit}` : ""} from ${min} to ${max}.`);
     }
     return n;
   };
 }
+const minutes = (min: number, max: number) => wholeNumber(min, max, "minutes");
+
+/** Org for commands printed in reports: an alias as given, never a username. */
+const orgLabelFor = (org: string) => (org.includes("@") ? "<org>" : assertSafeOrg(org));
 
 function readJson(file: string, what: string): unknown {
   try {
@@ -502,6 +514,114 @@ program
       });
       write(opts.format === "json" ? JSON.stringify(r, null, 2) : agentTestsToMarkdown(r));
       if (r.status === "failed") process.exitCode = 2;
+    },
+  );
+
+program
+  .command("incidents")
+  .description(
+    "Trace production errors (failed flows, Apex exceptions, failed jobs, Agentforce action errors) back to the recent changes that most likely caused them",
+  )
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("--org <alias>", "org to read errors from, read-only (production is fine)")
+  .option("--since <when>", "errors since a duration (7d, 24h, 2w) or a date", "7d")
+  .option("--ref <ref>", "branch whose history to search", "HEAD")
+  .option("--max-changes <n>", "most recent changes to consider", wholeNumber(1, 500), 50)
+  .option("--lookback <days>", "days before --since to look for changes", wholeNumber(0, 366, "days"), 30)
+  .option("--errors <file>", "also read errors from a JSON file (see docs/INCIDENTS.md)")
+  .addOption(
+    new Option("--source <sources...>", "org sources to read (default: all)").choices([
+      "flow",
+      "apex",
+      "async-apex",
+      "agent",
+    ]),
+  )
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .option("-o, --out <file>", "write the report to a file instead of stdout")
+  .action(
+    (opts: {
+      project: string;
+      org?: string;
+      since: string;
+      ref: string;
+      maxChanges: number;
+      lookback: number;
+      errors?: string;
+      source?: ("flow" | "apex" | "async-apex" | "agent")[];
+      format: "md" | "json";
+      out?: string;
+    }) => {
+      if (!opts.org && !opts.errors) throw new Error("incidents needs --org <alias> or --errors <file>.");
+      if (opts.org) process.stderr.write("Reading production errors from the org (read-only)...\n");
+      const report = investigateIncidents({
+        projectDir: opts.project,
+        org: opts.org,
+        since: parseSince(opts.since),
+        ref: opts.ref,
+        maxChanges: opts.maxChanges,
+        lookbackDays: opts.lookback,
+        errors: opts.errors ? { raw: readJson(opts.errors, "errors"), file: opts.errors } : undefined,
+        sources: opts.source,
+      });
+      const text = opts.format === "json" ? JSON.stringify(report, null, 2) : incidentsToMarkdown(report);
+      if (opts.out) writeFileSync(opts.out, `${text}\n`);
+      else process.stdout.write(`${text}\n`);
+    },
+  );
+
+program
+  .command("rollback")
+  .description("Plan a partial rollback of a change: restore or deactivate only the components that need it")
+  .argument("<commit>", "the commit or merge commit to roll back")
+  .option("-p, --project <dir>", "SFDX project directory", ".")
+  .option("--component <names...>", "components to roll back (default: everything the commit changed)")
+  .option("--org <alias>", "org alias to put in the deploy commands (nothing is deployed)")
+  .option("--restore", "restore and edit the files in the working tree (nothing is committed or deployed)")
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .option("-o, --out <file>", "write the plan to a file instead of stdout")
+  .action(
+    (
+      commit: string,
+      opts: {
+        project: string;
+        component?: string[];
+        org?: string;
+        restore?: boolean;
+        format: "md" | "json";
+        out?: string;
+      },
+    ) => {
+      const projectDir = path.resolve(opts.project);
+      const change = changeAt(projectDir, commit);
+      const plan = planRollback({
+        projectDir,
+        model: loadProject(projectDir),
+        change,
+        components: opts.component,
+        org: opts.org ? orgLabelFor(opts.org) : undefined,
+      });
+      let applied: AppliedRollback | undefined;
+      if (opts.restore) applied = applyRollback(projectDir, plan);
+      let text: string;
+      if (opts.format === "json") text = JSON.stringify(applied ? { ...plan, applied } : plan, null, 2);
+      else {
+        text = rollbackToMarkdown(plan);
+        if (applied) {
+          const lines = [
+            ...applied.restored.map((f) => `- restored \`${f}\``),
+            ...applied.removed.map((f) => `- removed \`${f}\``),
+            ...applied.edited.map((f) => `- deactivated in \`${f}\``),
+            ...applied.created.map((f) => `- created \`${f}\``),
+            ...applied.skipped.map(
+              (f) => `- ⚠️ couldn't apply the edit to \`${f}\` (it changed since the plan): edit it by hand`,
+            ),
+          ];
+          text += `\n\n**Applied to the working tree (nothing staged):**\n${lines.join("\n") || "- nothing to change"}\n\nReview with \`git status\` and \`git diff\`, then commit and open a pull request.`;
+        }
+      }
+      if (opts.out) writeFileSync(opts.out, `${text}\n`);
+      else process.stdout.write(`${text}\n`);
     },
   );
 

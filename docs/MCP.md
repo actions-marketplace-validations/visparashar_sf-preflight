@@ -15,6 +15,7 @@ deploys, writes files or contacts a Salesforce org.
 | `explain_save_order` | What runs, in order, when an object is saved | `object`, `event` (`insert`/`update`/`delete`/`undelete`), `project_dir` |
 | `find_field_references` | Validation rules, flows, Apex, formulas, roll-ups and permission sets that use a field | `object`, `field`, `project_dir` |
 | `explain_agent` | An Agentforce agent's topics and actions, what each action calls and saves, the access its runtime user needs and its Testing Center coverage; lists the agents without a name. See [AGENTS.md](AGENTS.md) | `agent`, `project_dir` |
+| `plan_rollback` | A partial rollback plan for a commit or merged pull request: what to restore or deactivate, what comes along for consistency, and the commands to ship it as a pull request; nothing is changed. See [INCIDENTS.md](INCIDENTS.md#partial-rollback) | `commit`, `components`, `project_dir` |
 | `generate_tests` | Apex tests for what a change touches (bulk, recursion, idempotency, validation errors surfacing), returned as code; nothing is written to disk. See [TESTS.md](TESTS.md) | `base` (default `HEAD`), `head`, `files`, `project_dir`, `prefix`, `bulk_size` |
 
 With no arguments, `analyze_change` compares the working tree (including untracked files) with

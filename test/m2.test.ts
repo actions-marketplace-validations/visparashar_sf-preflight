@@ -160,6 +160,7 @@ describe("MCP server", () => {
       "explain_save_order",
       "find_field_references",
       "generate_tests",
+      "plan_rollback",
     ]);
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(client.getInstructions()).toContain("analyze_change");
