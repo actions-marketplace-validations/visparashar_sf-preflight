@@ -45,6 +45,7 @@ import {
   validationToMarkdown,
   verifyEvidence,
 } from "./core/index.js";
+import { bundledSkillDir, installSkill } from "./core/skill.js";
 
 // `preflight analyze | head` closes stdout early; exit quietly instead of crashing on EPIPE.
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -648,6 +649,34 @@ program
       const notes = s.notes.length ? `  [${s.notes.join("; ")}]` : "";
       console.log(`  ${s.order}. ${s.phaseLabel.padEnd(18)} ${s.automation.name}${writes}${notes}`);
     }
+  });
+
+program
+  .command("skill")
+  .description(
+    "Install the sf-preflight agent skill for AI coding agents (Codex, Copilot, Cursor, Gemini CLI, Claude Code, …)",
+  )
+  .argument("[action]", "install (default) or path", "install")
+  .option("-p, --project <dir>", "project to install into", ".")
+  .option("--global", "install for your user (home directory) instead of the project")
+  .option("--dir <dirs...>", "skills directories to install into instead of .agents/skills and .claude/skills")
+  .option("--force", "replace an existing copy")
+  .action((action: string, opts: { project: string; global?: boolean; dir?: string[]; force?: boolean }) => {
+    if (action === "path") {
+      console.log(bundledSkillDir());
+      return;
+    }
+    if (action !== "install") throw new Error(`Unknown action "${action}": use install or path.`);
+    const written = installSkill({ projectDir: opts.project, global: opts.global, dirs: opts.dir, force: opts.force });
+    console.log(
+      [
+        "Installed the sf-preflight skill:",
+        ...written.map((d) => `  ${d}`),
+        "",
+        "Agents load it when a task involves Salesforce metadata. For its tools, also add the MCP server",
+        "(`npx -y sf-preflight mcp`): see https://github.com/visparashar/sf-preflight/blob/main/docs/AI_AGENTS.md",
+      ].join("\n"),
+    );
   });
 
 program

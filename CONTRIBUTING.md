@@ -157,6 +157,9 @@ release notes.
 2. Move the **Unreleased** changelog entries under `## [X.Y.Z] - YYYY-MM-DD` and update the
    compare links at the bottom.
 3. `npm version X.Y.Z --no-git-tag-version` to bump `package.json` and `package-lock.json`.
+   Set the same version in `.claude-plugin/plugin.json` (`version` and the `sf-preflight@X.Y.Z`
+   MCP argument) and in `skills/sf-preflight/SKILL.md` (`metadata.version`); a test fails until
+   they match.
 4. Open a pull request, wait for CI and CodeQL, and merge it.
 5. Tag the merge commit and push the tag:
 

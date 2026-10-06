@@ -29,6 +29,7 @@
   "files": [
     "dist",
     "schema",
+    "skills",
     "CHANGELOG.md",
     "NOTICE"
   ],
