@@ -4,7 +4,9 @@ Thanks for your interest in making Salesforce changes safer to ship! This projec
 contributions of all sizes: bug reports, false-positive reports, docs, new metadata parsers
 and new analysis rules.
 
-By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md). How the project
+is run and how decisions are made is described in [GOVERNANCE.md](GOVERNANCE.md). Have a
+question rather than a change? See [SUPPORT.md](SUPPORT.md).
 
 ## Ways to contribute
 
@@ -16,6 +18,8 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Pick up an issue.** Issues labelled `good first issue` and `help wanted` are ready to work on.
   Comment on the issue so others know you're on it.
 - **Improve the docs.** README, architecture notes and examples are all fair game.
+- **Review pull requests and triage issues.** Reproducing a reported finding on your own
+  metadata, or confirming that a fix works, is a real contribution.
 
 ## Development setup
 
@@ -65,7 +69,8 @@ a parser or a rule.
 1. Fork the repo and create a branch from `main` (`fix/flow-loop-resolution`, `feat/sarif-output`, …).
 2. Write a test first when fixing a bug — ideally a fixture snippet that reproduces it.
 3. Keep changes focused; one logical change per pull request.
-4. Run `npm run check` before pushing. CI runs the same checks on Node 22 and 24.
+4. Run `npm run check` before pushing. CI runs the same checks on Node 22 and 24, plus CodeQL
+   and a [DCO](#developer-certificate-of-origin) sign-off check.
 5. Add an entry under **Unreleased** in [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
 6. Open a pull request and fill in the template.
 
@@ -78,6 +83,18 @@ feat(flows): resolve inputReference through assignment collections
 fix(apex): ignore DML keywords inside SOQL FOR UPDATE
 docs: explain cascade depth option
 ```
+
+### AI-assisted contributions
+
+AI coding tools are welcome here — helping review AI-authored changes is what this project is
+for. If a tool wrote a meaningful part of your change:
+
+- say so in the pull request, and keep the tool's commit trailer (for example
+  `Co-Authored-By:`) so preflight's own AI-assisted commit detection sees it;
+- read and understand every line before you open the pull request — you are accountable for it,
+  as for any other contribution;
+- don't let a tool invent fixture metadata that wouldn't deploy, or paste in code you don't have
+  the right to contribute.
 
 ### License headers
 
@@ -112,6 +129,25 @@ commits:
 ```bash
 git commit -s -m "fix(apex): …"
 ```
+
+A **DCO** check runs on every pull request and fails if a commit is missing a `Signed-off-by:`
+line that matches its author. To fix the commits on your branch:
+
+```bash
+git rebase --signoff origin/main   # adds sign-off to every commit since main
+git push --force-with-lease
+```
+
+Commits made in the GitHub web editor need the "Sign off and commit" option. Bot commits (such as
+Dependabot's) are exempt.
+
+## Issue triage
+
+New issues get the `triage` label. A maintainer reproduces or clarifies them, then replaces it
+with labels such as `bug`, `analysis-accuracy`, `enhancement`, `documentation`,
+`good first issue` or `help wanted`. Pull requests that change behavior users must adapt to are
+labelled `breaking-change`; labels also decide where a pull request appears in the generated
+release notes.
 
 ## Releasing (maintainers)
 

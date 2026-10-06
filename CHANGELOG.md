@@ -25,6 +25,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `--wait` options take a whole number of minutes and reject values such as `5.9` or `10m`
   instead of truncating them.
+- The npm package now includes a `NOTICE` file, as the Apache License 2.0 expects.
+
+### Security
+
+- The GitHub Action pins every action it uses to a full commit SHA, so a moved tag upstream
+  can't change what runs in your workflow.
 
 ## [0.5.0] - 2026-10-06
 

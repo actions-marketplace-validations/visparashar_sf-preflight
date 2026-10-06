@@ -29,7 +29,8 @@
   "files": [
     "dist",
     "schema",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=22.13"

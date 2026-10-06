@@ -1,0 +1,32 @@
+# Categories for the release notes that the Release workflow generates
+# (gh release create --generate-notes). Pull requests are sorted by label.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking-change
+    - title: New features
+      labels:
+        - enhancement
+    - title: Analysis accuracy
+      labels:
+        - analysis-accuracy
+    - title: Bug fixes
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Dependencies and CI
+      labels:
+        - dependencies
+        - github_actions
+    - title: Other changes
+      labels:
+        - "*"

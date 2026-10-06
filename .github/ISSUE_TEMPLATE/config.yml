@@ -2,7 +2,10 @@ blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
     url: https://github.com/visparashar/sf-preflight/security/advisories/new
-    about: Please report security issues privately, not as public issues.
+    about: Please report security issues privately, not as public issues. See SECURITY.md.
+  - name: Ask a question or get help
+    url: https://github.com/visparashar/sf-preflight/blob/main/SUPPORT.md
+    about: Where to ask usage questions and what to include so we can help.
   - name: Roadmap
     url: https://github.com/visparashar/sf-preflight/blob/main/docs/ROADMAP.md
     about: Check whether your idea is already planned.

@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/visparashar/sf-preflight/actions/workflows/ci.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/visparashar/sf-preflight/badge)](https://scorecard.dev/viewer/?uri=github.com/visparashar/sf-preflight)
 [![npm](https://img.shields.io/npm/v/sf-preflight.svg)](https://www.npmjs.com/package/sf-preflight)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)
@@ -239,15 +240,20 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details and known limitatio
 Process Builder, legacy workflow, duplicate and assignment rules are not modelled yet, and the
 Apex call graph doesn't follow interfaces or dynamic dispatch.
 
-## Contributing
+## Contributing and community
 
 Contributions are welcome — especially reports of wrong or missing findings with a small,
 anonymised metadata snippet. Read [CONTRIBUTING.md](CONTRIBUTING.md) to get started, and please
-follow our [Code of Conduct](CODE_OF_CONDUCT.md). Security issues: see [SECURITY.md](SECURITY.md).
+follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+- **Questions and help:** [SUPPORT.md](SUPPORT.md)
+- **Security issues:** report privately, see [SECURITY.md](SECURITY.md)
+- **How the project is run:** [GOVERNANCE.md](GOVERNANCE.md) and [MAINTAINERS.md](MAINTAINERS.md)
+- **What's next:** [roadmap](docs/ROADMAP.md) and [changelog](CHANGELOG.md)
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
 
 *Salesforce, Agentforce and related marks are trademarks of Salesforce, Inc. This project is
 independent and not affiliated with or endorsed by Salesforce.*
