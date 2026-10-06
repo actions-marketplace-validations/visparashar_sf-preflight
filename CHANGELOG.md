@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-06
+
+Quality gates, an evidence pack per change, and pipeline integration (GitHub, GitLab, Azure
+DevOps, Jenkins, Bitbucket, DevOps Center).
+
 ### Added
 
 - **Policy file:** `.preflight.json` (in the project or at the repository root) changes rule
@@ -185,7 +190,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/visparashar/sf-preflight/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/visparashar/sf-preflight/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/visparashar/sf-preflight/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/visparashar/sf-preflight/compare/v0.1.0...v0.2.0
