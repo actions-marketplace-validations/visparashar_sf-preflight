@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sf-preflight</title>
+<meta name="description" content="Open-source, org-aware change verifier for Salesforce pull requests and Agentforce actions.">
+<meta name="theme-color" content="#0A0C0F">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:#9AA4B0;text-decoration:none}a:hover{color:#E6E9ED}
+pre{margin:0}
+html{scroll-behavior:smooth}
+</style>
+
+</head>
+<body>
+
+<div id="top" style="background:#0A0C0F;color:#E6E9ED;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:17px;line-height:1.6">
+
+<!-- NAV -->
+<div style="border-bottom:1px solid #232A33">
+<div style="max-width:1200px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<a href="#top" style="display:flex;align-items:center;gap:10px;color:#E6E9ED;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:500">
+<svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" stroke="#232A33" stroke-width="1.5"></rect><path d="M7 13.5l4 4 8-9" stroke="#52E0A1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+sf-preflight
+</a>
+<nav style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;font-size:15px">
+<a href="#how">How it works</a>
+<a href="#features">Features</a>
+<a href="#findings">Findings</a>
+<a href="#roadmap">Roadmap</a>
+<a href="https://github.com/visparashar/sf-preflight" style="color:#E6E9ED;border:1px solid #2F3945;border-radius:8px;padding:10px 16px;min-height:20px">GitHub</a>
+</nav>
+</div>
+</div>
+
+<!-- HERO -->
+<div style="max-width:1200px;margin:0 auto;padding:88px 24px 72px;display:flex;flex-wrap:wrap;gap:56px;align-items:center">
+<div style="flex:1 1 440px;min-width:0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1;margin-bottom:20px">Open source · Apache-2.0 · Salesforce change verifier</div>
+<h1 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(40px,5.4vw,68px);line-height:1.04;letter-spacing:-0.02em">Know what your change will set off, before it ships.</h1>
+<p style="margin:24px 0 0;color:#9AA4B0;font-size:19px;max-width:560px">sf-preflight is an org-aware verifier for Salesforce pull requests and Agentforce actions. It maps the blast radius through your automation, permissions and data model, generates the tests that matter, and leaves an audit-ready evidence pack.</p>
+<div style="margin-top:32px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+<a href="https://github.com/visparashar/sf-preflight" style="background:#52E0A1;color:#04110B;font-weight:600;border-radius:8px;padding:13px 22px;font-size:16px">Get started on GitHub</a>
+<a href="https://www.npmjs.com/package/sf-preflight" style="color:#E6E9ED;border:1px solid #2F3945;border-radius:8px;padding:12px 22px;font-size:16px">View on npm</a>
+</div>
+<div style="margin-top:28px;background:#12161B;border:1px solid #232A33;border-radius:10px;padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#E6E9ED;overflow-x:auto;white-space:nowrap"><span style="color:#9AA4B0">$</span> npm install -g sf-preflight</div>
+<div style="margin-top:12px;font-size:14px;color:#9AA4B0">Works offline on SFDX source. No org credentials needed to get value.</div>
+</div>
+
+<div style="flex:1 1 480px;min-width:0;background:#12161B;border:1px solid #232A33;border-radius:14px;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid #232A33;font-family:'JetBrains Mono',monospace;font-size:12px;color:#9AA4B0">
+<span>preflight analyze --base main --head HEAD</span>
+<span>illustrative output</span>
+</div>
+<div style="padding:20px 18px;overflow-x:auto">
+<pre style="font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;color:#E6E9ED"><span style="color:#9AA4B0">Changed</span>  Opportunity.Discount__c (field)
+<span style="color:#9AA4B0">Radius</span>   3 objects · 5 automations · 1 permission set
+
+Opportunity <span style="color:#9AA4B0">(update)</span>
+ ├─ before-save flow   Opp_Set_Defaults
+ ├─ validation rule    Discount_Needs_Approval
+ ├─ roll-up            Account.Open_Pipeline__c
+ └─ after-save flow    Opp_Sync_Account
+     └─ Account <span style="color:#9AA4B0">(update)</span>
+         └─ trigger ContactSync → Contact → Account <span style="color:#FF7A6B">⟲ cycle</span>
+
+<span style="color:#FF7A6B">HIGH</span>    Account ↔ Contact automation cycle
+<span style="color:#F5B041">MEDIUM</span>  Active validation rule references changed field
+<span style="color:#FF7A6B">HIGH</span>    Permission set grants Modify All
+
+<span style="color:#52E0A1">4 tests suggested</span>  bulk · recursion · idempotency · validation</pre>
+</div>
+</div>
+</div>
+
+<!-- STATS -->
+<div style="border-top:1px solid #232A33;border-bottom:1px solid #232A33;background:#0E1115">
+<div style="max-width:1200px;margin:0 auto;padding:56px 24px">
+<div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:500;font-size:28px;line-height:1.25;max-width:760px">Salesforce DevOps has mostly solved <span style="color:#9AA4B0">“can we deploy this?”</span> It has not solved <span style="color:#52E0A1">“can we trust what this change will do in this org?”</span></div>
+<div style="margin-top:36px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:52px;line-height:1">38%</div>
+<div style="margin-top:10px;color:#9AA4B0;font-size:15px">of teams name testing bottlenecks as the top blocker to scaling delivery.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:52px;line-height:1">43%</div>
+<div style="margin-top:10px;color:#9AA4B0;font-size:15px">apply no extra review to AI-generated changes.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:52px;line-height:1">19%</div>
+<div style="margin-top:10px;color:#9AA4B0;font-size:15px">cite failed deployments as a blocker. Deployment is no longer the main pain.</div>
+</div>
+</div>
+<div style="margin-top:18px;font-size:13px;color:#9AA4B0">Figures from industry surveys, including Gearset's State of Salesforce DevOps 2026.</div>
+</div>
+</div>
+
+<!-- HOW -->
+<div id="how" style="max-width:1200px;margin:0 auto;padding:96px 24px 40px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">How it works</div>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:720px">From a diff to evidence, in four steps.</h2>
+<div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1">01</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Read the diff</h3>
+<div style="color:#9AA4B0;font-size:15px">Point it at git refs or a file list in an SFDX project. Changed files map to components: fields, flows, triggers, classes, validation rules, permission sets, agent actions.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1">02</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Build the org graph</h3>
+<div style="color:#9AA4B0;font-size:15px">Objects, fields, flows, triggers, Apex, permissions and agent actions become nodes. Edges capture what fires on, writes to, reads, invokes and rolls up to what.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1">03</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Compute blast radius</h3>
+<div style="color:#9AA4B0;font-size:15px">Walk the order of execution per object and event, follow cascades to a set depth, flag cycles as recursion risk, and cite the file behind every finding.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1">04</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Test and prove it</h3>
+<div style="color:#9AA4B0;font-size:15px">Generate bulk, recursion, idempotency and validation tests, run them as a check-only deployment, and attach the results to a signed evidence pack.</div>
+</div>
+</div>
+</div>
+
+<!-- FEATURES -->
+<div id="features" style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">Features</div>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Execution-layer depth, not another screen tester.</h2>
+<div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">ANALYZE</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Offline blast-radius analysis</h3>
+<div style="color:#9AA4B0;font-size:15px">Runs on SFDX source in your repo. Real Apex parsing with a cross-class call graph. Optional read-only <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#E6E9ED">--org</span> context adds record counts, org-only automation, assignments and packages.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">TEST</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Generated regression tests</h3>
+<div style="color:#9AA4B0;font-size:15px">Bulk, recursion, idempotency and validation-error tests built with a describe-driven data factory. Validate them against a sandbox as a check-only deployment.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">AGENTS</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Agentforce action verification</h3>
+<div style="color:#9AA4B0;font-size:15px">Parses agents, topics, actions and targets. Shows which actions a change affects, whether Testing Center covers them, and what access the runtime user needs. Agent responses stay out of reports.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">GATE</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Policy and quality gate</h3>
+<div style="color:#9AA4B0;font-size:15px">A <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#E6E9ED">.preflight.json</span> policy decides what blocks a merge. On pull requests it is read from the base branch, so a PR cannot loosen its own gate.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">EVIDENCE</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Audit-ready evidence pack</h3>
+<div style="color:#9AA4B0;font-size:15px">One pack per change: author, tests, results and approvals, signed with GitHub artifact attestations. JUnit output for the CI systems you already use.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">MCP</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Built for coding agents</h3>
+<div style="color:#9AA4B0;font-size:15px">An MCP server lets Claude Code, Cursor and other agents ask what a change will set off before they commit it. AI-assisted commits are detected and flagged.</div>
+</div>
+</div>
+</div>
+
+<!-- FINDINGS -->
+<div id="findings" style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">What it catches</div>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">The incident that passed every test.</h2>
+<p style="margin:16px 0 0;color:#9AA4B0;max-width:640px">Deterministic rules, each citing the metadata file and the path that produced it. No LLM in the core analysis loop.</p>
+<div style="margin-top:36px;background:#12161B;border:1px solid #232A33;border-radius:12px;overflow:hidden">
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>Automation cycle across objects (recursion risk)</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#FF7A6B;white-space:nowrap">HIGH</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>DML or SOQL inside a loop in a changed or impacted Apex class</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#FF7A6B;white-space:nowrap">HIGH</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>Permission set grants Modify All, View All, or new delete access</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#FF7A6B;white-space:nowrap">HIGH</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>Deleted component that is still referenced</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#FF7A6B;white-space:nowrap">HIGH</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>Changed field referenced by an active validation rule</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#F5B041;white-space:nowrap">MEDIUM</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>Validation rule added on an object that automations write to</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#F5B041;white-space:nowrap">MEDIUM</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #232A33">
+<span>Three or more automations on the same object and event</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#F5B041;white-space:nowrap">MEDIUM</span>
+</div>
+<div style="display:flex;justify-content:space-between;gap:16px;padding:18px 24px">
+<span>After-save flow updates its own triggering record</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#F5B041;white-space:nowrap">MEDIUM</span>
+</div>
+</div>
+</div>
+
+<!-- SURFACES -->
+<div style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">One engine, many surfaces</div>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Runs where your changes already flow.</h2>
+<div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px">
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
+<h3 style="margin:0 0 14px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">CLI</h3>
+<pre style="background:#0A0C0F;border:1px solid #232A33;border-radius:8px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;overflow-x:auto;color:#E6E9ED"><span style="color:#9AA4B0">$</span> preflight analyze --base main --head HEAD
+<span style="color:#9AA4B0">$</span> preflight tests --validate --org my-sandbox
+<span style="color:#9AA4B0">$</span> preflight agents
+<span style="color:#9AA4B0">$</span> preflight agent-tests</pre>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
+<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">GitHub Action</h3>
+<div style="color:#9AA4B0;font-size:15px">Posts a blast-radius comment on every pull request, uploads SARIF and JUnit, and enforces the quality gate. Make it a required check and DevOps Center honors it too.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
+<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">MCP server</h3>
+<div style="color:#9AA4B0;font-size:15px">Gives Claude Code, Cursor and other coding agents the same engine, including tools such as explain_agent, so they can check a change before proposing it.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
+<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Any pipeline</h3>
+<div style="color:#9AA4B0;font-size:15px">Guides for GitLab, Azure DevOps, Jenkins, Bitbucket and DevOps Center. Vendor-neutral by design: it complements Gearset, Copado and open-source CI instead of replacing them.</div>
+</div>
+</div>
+</div>
+
+<!-- COMPARE -->
+<div style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">Where it fits</div>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">The layer your stack is missing.</h2>
+<div style="margin-top:40px;overflow-x:auto;border:1px solid #232A33;border-radius:12px">
+<div style="min-width:760px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1.2fr;font-size:14px;background:#12161B">
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">Question</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">Deployment tools</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">Testing Center</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">UI test tools</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#52E0A1;font-weight:600">sf-preflight</div>
+
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Moves metadata between orgs</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Yes</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No, by design</div>
+
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Checks agent topic and action selection</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">Emerging</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Yes</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Runs those tests per change</div>
+
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Tests screens and UI flows</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Yes</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+
+<div style="padding:16px 20px;border-bottom:1px solid #232A33">Maps what a change sets off in automation, permissions and data</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">Limited</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;border-bottom:1px solid #232A33;font-weight:600">Yes</div>
+
+<div style="padding:16px 20px">Generates bulk, recursion and permission tests</div>
+<div style="padding:16px 20px;color:#9AA4B0">Not the focus</div>
+<div style="padding:16px 20px;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;color:#9AA4B0">No</div>
+<div style="padding:16px 20px;font-weight:600">Yes</div>
+</div>
+</div>
+<div style="margin-top:14px;font-size:13px;color:#9AA4B0">Broad strokes. Products in this space are changing quickly.</div>
+</div>
+
+<!-- PRINCIPLES -->
+<div style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+<div style="border-top:2px solid #52E0A1;padding-top:18px">
+<h3 style="margin:0 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Offline first</h3>
+<div style="color:#9AA4B0;font-size:15px">The core needs only your repo. Live-org enrichment is additive.</div>
+</div>
+<div style="border-top:2px solid #52E0A1;padding-top:18px">
+<h3 style="margin:0 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Deterministic</h3>
+<div style="color:#9AA4B0;font-size:15px">Every finding is explainable and cites its source. LLMs are optional consumers, never in the loop.</div>
+</div>
+<div style="border-top:2px solid #52E0A1;padding-top:18px">
+<h3 style="margin:0 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Execution semantics</h3>
+<div style="color:#9AA4B0;font-size:15px">Order of execution, cascades, roll-ups and permissions, modeled in one versioned module.</div>
+</div>
+<div style="border-top:2px solid #52E0A1;padding-top:18px">
+<h3 style="margin:0 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Vendor-neutral</h3>
+<div style="color:#9AA4B0;font-size:15px">Embeds in the pipeline you have. Open source under Apache-2.0.</div>
+</div>
+</div>
+</div>
+
+<!-- ROADMAP -->
+<div id="roadmap" style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">Roadmap</div>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Seven milestones shipped. Production feedback is next.</h2>
+<div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M1 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Offline blast-radius analyzer</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M2 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">MCP server, GitHub Action, SARIF</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M3 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Real Apex parser, live-org enrichment</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M4 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Generated tests, sandbox validation</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M5 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Agentforce action verification</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M6 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Policy gate, signed evidence packs</div>
+</div>
+<div style="background:#12161B;border:1px dashed #3A4553;border-radius:12px;padding:20px;grid-column:span 2">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#F5B041">M7 · NEXT</div>
+<div style="margin-top:8px;font-weight:600">Production feedback loop</div>
+<div style="margin-top:4px;color:#9AA4B0;font-size:15px">Map Flow and Apex errors and Agentforce session traces back to the change that introduced them, and suggest a partial rollback.</div>
+</div>
+</div>
+</div>
+
+<!-- CTA -->
+<div style="max-width:1200px;margin:0 auto;padding:72px 24px 96px">
+<div style="background:#12161B;border:1px solid #232A33;border-radius:16px;padding:56px 32px;text-align:center">
+<h2 style="margin:0 auto;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4.4vw,48px);line-height:1.1;letter-spacing:-0.01em;max-width:720px">Preflight your next pull request.</h2>
+<p style="margin:16px auto 0;color:#9AA4B0;max-width:520px">Install it, point it at a branch, and see what your change will set off.</p>
+<div style="margin:28px auto 0;display:inline-block;background:#0A0C0F;border:1px solid #232A33;border-radius:10px;padding:14px 20px;font-family:'JetBrains Mono',monospace;font-size:14px;max-width:100%;overflow-x:auto;white-space:nowrap"><span style="color:#9AA4B0">$</span> npm install -g sf-preflight</div>
+<div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
+<a href="https://github.com/visparashar/sf-preflight" style="background:#52E0A1;color:#04110B;font-weight:600;border-radius:8px;padding:13px 22px;font-size:16px">Star on GitHub</a>
+<a href="https://www.npmjs.com/package/sf-preflight" style="color:#E6E9ED;border:1px solid #2F3945;border-radius:8px;padding:12px 22px;font-size:16px">View on npm</a>
+</div>
+</div>
+</div>
+
+<!-- FOOTER -->
+<div style="border-top:1px solid #232A33">
+<div style="max-width:1200px;margin:0 auto;padding:28px 24px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;font-size:14px;color:#9AA4B0">
+<span style="font-family:'JetBrains Mono',monospace">sf-preflight · Apache-2.0 · DCO</span>
+<span style="display:flex;gap:20px;flex-wrap:wrap"><a href="https://github.com/visparashar/sf-preflight">GitHub</a><a href="https://www.npmjs.com/package/sf-preflight">npm</a></span>
+</div>
+</div>
+
+</div>
+
+</body>
+</html>
