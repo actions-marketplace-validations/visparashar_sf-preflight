@@ -1,4 +1,6 @@
-# sf-preflight
+<h1 align="center">
+  <img alt="sf-preflight: preflight checks for Salesforce changes" src="https://raw.githubusercontent.com/visparashar/sf-preflight/main/docs/assets/sf-preflight-banner.png">
+</h1>
 
 [![CI](https://github.com/visparashar/sf-preflight/actions/workflows/ci.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml/badge.svg)](https://github.com/visparashar/sf-preflight/actions/workflows/codeql.yml)
