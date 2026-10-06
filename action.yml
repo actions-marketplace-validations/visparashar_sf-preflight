@@ -208,15 +208,23 @@ runs:
             if (!r.user || r.state === "COMMENTED" || r.state === "PENDING") continue;
             latest.set(r.user.login, r);
           }
-          const trusted = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
-          const approvals = [...latest.values()]
+          // Approvals of the latest commit by people who didn't write the change and can write to the repository.
+          const candidates = [...latest.values()]
             .filter((r) => r.state === "APPROVED")
-            // People with access to the repository, approving the latest commit, who didn't write it.
-            .filter((r) => trusted.has(r.author_association))
             .filter((r) => r.user.type !== "Bot")
             .filter((r) => r.commit_id === pr.head.sha)
-            .filter((r) => !authors.has(r.user.login))
-            .map((r) => ({ reviewer: r.user.login, submittedAt: r.submitted_at }));
+            .filter((r) => !authors.has(r.user.login));
+          const approvals = [];
+          for (const r of candidates) {
+            let canWrite = false;
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: r.user.login });
+              canWrite = data.permission === "admin" || data.permission === "write";
+            } catch (err) {
+              core.info(`Could not check ${r.user.login}'s access (${err.message}); their approval doesn't count.`);
+            }
+            if (canWrite) approvals.push({ reviewer: r.user.login, submittedAt: r.submitted_at });
+          }
           core.info(`${approvals.length} approval(s) count: ${approvals.map((a) => a.reviewer).join(", ") || "none"}.`);
           core.setOutput("pr_number", String(pr.number));
           core.setOutput("pr_head_sha", pr.head.sha);
@@ -314,7 +322,7 @@ runs:
     - name: Warn when the evidence isn't signed
       if: inputs.attest == 'true' && steps.analyze.outputs.evidence != '' && steps.attest.outcome != 'success'
       shell: bash
-      run: echo "::warning title=sf-preflight::The evidence pack was not signed (fork pull request, or missing id-token/attestations permissions).
+      run: echo "::warning title=sf-preflight::The evidence pack was not signed (fork pull request, or missing id-token/attestations permissions)."
 
     - name: Comment on pull request
       if: inputs.comment == 'true' && github.event.pull_request

@@ -110,8 +110,7 @@ The action reads the pull request's reviews. An approval counts when:
 - it's the reviewer's latest decision (a later dismissal or "request changes" replaces it),
 - it approves the pull request's **latest commit** (pushing new commits, AI-assisted or not,
   needs a fresh approval),
-- the reviewer has access to the repository (owner, organization member or collaborator) and
-  isn't a bot,
+- the reviewer can write to the repository (write or admin permission) and isn't a bot,
 - the reviewer didn't write the change: the pull request's author and every commit author are
   excluded.
 

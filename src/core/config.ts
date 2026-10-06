@@ -143,22 +143,28 @@ export interface LoadedPolicy {
  * base branch), so a change can't loosen the policy it's checked against.
  */
 export function loadPolicy(projectDir: string, opts: { explicit?: string; ref?: string } = {}): LoadedPolicy {
-  if (!opts.ref) {
+  const root = gitRoot(projectDir);
+  const explicitAbs = opts.explicit ? path.resolve(opts.explicit) : undefined;
+  // A policy file outside the repository isn't part of the change: read it from disk.
+  const outsideRepo =
+    !!explicitAbs &&
+    (!root || path.relative(root, explicitAbs).startsWith("..") || path.isAbsolute(path.relative(root, explicitAbs)));
+  if (!opts.ref || outsideRepo) {
     const { config, file } = loadConfig(projectDir, opts.explicit);
     if (!file) return { config };
     const rel = path.relative(projectDir, file).split(path.sep).join("/") || CONFIG_FILE;
     return { config, file: rel, sha256: sha256(readFileSync(file)) };
   }
+  // The first candidate that exists at the ref is the policy; files only in the checkout (added by
+  // the change) can't shadow it.
+  const notes: string[] = [];
   for (const abs of configCandidates(projectDir, opts.explicit)) {
     const rel = path.relative(projectDir, abs).split(path.sep).join("/");
     const content = gitShow(projectDir, opts.ref, rel);
     const local = existsSync(abs) ? readFileSync(abs, "utf8") : undefined;
     if (content === undefined) {
-      if (local === undefined) continue;
-      return {
-        config: {},
-        warning: `This change adds ${rel}; it takes effect once merged. This run used the default policy, as at ${opts.ref}.`,
-      };
+      if (local !== undefined) notes.push(`This change adds ${rel}; it takes effect once merged.`);
+      continue;
     }
     let json: unknown;
     try {
@@ -166,18 +172,26 @@ export function loadPolicy(projectDir: string, opts: { explicit?: string; ref?: 
     } catch (err) {
       throw new Error(`${rel} at ${opts.ref}: invalid JSON (${(err as Error).message})`);
     }
+    if (local !== content) {
+      notes.push(
+        local === undefined
+          ? `This change removes ${rel}; this run used the version at ${opts.ref}.`
+          : `This change edits ${rel}; this run used the version at ${opts.ref}.`,
+      );
+    }
     return {
       config: parseConfig(json, `${rel} at ${opts.ref}`),
       file: rel,
       ref: opts.ref,
       sha256: sha256(content),
-      ...(local !== undefined && local !== content
-        ? { warning: `This change edits ${rel}; this run used the version at ${opts.ref}.` }
-        : {}),
+      ...(notes.length ? { warning: notes.join(" ") } : {}),
     };
   }
   if (opts.explicit) throw new Error(`Config file not found at ${opts.ref}: ${opts.explicit}`);
-  return { config: {} };
+  return {
+    config: {},
+    ...(notes.length ? { warning: `${notes.join(" ")} This run used the default policy, as at ${opts.ref}.` } : {}),
+  };
 }
 
 /**

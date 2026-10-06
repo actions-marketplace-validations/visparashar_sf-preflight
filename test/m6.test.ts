@@ -436,10 +436,29 @@ describe("policy from a git ref, and evidence hygiene", () => {
     expect(result.config).toMatchObject({ file: ".preflight.json", ref: "HEAD" });
     expect(result.warnings).toContain("This change edits .preflight.json; this run used the version at HEAD.");
     expect(toMarkdown(result)).toContain("_Policy: `.preflight.json` at `HEAD`_");
-    // A policy the change adds doesn't apply until it's merged.
-    rmSync(path.join(project, ".preflight.json"));
+    // A policy file the change adds closer to the project can't shadow the one at the ref.
+    const rootPolicy = path.join(repo, ".preflight.json");
+    writeFileSync(rootPolicy, JSON.stringify({ gate: { failOn: "low" } }));
     git("rm", "-q", "--cached", "sfdx/.preflight.json");
-    git("commit", "-q", "-m", "Remove policy");
+    git("add", ".preflight.json");
+    git("commit", "-q", "-m", "Only a root policy");
+    const shadowed = loadPolicy(project, { ref: "HEAD" });
+    expect(shadowed).toMatchObject({ config: { gate: { failOn: "low" } }, file: "../.preflight.json", ref: "HEAD" });
+    expect(shadowed.warning).toBe("This change adds .preflight.json; it takes effect once merged.");
+    // A policy outside the repository isn't part of the change, so it's read from disk.
+    const central = path.join(tmpdir(), `sf-preflight-central-${process.pid}.json`);
+    writeFileSync(central, JSON.stringify({ gate: { aiAssistedApprovals: 2 } }));
+    try {
+      expect(loadPolicy(project, { explicit: central, ref: "HEAD" }).config).toEqual({
+        gate: { aiAssistedApprovals: 2 },
+      });
+    } finally {
+      rmSync(central);
+    }
+    rmSync(rootPolicy);
+    git("rm", "-q", "--cached", ".preflight.json");
+    git("commit", "-q", "-m", "No root policy");
+    // A policy the change adds doesn't apply until it's merged.
     writeFileSync(path.join(project, ".preflight.json"), JSON.stringify({ gate: { failOn: "none" } }));
     expect(loadPolicy(project, { ref: "HEAD" })).toEqual({
       config: {},
@@ -475,5 +494,33 @@ describe("policy from a git ref, and evidence hygiene", () => {
       pullRequest: { number: 3, headSha: "nope", url: "javascript:alert(1)" },
     });
     expect(bad.change.pullRequest).toEqual({ number: 3, headSha: undefined, url: undefined });
+  });
+});
+
+describe("GitHub Action scripts", () => {
+  it("are valid bash", () => {
+    const lines = readFileSync(path.resolve(__dirname, "../action.yml"), "utf8").split("\n");
+    const scripts: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(\s*)run: (.*)$/.exec(lines[i]!);
+      if (!m) continue;
+      if (m[2] !== "|") {
+        scripts.push(m[2]!);
+        continue;
+      }
+      const body: string[] = [];
+      const indent = m[1]!.length;
+      while (i + 1 < lines.length && (lines[i + 1]!.trim() === "" || lines[i + 1]!.search(/\S/) > indent)) {
+        body.push(lines[++i]!);
+      }
+      scripts.push(body.join("\n"));
+    }
+    expect(scripts.length).toBeGreaterThan(5);
+    for (const script of scripts) {
+      expect(
+        () => execFileSync("bash", ["-n"], { input: script, stdio: ["pipe", "pipe", "pipe"] }),
+        script,
+      ).not.toThrow();
+    }
   });
 });

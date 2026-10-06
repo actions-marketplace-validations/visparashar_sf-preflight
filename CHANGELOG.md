@@ -28,8 +28,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   DevOps Center.
 - **GitHub Action:** evaluates the quality gate with the pull request's approvals (also on
   `pull_request_review` events, and for pushes from the merged pull request). An approval counts
-  when it's from someone with access to the repository who didn't write the change, and approves
-  the latest commit. On pull requests the policy is read from the base branch
+  when it's from someone who can write to the repository and didn't write the change, and
+  approves the latest commit. On pull requests the policy is read from the base branch
   (`policy-from-base`). Uploads the evidence pack as an artifact (`evidence`, `artifact-name`),
   and can sign it with a GitHub artifact attestation (`attest`; skipped with a warning on fork
   pull requests). New inputs `config`, `policy-from-base`; new outputs `gate`, `evidence`,
