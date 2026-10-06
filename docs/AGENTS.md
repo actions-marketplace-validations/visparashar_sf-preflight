@@ -75,9 +75,9 @@ preflight agent-tests --base origin/main --org my-sandbox --format json > agent-
 
 Preflight picks the tests of affected agents that expect an affected action, or the topic it
 belongs to, and runs each with `sf agent test run` (Testing Center and Agentforce Studio tests
-both work). `--all` runs every test of the affected agents; `--test <names...>` runs the tests you
-name. The report shows each test, how many cases passed and, for the rest, which expectation
-didn't match:
+both work; Studio scorers count as passed when Salesforce grades them so). `--all` runs every test
+of the affected agents; `--test <names...>` runs the tests you name. The report shows each test,
+how many cases passed and, for the rest, which expectation didn't match:
 
 ```markdown
 ### Testing Center in my-sandbox
@@ -95,10 +95,18 @@ is reported with the command to check it later.
 Agent actions really run during a test: they can create and update records. Preflight refuses
 production orgs (and orgs it can't identify) unless you pass `--allow-production`.
 
+The report shows expected and actual topics and actions. Expectations that check the agent's
+responses or action outputs only say whether they passed: responses can contain record data from
+the org, and reports are meant to be posted on pull requests. Email addresses are removed from
+utterances and error messages.
+
 To make passing tests part of the [quality gate](CONFIG.md#quality-gate), set
-`requireAgentTestsPassed` and pass the JSON output with `--agent-tests-result`. The gate fails
-when a test that covers the change isn't in the result, so a result from another change or a
-narrower run doesn't count. The [evidence pack](EVIDENCE.md) records each run.
+`requireAgentTestsPassed` and pass the JSON output with `--agent-tests-result`. The result records
+which change it was run for (a fingerprint of the changed files and their contents), and the gate
+fails when it's for a different change or leaves out a test that covers this one. Run
+`agent-tests` with the same `--base` (or `--files`) as the gate. When no test covers the affected
+actions, the check passes without a result (`requireAgentTests` is the setting that asks for
+coverage). The [evidence pack](EVIDENCE.md) records each run.
 
 ## Runtime user
 

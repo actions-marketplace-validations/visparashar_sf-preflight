@@ -187,17 +187,12 @@ export interface EvidenceOptions {
   pullRequest?: { number: number; headSha?: string; url?: string };
 }
 
-export function buildEvidence(opts: EvidenceOptions): EvidencePack {
-  const { result } = opts;
+/** Hashes a changed file's bytes (as `sha256sum` would), from git at the head ref or from disk. */
+function fileDigester(result: AnalysisResult): (file: string, changeType: ChangeType) => string | null {
   const projectDir = result.projectDir;
   const root = gitRoot(projectDir);
-  const headRef = result.head ?? "HEAD";
-  const uncommitted =
-    !result.head && !!root && !!tryGit(root, ["status", "--porcelain", "--untracked-files=no", "--", projectDir]);
-
   const projectPath = root ? path.relative(root, projectDir).split(path.sep).join("/") : "";
-  // Hash the file's bytes (as `sha256sum` would), from git at the head ref or from disk.
-  const digestOf = (file: string, changeType: ChangeType): string | null => {
+  return (file, changeType) => {
     if (changeType === "deleted") return null;
     if (result.head) {
       if (!root) return null;
@@ -207,6 +202,33 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
     const abs = path.join(projectDir, file);
     return existsSync(abs) ? sha256(readFileSync(abs)) : null;
   };
+}
+
+/**
+ * Identifies a change by its changed files and their contents, independent of commit SHAs (CI
+ * merge commits differ between jobs). Used to tie saved test results to the change they're for.
+ */
+export function changeFingerprint(result: AnalysisResult): string {
+  const digestOf = fileDigester(result);
+  const files = result.changes
+    .map((c) => ({
+      file: c.component.file,
+      changeType: c.changeType,
+      sha256: digestOf(c.component.file, c.changeType),
+    }))
+    .sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  return `sha256:${sha256(canonicalJson(files))}`;
+}
+
+export function buildEvidence(opts: EvidenceOptions): EvidencePack {
+  const { result } = opts;
+  const projectDir = result.projectDir;
+  const root = gitRoot(projectDir);
+  const headRef = result.head ?? "HEAD";
+  const uncommitted =
+    !result.head && !!root && !!tryGit(root, ["status", "--porcelain", "--untracked-files=no", "--", projectDir]);
+  const projectPath = root ? path.relative(root, projectDir).split(path.sep).join("/") : "";
+  const digestOf = fileDigester(result);
 
   const v = opts.tests?.validation;
   const count = (o: string) => (Array.isArray(v?.tests) ? v.tests.filter((t) => t.outcome === o).length : 0);

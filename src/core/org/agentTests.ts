@@ -28,10 +28,19 @@ export interface AgentTestRun {
   message?: string;
 }
 
+/** The change a result was run for, so the gate can tell a result from another change. */
+export interface AgentTestsChange {
+  /** `changeFingerprint` of the change: its changed files and their contents. */
+  fingerprint: string;
+  files: number;
+}
+
 export interface AgentTestsResult {
   /** Org alias, never a username. */
   org: string;
   orgKind: OrgKind;
+  /** Absent when the tests were named with --test and no change was given. */
+  change?: AgentTestsChange;
   runs: AgentTestRun[];
   status: "passed" | "failed";
 }
@@ -72,16 +81,30 @@ const clip = (s: string, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 const list = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 
 /**
- * Topic and action expectations compare metadata names, which are safe to show. Other expectations
- * compare the agent's response, which can contain record data, so their values stay out of reports.
+ * Topic and action expectations compare metadata names, which are safe to show. Every other
+ * expectation (response checks, quality metrics, custom evaluations) involves the agent's response
+ * or action outputs, which can contain record data, so their values and messages stay out of reports.
  */
-const NAMES_ONLY = /topic|action/i;
+const NAME_EXPECTATIONS = new Set([
+  "topic_sequence_match",
+  "topic_assertion",
+  "action_sequence_match",
+  "actions_assertion",
+]);
+const showsNames = (name: string) => NAME_EXPECTATIONS.has(name.toLowerCase());
 const mismatch = (name: string, expected: string, actual: string) =>
   clip(
-    NAMES_ONLY.test(name)
+    showsNames(name)
       ? `${name}: expected ${expected}, got ${actual}`
-      : `${name}: didn't match (the agent's response isn't included in reports)`,
+      : `${name}: didn't pass (the agent's response isn't included in reports)`,
   );
+const errored = (name: string, message: string | undefined) =>
+  clip(
+    showsNames(name)
+      ? `${name}: ${redactEmails(message || "error")}`
+      : `${name}: error (details aren't included in reports)`,
+  );
+const json = (v: unknown) => JSON.stringify(v ?? null);
 
 interface LegacyCase {
   status?: string;
@@ -99,64 +122,75 @@ interface LegacyCase {
 
 interface StudioCase {
   testNumber?: number;
-  testScorerResults?: { scorerName?: string; scorerResponse?: string }[];
+  testScorerResults?: { scorerName?: string; scorerResponse?: string; status?: string }[];
+}
+
+function readStudioCase(c: StudioCase, number: number): AgentTestCase {
+  const failures: string[] = [];
+  const errors: string[] = [];
+  let judged = 0;
+  for (const s of c.testScorerResults ?? []) {
+    const name = s.scorerName ?? "scorer";
+    let parsed: Record<string, unknown> = {};
+    try {
+      const v = JSON.parse(s.scorerResponse ?? "{}");
+      if (v && typeof v === "object" && !Array.isArray(v)) parsed = v;
+    } catch {
+      parsed = {};
+    }
+    // Salesforce grades each scorer and reports its status; that decides, as it does in `sf`.
+    const status = typeof parsed.status === "string" ? parsed.status : typeof s.status === "string" ? s.status : "";
+    if (status) {
+      judged++;
+      const st = status.toUpperCase();
+      if (st === "PASS") continue;
+      if (st === "FAIL" || st === "FAILURE")
+        failures.push(mismatch(name, json(parsed.expectedValue), json(parsed.actualValue)));
+      else errors.push(errored(name, `status ${status}`));
+      continue;
+    }
+    // Without a status, a scorer with an expected value passes when the actual value equals it.
+    if (parsed.expectedValue === undefined) continue;
+    judged++;
+    if (json(parsed.actualValue) !== json(parsed.expectedValue)) {
+      failures.push(mismatch(name, json(parsed.expectedValue), json(parsed.actualValue)));
+    }
+  }
+  if (!judged) return { number, outcome: "error", failures: ["no scorer results to judge"] };
+  return {
+    number,
+    outcome: errors.length ? "error" : failures.length ? "fail" : "pass",
+    failures: [...failures, ...errors],
+  };
+}
+
+function readLegacyCase(c: LegacyCase, number: number): AgentTestCase {
+  const results = list(c.testResults);
+  const status = (c.status ?? "COMPLETED").toUpperCase();
+  const failures = results
+    .filter((t) => t.result === "FAILURE")
+    .map((t) => mismatch(t.name ?? "expectation", t.expectedValue ?? "?", t.actualValue ?? "?"));
+  const errors = results
+    .filter((t) => t.status === "ERROR" || t.errorMessage)
+    .map((t) => errored(t.name ?? "expectation", t.errorMessage));
+  // A case that hasn't finished, or evaluated nothing, can't count as passed.
+  if (status !== "COMPLETED" && status !== "ERROR") errors.push(`the test case didn't finish (status ${c.status})`);
+  else if (!results.length) errors.push("no expectations were evaluated");
+  return {
+    number,
+    utterance: c.inputs?.utterance ? clip(redactEmails(c.inputs.utterance), 160) : undefined,
+    outcome: status === "ERROR" || errors.length ? "error" : failures.length ? "fail" : "pass",
+    failures: [...failures, ...errors],
+  };
 }
 
 /** Test case outcomes from `sf agent test run --json` (Testing Center or Agentforce Studio format). */
 export function readAgentTestResult(raw: unknown): { cases: AgentTestCase[]; message?: string } {
   const r = (raw ?? {}) as { testCases?: unknown; errorMessage?: string };
-  const cases: AgentTestCase[] = [];
-  for (const [i, c] of list(r.testCases as (LegacyCase & StudioCase)[]).entries()) {
+  const cases = list(r.testCases as (LegacyCase & StudioCase)[]).map((c, i) => {
     const number = typeof c.testNumber === "number" ? c.testNumber : i + 1;
-    if (Array.isArray(c.testScorerResults)) {
-      // Agentforce Studio: a scorer with an expected value passes when the actual value equals it.
-      // Scorers without one (quality metrics) can't be judged here and are left out.
-      const failures: string[] = [];
-      let judged = 0;
-      for (const s of c.testScorerResults) {
-        let parsed: { actualValue?: unknown; expectedValue?: unknown } = {};
-        try {
-          const v = JSON.parse(s.scorerResponse ?? "{}");
-          if (v && typeof v === "object") parsed = v;
-        } catch {
-          parsed = {};
-        }
-        if (parsed.expectedValue === undefined) continue;
-        judged++;
-        if (JSON.stringify(parsed.actualValue) !== JSON.stringify(parsed.expectedValue)) {
-          failures.push(
-            mismatch(
-              s.scorerName ?? "scorer",
-              JSON.stringify(parsed.expectedValue),
-              JSON.stringify(parsed.actualValue ?? null),
-            ),
-          );
-        }
-      }
-      cases.push({
-        number,
-        outcome: !judged ? "error" : failures.length ? "fail" : "pass",
-        failures: judged ? failures : ["no scorer results with an expected value"],
-      });
-      continue;
-    }
-    // Testing Center: every evaluated expectation must pass.
-    const results = list(c.testResults);
-    const errors = results.filter((t) => t.status === "ERROR" || t.errorMessage);
-    const failures = results
-      .filter((t) => t.result === "FAILURE")
-      .map((t) => mismatch(t.name ?? "expectation", t.expectedValue ?? "?", t.actualValue ?? "?"));
-    const outcome = c.status === "ERROR" || errors.length ? "error" : failures.length ? "fail" : "pass";
-    cases.push({
-      number,
-      utterance: c.inputs?.utterance ? clip(c.inputs.utterance, 160) : undefined,
-      outcome,
-      failures: [
-        ...failures,
-        ...errors.map((t) => clip(redactEmails(`${t.name ?? "expectation"}: ${t.errorMessage ?? "error"}`))),
-      ],
-    });
-  }
+    return Array.isArray(c.testScorerResults) ? readStudioCase(c, number) : readLegacyCase(c, number);
+  });
   return { cases, message: r.errorMessage ? clip(redactEmails(r.errorMessage)) : undefined };
 }
 
@@ -167,6 +201,8 @@ export interface RunAgentTestsOptions {
   waitMinutes?: number;
   allowProduction?: boolean;
   runner?: SfRunner;
+  /** The change the tests were picked for; recorded in the result. */
+  change?: AgentTestsChange;
 }
 
 /** Run each test with `sf agent test run` and collect the outcomes. */
@@ -204,12 +240,13 @@ export function runAgentTests(opts: RunAgentTestsOptions): AgentTestsResult {
     try {
       let raw: { status?: string; runId?: string } | undefined;
       try {
-        raw = run(args) as typeof raw;
+        // `sf` exits non-zero when a test case errors, but still reports the run.
+        raw = run(args, { resultOnError: true }) as typeof raw;
       } catch (err) {
         // Older Salesforce CLIs don't know --test-runner and only run Testing Center tests.
         const unknownFlag = /test-runner/i.test((err as Error).message) && t.format === "AiEvaluationDefinition";
         if (!unknownFlag) throw err;
-        raw = run(args.slice(0, -2)) as typeof raw;
+        raw = run(args.slice(0, -2), { resultOnError: true }) as typeof raw;
       }
       if (raw?.status === "IN_PROGRESS" || raw?.status === "NEW") {
         runs.push({
@@ -236,7 +273,11 @@ export function runAgentTests(opts: RunAgentTestsOptions): AgentTestsResult {
         status,
         runId: raw?.runId,
         cases,
-        message: message ?? (cases.length ? undefined : "The run returned no test cases."),
+        message:
+          message ??
+          (cases.length
+            ? undefined
+            : `The run returned no test cases; it may still be running${raw?.runId ? `: check it with \`sf agent test results --job-id ${raw.runId}\`` : ""}.`),
       });
     } catch (err) {
       runs.push({
@@ -251,6 +292,7 @@ export function runAgentTests(opts: RunAgentTestsOptions): AgentTestsResult {
   return {
     org: label,
     orgKind: kind,
+    ...(opts.change ? { change: opts.change } : {}),
     runs,
     status: overall(runs),
   };
@@ -260,8 +302,14 @@ const overall = (runs: AgentTestRun[]): AgentTestsResult["status"] =>
   runs.every((r) => r.status === "passed") ? "passed" : "failed";
 
 /** The result when the change affects no tested agent actions: nothing ran, nothing failed. */
-export function noAgentTests(org: string): AgentTestsResult {
-  return { org: orgLabel(assertSafeOrg(org)), orgKind: "unknown", runs: [], status: "passed" };
+export function noAgentTests(org: string, change?: AgentTestsChange): AgentTestsResult {
+  return {
+    org: orgLabel(assertSafeOrg(org)),
+    orgKind: "unknown",
+    ...(change ? { change } : {}),
+    runs: [],
+    status: "passed",
+  };
 }
 
 const RUN_STATUSES = new Set(["passed", "failed", "error", "timeout"]);
@@ -289,26 +337,33 @@ export function parseAgentTestsResult(raw: unknown, source: string): AgentTestsR
         throw bad(`case ${j + 1} of run ${i + 1} has no valid outcome`);
       return {
         number: typeof tc.number === "number" ? tc.number : j + 1,
-        utterance: typeof tc.utterance === "string" ? tc.utterance : undefined,
+        utterance: typeof tc.utterance === "string" ? clip(redactEmails(tc.utterance), 160) : undefined,
         outcome: tc.outcome as AgentTestCase["outcome"],
-        failures: Array.isArray(tc.failures) ? tc.failures.filter((f): f is string => typeof f === "string") : [],
+        failures: Array.isArray(tc.failures)
+          ? tc.failures.filter((f): f is string => typeof f === "string").map((f) => clip(redactEmails(f)))
+          : [],
       };
     });
-    if (run.status === "passed" && cases.some((c) => c.outcome !== "pass"))
-      throw bad(`run ${i + 1} is marked passed but has cases that didn't pass`);
+    if (run.status === "passed" && (!cases.length || cases.some((c) => c.outcome !== "pass")))
+      throw bad(`run ${i + 1} is marked passed but has no cases, or cases that didn't pass`);
     return {
       test: run.test,
       agent: run.agent,
       status: run.status as AgentTestRun["status"],
       runId: typeof run.runId === "string" ? run.runId : undefined,
       cases,
-      message: typeof run.message === "string" ? run.message : undefined,
+      message: typeof run.message === "string" ? clip(redactEmails(run.message)) : undefined,
     };
   });
   const orgKind = ["sandbox", "scratch", "developer", "production"].includes(String(r.orgKind))
     ? (r.orgKind as OrgKind)
     : "unknown";
-  return { org: orgLabel(r.org), orgKind, runs, status: overall(runs) };
+  const ch = r.change as Record<string, unknown> | undefined;
+  const change =
+    ch && typeof ch === "object" && typeof ch.fingerprint === "string"
+      ? { fingerprint: ch.fingerprint, files: typeof ch.files === "number" ? ch.files : 0 }
+      : undefined;
+  return { org: orgLabel(r.org), orgKind, ...(change ? { change } : {}), runs, status: overall(runs) };
 }
 
 const cell = (s: string) => s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");

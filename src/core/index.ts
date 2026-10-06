@@ -36,6 +36,7 @@ export {
 export {
   buildEvidence,
   canonicalJson,
+  changeFingerprint,
   EVIDENCE_PREDICATE_TYPE,
   type EvidencePack,
   evidenceDigest,
@@ -55,6 +56,7 @@ export { saveProcedure } from "./orderOfExecution.js";
 export {
   type AgentTestCase,
   type AgentTestRun,
+  type AgentTestsChange,
   type AgentTestsResult,
   agentTestsToMarkdown,
   noAgentTests,
@@ -64,7 +66,7 @@ export {
   selectAgentTests,
 } from "./org/agentTests.js";
 export { applyOrgContext, collectOrgContext, enrichWithOrg, GENERIC_ORG_LABEL } from "./org/enrich.js";
-export { assertSafeOrg, createSfRunner, SfError, type SfRunner } from "./org/sf.js";
+export { assertSafeOrg, createSfRunner, type SfCallOptions, SfError, type SfRunner } from "./org/sf.js";
 export {
   type ComponentError,
   type OrgKind,

@@ -1,3 +1,5 @@
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -5,6 +7,8 @@ import {
   type AgentTestsResult,
   agentTestsToMarkdown,
   buildEvidence,
+  changeFingerprint,
+  createSfRunner,
   evaluateGate,
   loadProject,
   noAgentTests,
@@ -172,8 +176,70 @@ describe("reading test results", () => {
     expect(r.cases.map((c) => c.outcome)).toEqual(["fail", "fail"]);
     expect(JSON.stringify(r)).not.toMatch(/Jane|48,000|acme/);
     expect(r.cases[0]!.failures).toEqual([
-      "output_validation: didn't match (the agent's response isn't included in reports)",
+      "output_validation: didn't pass (the agent's response isn't included in reports)",
     ]);
+  });
+
+  it("keeps values and messages of other expectations out, even when named like topics or actions", () => {
+    const r = readAgentTestResult({
+      testCases: [
+        {
+          inputs: { utterance: "Email jane@acme.com the quote" },
+          testResults: [
+            { name: "custom_action_output", result: "FAILURE", expectedValue: "ok", actualValue: "Jane Doe" },
+            { name: "output_validation", status: "ERROR", errorMessage: "Could not grade: Jane Doe owes $48,000" },
+            { name: "topic_sequence_match", status: "ERROR", errorMessage: "Planner timeout for admin@acme.com" },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(r)).not.toMatch(/Jane|48,000|acme/);
+    expect(r.cases[0]).toMatchObject({
+      utterance: "Email <username> the quote",
+      outcome: "error",
+      failures: [
+        "custom_action_output: didn't pass (the agent's response isn't included in reports)",
+        "output_validation: error (details aren't included in reports)",
+        "topic_sequence_match: Planner timeout for <username>",
+      ],
+    });
+  });
+
+  it("judges Agentforce Studio scorers by the status Salesforce gives them", () => {
+    const r = readAgentTestResult({
+      testCases: [
+        {
+          // AI-graded: the expected value is a description, so values never match; the status decides.
+          testScorerResults: [
+            {
+              scorerName: "response_match",
+              scorerResponse: '{"status":"PASS","expectedValue":"Confirms","actualValue":"Done"}',
+            },
+          ],
+        },
+        {
+          // A quality metric with no expected value that failed must not be skipped.
+          testScorerResults: [{ scorerName: "completeness", scorerResponse: '{"status":"FAIL","score":1}' }],
+        },
+        { testScorerResults: [{ scorerName: "topic_sequence_match", scorerResponse: '{"status":"ERROR"}' }] },
+      ],
+    });
+    expect(r.cases.map((c) => c.outcome)).toEqual(["pass", "fail", "error"]);
+    expect(r.cases[1]!.failures).toEqual([
+      "completeness: didn't pass (the agent's response isn't included in reports)",
+    ]);
+  });
+
+  it("doesn't count unfinished or empty test cases as passed", () => {
+    const r = readAgentTestResult({
+      testCases: [
+        { status: "IN_PROGRESS", testResults: [] },
+        { status: "COMPLETED", testResults: [] },
+      ],
+    });
+    expect(r.cases.map((c) => c.outcome)).toEqual(["error", "error"]);
+    expect(r.cases[0]!.failures).toEqual(["the test case didn't finish (status IN_PROGRESS)"]);
+    expect(r.cases[1]!.failures).toEqual(["no expectations were evaluated"]);
   });
 });
 
@@ -266,7 +332,7 @@ describe("Testing Center results in the gate and evidence", () => {
     const check = (agentTests?: AgentTestsResult) =>
       evaluateGate({ result: r, config, agentTests }).checks.find((c) => c.id === "agent-tests-passed")!;
     expect(check()).toMatchObject({ status: "fail" });
-    expect(check().detail).toContain("preflight agent-tests --org <sandbox> --format json");
+    expect(check().detail).toContain("preflight agent-tests --base <base> --org <sandbox> --format json");
     expect(check(result("passed"))).toMatchObject({ status: "pass", detail: "1 of 1 test run(s) passed in uat." });
     expect(check(result("failed"))).toMatchObject({ status: "fail" });
     // A result from another change, or a run that left out a covering test, doesn't pass.
@@ -283,6 +349,37 @@ describe("Testing Center results in the gate and evidence", () => {
     });
     const covered = evaluateGate({ result: r, config, agentTests: result("passed"), expectedAgentTests: expected });
     expect(covered.status).toBe("pass");
+
+    // The result must be for this change.
+    const fingerprint = changeFingerprint(r);
+    const forChange = (agentTests: AgentTestsResult) =>
+      evaluateGate({
+        result: r,
+        config,
+        agentTests,
+        expectedAgentTests: expected,
+        changeFingerprint: fingerprint,
+      }).checks.find((c) => c.id === "agent-tests-passed")!;
+    expect(forChange(result("passed"))).toMatchObject({
+      status: "fail",
+      detail: expect.stringContaining("doesn't say which change"),
+    });
+    const other = { ...result("passed"), change: { fingerprint: "sha256:other", files: 1 } };
+    expect(forChange(other)).toMatchObject({
+      status: "fail",
+      detail: expect.stringContaining("for a different change"),
+    });
+    const same = { ...result("passed"), change: { fingerprint, files: 1 } };
+    expect(forChange(same)).toMatchObject({ status: "pass" });
+
+    // Library callers that don't say which tests are expected: an empty result proves nothing.
+    expect(check(noAgentTests("uat"))).toMatchObject({
+      status: "fail",
+      detail: expect.stringContaining("no test runs"),
+    });
+    // When no test covers the change, there's nothing to run and no result is needed.
+    const uncovered = evaluateGate({ result: r, config, expectedAgentTests: [] });
+    expect(uncovered.checks.find((c) => c.id === "agent-tests-passed")).toMatchObject({ status: "pass" });
     const none = run({
       projectDir: FIXTURE,
       files: [at("permissionsets/Agent_Runtime_User.permissionset-meta.xml")],
@@ -330,7 +427,10 @@ describe("saved Testing Center results", () => {
         { org: "uat", runs: [{ test: "T", agent: "A", status: "passed", cases: [{ outcome: "fail" }] }] },
         "r.json",
       ),
-    ).toThrow("marked passed but has cases that didn't pass");
+    ).toThrow("marked passed but has no cases, or cases that didn't pass");
+    expect(() =>
+      parseAgentTestsResult({ org: "uat", runs: [{ test: "T", agent: "A", status: "passed", cases: [] }] }, "r.json"),
+    ).toThrow("marked passed but has no cases");
   });
 
   it("writes an empty, passing result when nothing needs to run, without usernames", () => {
@@ -341,5 +441,26 @@ describe("saved Testing Center results", () => {
       status: "passed",
     });
     expect(agentTestsToMarkdown(noAgentTests("uat"))).toContain("No Testing Center tests cover");
+  });
+});
+
+describe.skipIf(process.platform === "win32")("the sf runner", () => {
+  it("returns a result from a failing command only when asked to", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "preflight-sf-"));
+    const sf = path.join(dir, "sf");
+    writeFileSync(
+      sf,
+      `#!/bin/sh\necho '{"status":1,"name":"TestError","message":"A test case errored","result":{"runId":"4KB1"}}'\nexit 1\n`,
+    );
+    chmodSync(sf, 0o755);
+    const pathBefore = process.env.PATH;
+    process.env.PATH = `${dir}${path.delimiter}${pathBefore}`;
+    try {
+      const run = createSfRunner();
+      expect(() => run(["agent", "test", "run"])).toThrow("A test case errored");
+      expect(run(["agent", "test", "run"], { resultOnError: true })).toEqual({ runId: "4KB1" });
+    } finally {
+      process.env.PATH = pathBefore;
+    }
   });
 });

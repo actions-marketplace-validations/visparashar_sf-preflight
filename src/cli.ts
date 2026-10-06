@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Command, Option } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import type { AnalysisResult, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
@@ -12,6 +12,7 @@ import {
   analyzeChange,
   assertSafeRef,
   buildEvidence,
+  changeFingerprint,
   evaluateGate,
   evidenceToMarkdown,
   explainAgent,
@@ -55,6 +56,17 @@ function render(result: AnalysisResult, format: Format, failOn?: FailOn): string
   if (format === "sarif") return JSON.stringify(toSarif(result, { toolVersion: version }), null, 2);
   if (format === "junit") return toJunit(result, result.gate?.failOn ?? failOn);
   return toMarkdown(result);
+}
+
+/** Parser for a whole number of minutes in a range; rejects "5.9" and "10m" rather than truncating. */
+function minutes(min: number, max: number) {
+  return (v: string): number => {
+    const n = /^\d+$/.test(v.trim()) ? Number(v) : Number.NaN;
+    if (!Number.isInteger(n) || n < min || n > max) {
+      throw new InvalidArgumentError(`Expected a whole number of minutes from ${min} to ${max}.`);
+    }
+    return n;
+  };
 }
 
 function readJson(file: string, what: string): unknown {
@@ -125,6 +137,7 @@ function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
       expectedAgentTests: policy.gate?.requireAgentTestsPassed
         ? selectAgentTests(model, result).map((t) => t.name)
         : undefined,
+      changeFingerprint: policy.gate?.requireAgentTestsPassed && agentTests ? changeFingerprint(result) : undefined,
     });
   }
   return { result, approvals, tests, agentTests };
@@ -270,7 +283,7 @@ program
   .option("--validate", "run the tests in --org with a check-only deployment (nothing is saved)")
   .option("--org <alias>", "org for --validate: a sandbox, scratch org or Developer Edition org")
   .option("--allow-production", "allow --validate in a production org")
-  .option("--wait <minutes>", "minutes to wait for --validate", (v) => Number.parseInt(v, 10), 33)
+  .option("--wait <minutes>", "minutes to wait for --validate (1-600)", minutes(1, 600), 33)
   .addOption(new Option("--format <format>", "summary format").choices(["md", "json"]).default("md"))
   .action(
     (opts: {
@@ -421,7 +434,7 @@ program
   .option("--test <names...>", "run these Testing Center tests instead of picking them from the change")
   .option("--all", "run every test of the affected agents, not only those expecting an affected action or topic")
   .option("--allow-production", "allow running in a production org")
-  .option("--wait <minutes>", "minutes to wait for each test run", (v) => Number.parseInt(v, 10), 10)
+  .option("--wait <minutes>", "minutes to wait for each test run (1-120)", minutes(1, 120), 10)
   .option("--dry-run", "list the tests that would run, without running them")
   .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
   .option("-o, --out <file>", "write the output to a file instead of stdout")
@@ -441,6 +454,7 @@ program
       out?: string;
     }) => {
       if (!opts.org && !opts.dryRun) throw new Error("agent-tests needs --org <alias> (or --dry-run).");
+      if (opts.all && opts.test?.length) throw new Error("Use either --all or --test, not both.");
       const changed = !!(opts.base || opts.files?.length);
       if (!changed && !opts.test?.length)
         throw new Error("Provide --base or --files to pick tests from a change, or --test <names...>.");
@@ -455,9 +469,11 @@ program
         if (opts.out) writeFileSync(opts.out, `${text}\n`);
         else process.stdout.write(`${text}\n`);
       };
+      // With a change, the result records it so the gate can tell results from other changes.
+      const change = result ? { fingerprint: changeFingerprint(result), files: result.changes.length } : undefined;
       if (!opts.dryRun && !tests.length && opts.format === "json") {
         // A result the gate and evidence can read: nothing to run, so nothing failed.
-        write(JSON.stringify(noAgentTests(opts.org!), null, 2));
+        write(JSON.stringify(noAgentTests(opts.org!, change), null, 2));
         return;
       }
       if (opts.dryRun || !tests.length) {
@@ -482,6 +498,7 @@ program
         tests,
         waitMinutes: opts.wait,
         allowProduction: opts.allowProduction,
+        change,
       });
       write(opts.format === "json" ? JSON.stringify(r, null, 2) : agentTestsToMarkdown(r));
       if (r.status === "failed") process.exitCode = 2;

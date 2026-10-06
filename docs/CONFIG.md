@@ -81,8 +81,9 @@ Approvals and test results come from the pipeline:
 
 These record what the caller provides; the gate can't check them itself. A change that generates
 no tests passes the "generated tests" check without a result, and a change that affects no agent
-actions passes the "Testing Center tests" check. The Testing Center check fails when a test that
-covers the change is missing from the result. On a shallow clone, the
+actions, or none that tests cover, passes the "Testing Center tests" check. The Testing Center
+check fails when the result was run for a different change or leaves out a test that covers this
+one. On a shallow clone, the
 AI-assisted approvals check fails when it can't see the whole history (use `fetch-depth: 0`).
 
 When a check needs data that wasn't provided (approvals for an AI-assisted change, or test
