@@ -4,7 +4,7 @@ import { createSfRunner, type SfRunner } from "../org/sf.js";
 import { loadProject } from "../project.js";
 import { mergeVocabulary, vocabularyFromModel } from "./classify.js";
 import { collectIncidents, componentDatesInOrg, type IncidentSource } from "./collect.js";
-import { historyVocabulary, type IncidentReport, recentChanges, traceIncidents } from "./trace.js";
+import { createTraceCache, historyVocabulary, type IncidentReport, recentChanges, traceIncidents } from "./trace.js";
 
 export interface InvestigateOptions {
   projectDir: string;
@@ -43,7 +43,8 @@ export function investigateIncidents(opts: InvestigateOptions): IncidentReport {
     sources: opts.sources,
     imported: opts.errors,
   });
-  const report = traceIncidents({ model, collection, history, projectDir });
+  const cache = createTraceCache();
+  const report = traceIncidents({ model, collection, history, projectDir, cache });
   if (!opts.org) return report;
   // When the suspected components changed in the org sharpens the timing.
   const components = report.incidents
@@ -51,7 +52,8 @@ export function investigateIncidents(opts: InvestigateOptions): IncidentReport {
     .filter((c) => ["ApexClass", "ApexTrigger", "Flow", "ValidationRule"].includes(c.type));
   if (!components.length) return report;
   const { dates } = componentDatesInOrg(opts.org, components, runner);
-  return dates.size ? traceIncidents({ model, collection, history, projectDir, orgDates: dates }) : report;
+  // The second pass only re-scores the timing: the analyses come from the cache.
+  return dates.size ? traceIncidents({ model, collection, history, projectDir, orgDates: dates, cache }) : report;
 }
 
 export {
@@ -81,9 +83,19 @@ export {
   type SourceStatus,
 } from "./collect.js";
 export { incidentsToMarkdown, rollbackToMarkdown } from "./markdown.js";
-export { applyRollback, changeAt, planRollback, type RollbackPlan, type RollbackStep } from "./rollback.js";
+export {
+  type AppliedRollback,
+  applyRollback,
+  changeAt,
+  type FileEdit,
+  planRollback,
+  type RollbackPlan,
+  type RollbackStep,
+} from "./rollback.js";
 export {
   type ChangeRef,
+  cleanSubject,
+  createTraceCache,
   type HistoryChange,
   historyVocabulary,
   type IncidentReport,
@@ -91,6 +103,7 @@ export {
   recentChanges,
   type Suspect,
   type SuspectComponent,
+  type TraceCache,
   type TracedIncident,
   traceIncidents,
 } from "./trace.js";

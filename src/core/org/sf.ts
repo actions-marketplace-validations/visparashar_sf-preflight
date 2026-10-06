@@ -72,14 +72,27 @@ export function createSfRunner(opts: SfRunnerOptions = {}): SfRunner {
         env: { ...process.env, SF_SKIP_NEW_VERSION_CHECK: "true", SF_DISABLE_AUTOUPDATE: "true" },
       });
     } catch (err) {
-      const e = err as NodeJS.ErrnoException & { stdout?: string };
+      const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string; status?: number };
       if (e.code === "ENOENT") {
         throw new SfError(
           "Salesforce CLI (`sf`) not found on PATH. Install it from https://developer.salesforce.com/tools/salesforcecli or run without --org.",
         );
       }
       stdout = typeof e.stdout === "string" ? e.stdout : "";
-      if (!stdout || call.raw) throw new SfError(`sf ${args.slice(0, 3).join(" ")} failed: ${e.message}`);
+      if (!stdout || call.raw) {
+        // Not e.message: it repeats the command line, which can carry record IDs (e.g. a log file URL).
+        const detail = (typeof e.stderr === "string" ? e.stderr : "")
+          .split("\n")
+          .map((l) => l.trim())
+          .find(Boolean);
+        const clean = detail
+          ?.replace(/\/services\/\S*/g, "<url>")
+          .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?\b/g, "<id>")
+          .slice(0, 300);
+        throw new SfError(
+          `sf ${args.slice(0, 3).join(" ")} failed${clean ? `: ${clean}` : e.status !== undefined ? ` (exit code ${e.status})` : ""}`,
+        );
+      }
     }
     if (call.raw) return stdout;
     let parsed: { status?: number; result?: unknown; message?: string; name?: string; data?: unknown };

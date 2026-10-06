@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, InvalidArgumentError, Option } from "commander";
-import type { AnalysisResult, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
+import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
@@ -601,8 +601,8 @@ program
         components: opts.component,
         org: opts.org ? orgLabelFor(opts.org) : undefined,
       });
-      let applied: { restored: string[]; edited: string[] } | undefined;
-      if (opts.restore) applied = applyRollback(projectDir, plan, change.sha);
+      let applied: AppliedRollback | undefined;
+      if (opts.restore) applied = applyRollback(projectDir, plan);
       let text: string;
       if (opts.format === "json") text = JSON.stringify(applied ? { ...plan, applied } : plan, null, 2);
       else {
@@ -610,9 +610,14 @@ program
         if (applied) {
           const lines = [
             ...applied.restored.map((f) => `- restored \`${f}\``),
+            ...applied.removed.map((f) => `- removed \`${f}\``),
             ...applied.edited.map((f) => `- deactivated in \`${f}\``),
+            ...applied.created.map((f) => `- created \`${f}\``),
+            ...applied.skipped.map(
+              (f) => `- ⚠️ couldn't apply the edit to \`${f}\` (it changed since the plan): edit it by hand`,
+            ),
           ];
-          text += `\n\n**Applied to the working tree:**\n${lines.join("\n") || "- nothing to change"}\n\nReview with \`git diff\`, then commit and open a pull request.`;
+          text += `\n\n**Applied to the working tree (nothing staged):**\n${lines.join("\n") || "- nothing to change"}\n\nReview with \`git status\` and \`git diff\`, then commit and open a pull request.`;
         }
       }
       if (opts.out) writeFileSync(opts.out, `${text}\n`);

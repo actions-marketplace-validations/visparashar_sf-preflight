@@ -50,7 +50,10 @@ export interface Suspect {
   score: number;
   confidence: "high" | "medium" | "low";
   reasons: string[];
-  /** Components of the change the evidence points to: what a partial rollback would cover. */
+  /**
+   * Components of the change the error points to directly (where it happens, or the rule or field
+   * it names): what a partial rollback would cover. Empty when the evidence is only indirect.
+   */
   components: SuspectComponent[];
 }
 
@@ -60,11 +63,29 @@ export interface TracedIncident extends Incident {
 
 export interface IncidentReport extends Omit<IncidentCollection, "incidents"> {
   incidents: TracedIncident[];
-  history: { ref: string; changes: number; from?: string; to?: string; shallow: boolean };
+  history: {
+    ref: string;
+    changes: number;
+    from?: string;
+    to?: string;
+    shallow: boolean;
+    /** Changes too large to analyse every component of (only direct evidence was checked for the rest). */
+    partial?: number;
+  };
 }
 
 const PR = [/Merge pull request #(\d+)/, /\(#(\d+)\)\s*$/];
 const clip = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/**
+ * A commit subject without emails, and without the user and branch names in merge subjects
+ * ("Merge pull request #12 from alice/fix" → "Merge pull request #12").
+ */
+export function cleanSubject(subject: string): string {
+  return redactEmails(subject)
+    .replace(/^(Merge pull request #\d+) from \S+.*$/, "$1")
+    .replace(/^Merge (?:remote-tracking )?branch\b.*$/, "Merge branch");
+}
 
 /**
  * A commit's title and pull request number. Merge commits ("Merge pull request #12 from …") carry
@@ -72,7 +93,7 @@ const clip = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` :
  */
 export function commitTitle(root: string, sha: string, subject: string): { subject: string; pr?: number } {
   const pr = PR.map((re) => re.exec(subject)?.[1]).find(Boolean);
-  let title = subject.replace(/\s*\(#\d+\)\s*$/, "");
+  let title = cleanSubject(subject).replace(/\s*\(#\d+\)\s*$/, "");
   if (/^Merge pull request #\d+/.test(subject)) {
     try {
       const body = git(root, ["log", "-1", "--no-show-signature", "--format=%b", sha])
@@ -235,31 +256,70 @@ function changeKey(c: Change): string | undefined {
   }
 }
 
-interface ComponentImpact {
-  change: Change;
+interface Analysis {
   result: AnalysisResult;
-  /** Keys the change touches directly (the component, or agent actions defined in its file). */
-  direct: Set<string>;
   /** Failing-component key → how it relates to the change, e.g. "runs when Opportunity records are updated". */
   involved: Map<string, string>;
+  /** Agent actions an agent metadata change defines or changes directly. */
+  defined: Set<string>;
 }
+
+interface ComponentImpact {
+  change: Change;
+  /** Keys the change touches directly (the component, or agent actions defined in its file). */
+  direct(): Set<string>;
+  /** The blast-radius analysis, computed on first use; undefined when the change is too large. */
+  analysis(): Analysis | undefined;
+}
+
+/** Analysis results shared between tracing passes (e.g. with and without org dates). */
+export type TraceCache = Map<string, ComponentImpact[]>;
+export const createTraceCache = (): TraceCache => new Map();
+
+/** Components analysed per change; larger changes get direct evidence only for the rest. */
+const MAX_ANALYSED = 60;
+/** Which components of a large change to analyse first: those errors most often trace to. */
+const ANALYSE_FIRST: Partial<Record<ComponentType, number>> = {
+  ValidationRule: 0,
+  Flow: 1,
+  ApexTrigger: 2,
+  CustomField: 3,
+  ApexClass: 4,
+  AgentMetadata: 5,
+};
 
 function componentImpact(
   model: OrgModel,
   change: Change,
-  readBase?: (file: string) => string | undefined,
+  readBase: (file: string) => string | undefined,
+  analysable: boolean,
 ): ComponentImpact {
-  const result = analyze({ model, changes: [change], maxDepth: 4, readBase });
-  const direct = new Set<string>();
-  const involved = new Map<string, string>();
-  const add = (k: string, why: string) => {
-    if (!direct.has(k) && !involved.has(k)) involved.set(k, why);
+  let memo: Analysis | undefined | null = null;
+  const analysis = () => {
+    if (!analysable) return undefined;
+    if (memo === null) memo = analyseComponent(model, change, readBase);
+    return memo;
   };
   const own = changeKey(change);
-  if (own) direct.add(own);
+  const cheap = new Set<string>(own ? [own] : []);
+  return {
+    change,
+    analysis,
+    direct: () =>
+      change.component.type === "AgentMetadata" ? new Set([...cheap, ...(analysis()?.defined ?? [])]) : cheap,
+  };
+}
+
+function analyseComponent(model: OrgModel, change: Change, readBase: (file: string) => string | undefined): Analysis {
+  const result = analyze({ model, changes: [change], maxDepth: 4, readBase });
+  const defined = new Set<string>();
+  const involved = new Map<string, string>();
+  const own = changeKey(change);
+  const add = (k: string, why: string) => {
+    if (k !== own && !defined.has(k) && !involved.has(k)) involved.set(k, why);
+  };
   for (const a of result.agents) {
-    const defined = change.component.type === "AgentMetadata";
-    if (defined) direct.add(ck("agentaction", a.action));
+    if (change.component.type === "AgentMetadata") defined.add(ck("agentaction", a.action));
     else add(ck("agentaction", a.action), a.reasons[0] ?? "is affected by it");
   }
 
@@ -267,7 +327,7 @@ function componentImpact(
   const viaClasses = (from: string[], why: string, depth = 0) => {
     for (const cls of knownClassRefs(model, from)) {
       const k = ck("apexclass", cls.name);
-      if (direct.has(k) || involved.has(k)) continue;
+      if (k === own || involved.has(k)) continue;
       add(k, why);
       if (depth < 2) viaClasses(cls.classRefs, why, depth + 1);
     }
@@ -345,7 +405,7 @@ function componentImpact(
       (comp.type === "Flow" && t === "flow" && key(target) === key(comp.name));
     if (calls) add(ck("agentaction", ref.action.name), `runs \`${comp.name}\``);
   }
-  return { change, result, direct, involved };
+  return { result, involved, defined };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -389,10 +449,11 @@ function evaluateComponent(
   const via = incident.via.map((v) => ({ v, k: failingKey(v, actions) }));
   const sig = incident.signature;
 
-  if (primary && impact.direct.has(primary)) {
+  const direct = impact.direct();
+  if (primary && direct.has(primary)) {
     out.push({ kind: "direct", strength: 60, text: `It ${what}, where the error happens.` });
   } else {
-    const hit = via.find((x) => x.k && impact.direct.has(x.k));
+    const hit = via.find((x) => x.k && direct.has(x.k));
     if (hit) {
       out.push({
         kind: "direct",
@@ -401,8 +462,15 @@ function evaluateComponent(
       });
     }
   }
-  if (comp.type === "ValidationRule" && sig.validationRule && key(sig.validationRule) === key(comp.name)) {
-    out.push({ kind: "message", strength: 65, text: `It ${what}, and the error is that rule's message.` });
+  if (comp.type === "ValidationRule" && sig.validationRules.some((r) => key(r) === key(comp.name))) {
+    const shared = sig.validationRules.length > 1;
+    out.push({
+      kind: "message",
+      strength: shared ? 45 : 65,
+      text: shared
+        ? `It ${what}, and the error is that rule's message (which ${sig.validationRules.length - 1} other rule(s) share).`
+        : `It ${what}, and the error is that rule's message.`,
+    });
   }
   if (comp.type === "CustomField" && sig.fields.some((f) => key(f) === key(comp.name))) {
     out.push({
@@ -411,15 +479,16 @@ function evaluateComponent(
       text: `It ${what}, which the error names.`,
     });
   }
+  const analysis = impact.analysis();
   if (!out.length && primary) {
-    const why = impact.involved.get(primary);
+    const why = analysis?.involved.get(primary);
     if (why)
       out.push({ kind: "blast", strength: 25, text: `It ${what}, and ${failingLabel(incident.component)} ${why}.` });
   }
   // Preflight's findings for the change that predicted this kind of failure.
   const rules = new Set(CATEGORY_RULES[sig.category]);
   const files = [incident.component, ...incident.via].map((c) => fileOf(model, c)).filter(Boolean);
-  const finding = impact.result.findings.find(
+  const finding = analysis?.result.findings.find(
     (f) =>
       rules.has(f.rule) && (f.files.some((x) => files.includes(x)) || (out.length > 0 && f.files.includes(comp.file))),
   );
@@ -440,10 +509,31 @@ export interface TraceOptions {
   projectDir: string;
   /** When each component last changed in the org ("Kind:name" lower-cased → ISO), if known. */
   orgDates?: Map<string, string>;
+  /** Reuse analyses from an earlier pass over the same model and history. */
+  cache?: TraceCache;
 }
 
 /** Org date key for a component, e.g. "apexclass:opportunitycloser". */
 export const orgDateKey = (type: ComponentType, name: string) => `${type.toLowerCase()}:${key(name)}`;
+
+const HOUR = 3_600_000;
+
+/** Where the data the incident was found in starts: the window, or later when the source keeps less. */
+function dataStart(collection: IncidentCollection, incident: Incident): string {
+  const from = collection.sources.find((s) => s.source === incident.source)?.coverage?.from;
+  return from && from > collection.since ? from : collection.since;
+}
+
+/**
+ * Did the errors clearly begin inside the data, rather than already being there when it starts?
+ * Errors that recur every few hours and first show up minutes into the data can't be dated.
+ */
+function onsetKnown(incident: Incident, start: string): boolean {
+  const gap = Date.parse(incident.firstSeen) - Date.parse(start);
+  const span = Date.parse(incident.lastSeen) - Date.parse(incident.firstSeen);
+  const interval = incident.count > 1 ? span / (incident.count - 1) : 24 * HOUR;
+  return gap > Math.max(HOUR, 3 * interval);
+}
 
 export function traceIncidents(opts: TraceOptions): IncidentReport {
   const { model, collection, history } = opts;
@@ -451,11 +541,16 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
   for (const ref of allAgentActions(model)) {
     for (const n of [ref.action.name, ...(ref.action.aliases ?? [])]) actions.set(key(n), ref.action.name);
   }
-  const impacts = new Map<string, ComponentImpact[]>();
+  const impacts = opts.cache ?? createTraceCache();
   const impactsOf = (h: HistoryChange) => {
     let list = impacts.get(h.sha);
     if (!list) {
-      list = h.changes.map((c) => componentImpact(model, c, (file) => gitShow(opts.projectDir, h.parent, file)));
+      const first = [...h.changes]
+        .sort((a, b) => (ANALYSE_FIRST[a.component.type] ?? 9) - (ANALYSE_FIRST[b.component.type] ?? 9))
+        .slice(0, MAX_ANALYSED);
+      list = h.changes.map((c) =>
+        componentImpact(model, c, (file) => gitShow(opts.projectDir, h.parent, file), first.includes(c)),
+      );
       impacts.set(h.sha, list);
     }
     return list;
@@ -463,6 +558,8 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
 
   const incidents = collection.incidents.map((incident): TracedIncident => {
     const suspects: Suspect[] = [];
+    const start = dataStart(collection, incident);
+    const known = onsetKnown(incident, start);
     for (const h of history.changes) {
       if (h.date > incident.lastSeen) continue; // merged after the last error: not the cause
       const scored = impactsOf(h)
@@ -478,12 +575,15 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
       );
       let score = best + Math.min(10, 3 * (scored.length - 1));
       const reasons = uniq(scored.flatMap((x) => x.evidence.map((e) => e.text)));
-      const components = scored.map(({ impact: { change } }) => ({
-        type: change.component.type,
-        name: change.component.name,
-        file: change.component.file,
-        changeType: change.changeType,
-      }));
+      // A partial rollback covers only what the error points to directly.
+      const components = scored
+        .filter(({ evidence }) => evidence.some((e) => e.kind === "direct" || e.kind === "message"))
+        .map(({ impact: { change } }) => ({
+          type: change.component.type,
+          name: change.component.name,
+          file: change.component.file,
+          changeType: change.changeType,
+        }));
 
       // Timing: in the org, when known; otherwise the merge.
       const dates = components
@@ -494,21 +594,25 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
         reasons.push(
           `These errors were already happening before it was merged (first seen ${day(incident.firstSeen)}).`,
         );
-      } else if (dates.some((d) => Date.parse(d.at) < Date.parse(h.date) - 3_600_000)) {
-        const old = dates.find((d) => Date.parse(d.at) < Date.parse(h.date) - 3_600_000)!;
+      } else if (dates.some((d) => Date.parse(d.at) < Date.parse(h.date) - HOUR)) {
+        const old = dates.find((d) => Date.parse(d.at) < Date.parse(h.date) - HOUR)!;
         score *= 0.5;
         reasons.push(
           `The org's ${describeComponent(old.c.type, old.c.name)} last changed ${day(old.at)}, before this change, so it may not be deployed there.`,
         );
+      } else if (!known) {
+        reasons.push(
+          `The errors show up from the start of the data read (${day(start)}), so when they began isn't known.`,
+        );
       } else if (dates.length) {
         const latest = dates.sort((a, b) => (a.at < b.at ? 1 : -1))[0]!;
-        if (incident.firstSeen >= latest.at) {
+        if (incident.firstSeen >= latest.at && latest.at >= start) {
           score += 10;
           reasons.push(
             `The errors started ${since(latest.at, incident.firstSeen)} after ${describeComponent(latest.c.type, latest.c.name)} changed in the org (${day(latest.at)}).`,
           );
         }
-      } else if (Date.parse(incident.firstSeen) - Date.parse(h.date) <= 72 * 3_600_000) {
+      } else if (Date.parse(incident.firstSeen) - Date.parse(h.date) <= 72 * HOUR) {
         score += 10;
         reasons.push(`The errors started ${since(h.date, incident.firstSeen)} after it was merged.`);
       }
@@ -528,6 +632,7 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
   });
 
   const dates = history.changes.map((h) => h.date).sort();
+  const partial = history.changes.filter((h) => h.changes.length > MAX_ANALYSED).length;
   return {
     ...collection,
     incidents,
@@ -536,6 +641,7 @@ export function traceIncidents(opts: TraceOptions): IncidentReport {
       changes: history.changes.length,
       ...(dates.length ? { from: dates[0], to: dates.at(-1) } : {}),
       shallow: history.shallow,
+      ...(partial ? { partial } : {}),
     },
   };
 }

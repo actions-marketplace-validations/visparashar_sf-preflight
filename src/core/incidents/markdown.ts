@@ -25,6 +25,9 @@ export function incidentsToMarkdown(r: IncidentReport): string {
   const read = r.sources.filter((s) => s.status === "ok").map((s) => `${s.label} (${s.events})`);
   const missing = r.sources.filter((s) => s.status !== "ok");
   if (read.length) out.push(`Read: ${read.join(" · ")}.`);
+  for (const s of r.sources) {
+    if (s.status === "ok" && s.note) out.push(`ℹ️ ${s.label}: ${s.note}.`);
+  }
   for (const s of missing) {
     out.push(
       `${s.status === "unavailable" ? "Not available" : "⚠️ Couldn't read"}: ${s.label}${s.note ? ` (${s.note})` : ""}.`,
@@ -39,6 +42,12 @@ export function incidentsToMarkdown(r: IncidentReport): string {
   );
   if (r.history.shallow) {
     out.push("", "⚠️ The repository is a shallow clone, so older changes may be missing (fetch the full history).");
+  }
+  if (r.history.partial) {
+    out.push(
+      "",
+      `ℹ️ ${r.history.partial} large change${r.history.partial === 1 ? " has" : "s have"} too many components to analyse each one's blast radius; the rest were checked for direct evidence only.`,
+    );
   }
   if (!r.incidents.length) return out.join("\n");
 
@@ -67,7 +76,9 @@ export function incidentsToMarkdown(r: IncidentReport): string {
       out.push(
         `- **${changeLabel(s)}** ${s.change.subject} (${s.change.date.slice(0, 10)}) · ${s.confidence} confidence`,
         ...s.reasons.map((x) => `  - ${x}`),
-        `  - Partial rollback: \`${rollbackCommand(s)}\``,
+        s.components.length
+          ? `  - Partial rollback: \`${rollbackCommand(s)}\``
+          : "  - The error doesn't point at a component of this change directly: review the change before rolling anything back.",
       );
     }
   });

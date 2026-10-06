@@ -158,8 +158,11 @@ export interface ErrorSignature {
   exceptionType?: string;
   /** Salesforce status code, e.g. "FIELD_CUSTOM_VALIDATION_EXCEPTION" (the innermost one). */
   statusCode?: string;
-  /** Validation rule ("Object.Rule") whose error message the error contains. */
-  validationRule?: string;
+  /**
+   * Validation rules ("Object.Rule") whose error message the error is. Usually one; several when
+   * rules share a message.
+   */
+  validationRules: string[];
   /** Known fields the message names ("Object.Field" when the object is known). */
   fields: string[];
   /** Known Apex triggers the message names, e.g. "ContactTrigger: execution of AfterUpdate". */
@@ -202,6 +205,36 @@ export function mergeVocabulary(a: ErrorVocabulary, b: Partial<ErrorVocabulary>)
 const EXCEPTION_TYPE = /\b((?:System|[A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*Exception)\b/;
 const IDENT = /[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)?/g;
 
+const CUSTOM_VALIDATION = "field_custom_validation_exception";
+
+/**
+ * Validation rules whose message follows FIELD_CUSTOM_VALIDATION_EXCEPTION in the text. The message
+ * must be the whole message: followed by the end, by ": [fields]" or ". You can look up…", or, when
+ * it ends a sentence itself, by more text. A rule whose message is a prefix of another matching
+ * rule's message is dropped.
+ */
+function ruleMessagesIn(text: string, vocab: ErrorVocabulary): string[] {
+  const lower = norm(text);
+  const found = new Map<string, string>();
+  for (let i = lower.indexOf(CUSTOM_VALIDATION); i !== -1; i = lower.indexOf(CUSTOM_VALIDATION, i + 1)) {
+    const rest = lower
+      .slice(i + CUSTOM_VALIDATION.length, i + CUSTOM_VALIDATION.length + 2000)
+      .replace(/^\s?[,:]\s?/, "");
+    for (const v of vocab.validationRules) {
+      const m = norm(v.message);
+      if (!m || !rest.startsWith(m)) continue;
+      const after = rest.slice(m.length);
+      const sentence = /[.!?]$/.test(m) && (after === "" || after[0] === " ");
+      if (sentence || after === "" || /^\s?[:;.)\]]/.test(after)) found.set(v.name, m);
+    }
+  }
+  const messages = [...found.values()];
+  return [...found]
+    .filter(([, m]) => !messages.some((o) => o !== m && o.length > m.length && o.startsWith(m)))
+    .map(([name]) => name)
+    .sort();
+}
+
 /** Classify an error message. The message is only read, never returned. */
 export function classifyError(
   message: string | undefined,
@@ -219,12 +252,7 @@ export function classifyError(
     (t): t is string => !!t && /^[A-Za-z_][A-Za-z0-9_.]{0,120}Exception$/.test(t),
   );
 
-  let validationRule: string | undefined;
-  if (category === "validation" || /FIELD_CUSTOM_VALIDATION_EXCEPTION/.test(text)) {
-    const haystack = norm(text);
-    const matches = vocab.validationRules.filter((v) => haystack.includes(norm(v.message)));
-    validationRule = matches.sort((a, b) => b.message.length - a.message.length)[0]?.name;
-  }
+  const validationRules = ruleMessagesIn(text, vocab);
 
   // Field names: qualified names and custom fields anywhere, bare names only in "[A, B]" lists or
   // quoted after "column" (where Salesforce puts them). Only names the project knows are kept.
@@ -268,7 +296,7 @@ export function classifyError(
     category,
     ...(type ? { exceptionType: type } : {}),
     ...(statusCode ? { statusCode } : {}),
-    ...(validationRule ? { validationRule } : {}),
+    validationRules,
     fields: [...fields].sort(),
     triggers: [...triggers].sort(),
   };
@@ -278,10 +306,12 @@ export function classifyError(
 export function describeSignature(s: ErrorSignature): string {
   const parts = [CATEGORY_LABEL[s.category]];
   const details: string[] = [];
-  if (s.validationRule) details.push(`validation rule \`${s.validationRule}\``);
+  const rules = s.validationRules.map((r) => `\`${r}\``);
+  if (rules.length === 1) details.push(`validation rule ${rules[0]}`);
+  else if (rules.length) details.push(`one of validation rules ${rules.join(", ")}`);
   if (s.fields.length) details.push(s.fields.map((f) => `\`${f}\``).join(", "));
   const code = s.statusCode ?? s.exceptionType;
-  if (code && !(s.category === "validation" && s.validationRule)) details.push(code);
+  if (code && !(s.category === "validation" && rules.length)) details.push(code);
   if (details.length) parts.push(`(${details.join("; ")})`);
   return parts.join(" ");
 }

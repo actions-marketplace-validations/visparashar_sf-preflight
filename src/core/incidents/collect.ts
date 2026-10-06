@@ -49,6 +49,8 @@ export interface SourceStatus {
   /** Errors read from this source. */
   events: number;
   note?: string;
+  /** The period the source's data covers, when it covers less than the window. */
+  coverage?: { from: string; to: string };
 }
 
 export interface IncidentCollection {
@@ -75,6 +77,15 @@ const UNAVAILABLE =
   /not supported|INVALID_TYPE|does not exist|no such column|insufficient|not found|isn't a sf command|is not a sf command|not a valid command|requested resource/i;
 
 const clip = (s: string, n = 200) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** Record IDs (15 or 18 characters with a digit) and API paths out of messages that end up in notes. */
+const scrub = (s: string) =>
+  redactEmails(s)
+    .replace(/\/services\/\S*/g, "<url>")
+    .replace(/\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?\b/g, "<id>");
+const noteOf = (err: unknown) => clip(scrub((err as Error).message ?? String(err)));
+const ROW_CAP = 2000;
+const capped = (rows: unknown[], what: string) =>
+  rows.length >= ROW_CAP ? [`only the newest ${ROW_CAP} ${what} were read`] : [];
 const isId = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9]{15,18}$/.test(v);
 const ident = (v: unknown, max = 120): string | undefined =>
   typeof v === "string" && new RegExp(`^[A-Za-z][A-Za-z0-9_.]{0,${max}}$`).test(v) ? v : undefined;
@@ -93,15 +104,25 @@ export function parseSince(value: string, now = new Date()): Date {
     if (hours < 1 || hours > 24 * 366) throw new Error(`--since must be between 1h and 366d: ${value}`);
     return new Date(now.getTime() - hours * 3_600_000);
   }
-  const d = /^\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(value.trim()) ? new Date(value) : undefined;
+  // Times without an offset are UTC, as the reports are.
+  const v = value.trim();
+  const m2 = /^(\d{4}-\d{2}-\d{2})(?:T([\d:.]+)(Z|[+-]\d{2}:?\d{2})?)?$/.exec(v);
+  const d = m2 ? new Date(m2[2] ? `${m2[1]}T${m2[2]}${m2[3] ?? "Z"}` : `${m2[1]}T00:00:00Z`) : undefined;
   if (!d || Number.isNaN(d.getTime())) throw new Error(`--since takes a duration (7d, 24h, 2w) or a date: ${value}`);
   return d;
+}
+
+interface Collected {
+  events: IncidentEvent[];
+  notes?: string[];
+  coverage?: { from: string; to: string };
 }
 
 interface Ctx {
   run: SfRunner;
   org: string;
   since: Date;
+  until: Date;
   vocab: ErrorVocabulary;
   model: OrgModel;
 }
@@ -138,7 +159,7 @@ function event(
 // Failed flow interviews
 // ---------------------------------------------------------------------------------------------
 
-function flowErrors(ctx: Ctx): IncidentEvent[] {
+function flowErrors(ctx: Ctx): Collected {
   const fields = describeFields(ctx, "FlowInterview");
   const status = fields.find((f) => f.name === "InterviewStatus");
   if (!status?.picklistValues?.some((p) => p.value === "Error")) {
@@ -152,15 +173,25 @@ function flowErrors(ctx: Ctx): IncidentEvent[] {
   const rows = query(
     ctx.run,
     ctx.org,
-    `SELECT ${select.join(", ")} FROM FlowInterview WHERE InterviewStatus = 'Error' AND CreatedDate >= ${soqlDateTime(ctx.since)} ORDER BY CreatedDate DESC LIMIT 2000`,
+    `SELECT ${select.join(", ")} FROM FlowInterview WHERE InterviewStatus = 'Error' AND CreatedDate >= ${soqlDateTime(ctx.since)} ORDER BY CreatedDate DESC LIMIT ${ROW_CAP}`,
   );
-  const names = flowNames(ctx, rows.map((r) => r.FlowVersionViewId).filter(isId));
+  const { names, failed } = flowNames(ctx, rows.map((r) => r.FlowVersionViewId).filter(isId));
   const labels = [...ctx.model.flows.values()].filter((f) => f.label).sort((a, b) => b.label!.length - a.label!.length);
-  return rows.map((r) => {
+  // The interview label starts with the flow's label ("Close Deal 10/6/2026, 9:30 AM") unless the
+  // flow customises it; only a fallback when the flow's name couldn't be looked up.
+  const byLabel = (label: string) =>
+    failed
+      ? labels.find((f) => {
+          if (!label.startsWith(f.label!)) return false;
+          const rest = label.slice(f.label!.length);
+          // Exactly the label, or the label and the start date ("10/6/2026", "06.10.2026", "2026-10-06").
+          return rest === "" || /^\s+\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\b/.test(rest);
+        })?.name
+      : undefined;
+  const events = rows.map((r) => {
     const id = isId(r.FlowVersionViewId) ? r.FlowVersionViewId.slice(0, 15) : undefined;
     const label = typeof r.InterviewLabel === "string" ? r.InterviewLabel : "";
-    // The interview label starts with the flow's label unless the flow customises it.
-    const name = (id && names.get(id)) ?? labels.find((f) => label.startsWith(f.label!))?.name ?? "(unknown flow)";
+    const name = (id && names.get(id)) ?? byLabel(label) ?? "(unknown flow)";
     const element = ident(r.CurrentElement, 80);
     const signature = classifyError(errorField ? (r[errorField] as string | undefined) : undefined, ctx.vocab);
     return event(
@@ -171,11 +202,19 @@ function flowErrors(ctx: Ctx): IncidentEvent[] {
       iso(r.CreatedDate) ?? ctx.since.toISOString(),
     );
   });
+  return {
+    events,
+    notes: [
+      ...capped(rows, "failed interviews"),
+      ...(errorField ? [] : ["the org doesn't record why interviews failed, so they can't be classified"]),
+    ],
+  };
 }
 
 /** Flow API names for flow version IDs, from the Tooling API (15-character keys). */
-function flowNames(ctx: Ctx, ids: string[]): Map<string, string> {
+function flowNames(ctx: Ctx, ids: string[]): { names: Map<string, string>; failed: boolean } {
   const out = new Map<string, string>();
+  let failed = false;
   const unique = [...new Set(ids.map((i) => i.slice(0, 15)))];
   for (let i = 0; i < unique.length; i += 100) {
     const chunk = ids.filter((id) => unique.slice(i, i + 100).includes(id.slice(0, 15)));
@@ -191,10 +230,10 @@ function flowNames(ctx: Ctx, ids: string[]): Map<string, string> {
         if (isId(r.Id) && name) out.set(r.Id.slice(0, 15), name);
       }
     } catch {
-      // Fall back to matching interview labels.
+      failed = true; // fall back to matching interview labels
     }
   }
-  return out;
+  return { names: out, failed };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -267,25 +306,52 @@ function eventLogTime(row: Record<string, string>): string | undefined {
 
 const LOG_FILE_URL = /^\/services\/data\/v\d{2,3}\.\d\/sobjects\/EventLogFile\/[A-Za-z0-9]{15,18}\/LogFile$/;
 
-function apexErrors(ctx: Ctx): IncidentEvent[] {
-  const day = `${ctx.since.toISOString().slice(0, 10)}T00:00:00Z`;
-  const soql = (withInterval: boolean) =>
-    `SELECT Id, LogDate, ${withInterval ? "Interval, " : ""}LogFile FROM EventLogFile WHERE EventType = 'ApexUnexpectedException' AND LogDate >= ${day} ORDER BY LogDate DESC LIMIT 60`;
-  let files: QueryRecord[];
+const DAY = 86_400_000;
+const HOUR = 3_600_000;
+/** Event log files read per interval at most (newest first). */
+const MAX_LOG_FILES = 120;
+
+/**
+ * Unhandled Apex exceptions from the event log. Every org gets a daily file (published the next day
+ * and kept briefly); orgs with Event Monitoring also get hourly files, kept longer. Daily files are
+ * used for the days they cover and hourly files after the last daily one, so nothing counts twice
+ * and today's errors aren't missed.
+ */
+function apexErrors(ctx: Ctx): Collected {
+  const sinceDay = `${ctx.since.toISOString().slice(0, 10)}T00:00:00Z`;
+  const select = (where: string) =>
+    `SELECT Id, LogDate, LogFile FROM EventLogFile WHERE EventType = 'ApexUnexpectedException' AND ${where} ORDER BY LogDate DESC LIMIT ${MAX_LOG_FILES}`;
+  const unavailable = (err: unknown): never => {
+    if (UNAVAILABLE.test((err as Error).message)) throw new Unavailable("the org's event log files aren't available");
+    throw err;
+  };
+  let daily: QueryRecord[] = [];
+  let hourly: QueryRecord[] = [];
+  let intervals = true;
   try {
-    files = query(ctx.run, ctx.org, soql(true));
+    daily = query(ctx.run, ctx.org, select(`Interval = 'Daily' AND LogDate >= ${sinceDay}`));
   } catch (err) {
-    if (!/interval/i.test((err as Error).message)) {
-      if (UNAVAILABLE.test((err as Error).message)) throw new Unavailable("the org's event log files aren't available");
-      throw err;
+    if (!/interval/i.test((err as Error).message)) unavailable(err);
+    intervals = false; // an older API version: every file is daily
+    try {
+      daily = query(ctx.run, ctx.org, select(`LogDate >= ${sinceDay}`));
+    } catch (e) {
+      unavailable(e);
     }
-    files = query(ctx.run, ctx.org, soql(false));
   }
-  // Orgs with Event Monitoring have hourly files too; use one interval so nothing counts twice.
-  const daily = files.filter((f) => f.Interval === "Daily");
-  const use = daily.length ? daily : files.filter((f) => f.Interval === undefined || f.Interval === "Hourly");
+  const starts = (rows: QueryRecord[]) => rows.map((f) => iso(f.LogDate)).filter((d): d is string => !!d);
+  const dailyEnd = Math.max(Date.parse(sinceDay), ...starts(daily).map((d) => Date.parse(d) + DAY));
+  if (intervals) {
+    const from = new Date(Math.max(dailyEnd, Math.floor(ctx.since.getTime() / HOUR) * HOUR));
+    try {
+      hourly = query(ctx.run, ctx.org, select(`Interval = 'Hourly' AND LogDate >= ${soqlDateTime(from)}`));
+    } catch {
+      hourly = []; // hourly files need Event Monitoring
+    }
+  }
+  const files = [...daily.map((f) => ({ f, length: DAY })), ...hourly.map((f) => ({ f, length: HOUR }))];
   const events: IncidentEvent[] = [];
-  for (const f of use) {
+  for (const { f } of files) {
     const url = typeof f.LogFile === "string" ? f.LogFile : "";
     if (!LOG_FILE_URL.test(url)) continue;
     let csv: string;
@@ -295,7 +361,7 @@ function apexErrors(ctx: Ctx): IncidentEvent[] {
       if (UNAVAILABLE.test((err as Error).message)) {
         throw new Unavailable("reading event log files needs a Salesforce CLI with `sf api request rest`");
       }
-      throw err;
+      throw new Error(`couldn't download an event log file: ${noteOf(err)}`);
     }
     for (const row of parseCsv(csv)) {
       const at = eventLogTime(row);
@@ -317,20 +383,55 @@ function apexErrors(ctx: Ctx): IncidentEvent[] {
       );
     }
   }
-  return events;
+
+  const notes: string[] = [];
+  if (daily.length >= MAX_LOG_FILES || hourly.length >= MAX_LOG_FILES) {
+    notes.push(`only the newest ${MAX_LOG_FILES} event log files were read`);
+  }
+  if (!files.length) {
+    notes.push(
+      "no event log files cover the window yet: Salesforce publishes the daily file the next day (hourly files need Event Monitoring)",
+    );
+    return { events, notes };
+  }
+  const from = new Date(Math.min(...files.map(({ f }) => Date.parse(iso(f.LogDate) ?? "")).filter(Number.isFinite)));
+  const to = new Date(
+    Math.max(...files.map(({ f, length }) => Date.parse(iso(f.LogDate) ?? "") + length).filter(Number.isFinite)),
+  );
+  const coverage = {
+    from: new Date(Math.max(from.getTime(), ctx.since.getTime())).toISOString(),
+    to: to.toISOString(),
+  };
+  if (to.getTime() < ctx.until.getTime() - 2 * HOUR) {
+    notes.push(
+      `the event log covers errors up to ${coverage.to.slice(0, 16).replace("T", " ")} UTC; newer ones appear when Salesforce publishes the next file`,
+    );
+  }
+  if (Date.parse(coverage.from) > ctx.since.getTime() + HOUR) {
+    notes.push(
+      `the event log starts ${coverage.from.slice(0, 16).replace("T", " ")} UTC (the org keeps it for a limited time)`,
+    );
+  }
+  return { events, notes, coverage };
 }
 
 // ---------------------------------------------------------------------------------------------
 // Failed asynchronous Apex
 // ---------------------------------------------------------------------------------------------
 
-function asyncApexErrors(ctx: Ctx): IncidentEvent[] {
+/**
+ * Jobs that run the org's code. Batch workers (`BatchApexWorker`) repeat their batch job's failure,
+ * and test runs aren't production errors.
+ */
+const ASYNC_JOB_TYPES = ["Future", "Queueable", "BatchApex", "ScheduledApex"];
+
+function asyncApexErrors(ctx: Ctx): Collected {
   const rows = query(
     ctx.run,
     ctx.org,
-    `SELECT ApexClass.Name, ApexClass.NamespacePrefix, JobType, ExtendedStatus, CreatedDate, CompletedDate FROM AsyncApexJob WHERE CreatedDate >= ${soqlDateTime(ctx.since)} AND (Status = 'Failed' OR NumberOfErrors > 0) ORDER BY CreatedDate DESC LIMIT 2000`,
+    `SELECT ApexClass.Name, ApexClass.NamespacePrefix, JobType, ExtendedStatus, CreatedDate, CompletedDate FROM AsyncApexJob WHERE CreatedDate >= ${soqlDateTime(ctx.since)} AND JobType IN (${ASYNC_JOB_TYPES.map((t) => `'${t}'`).join(", ")}) AND (Status = 'Failed' OR NumberOfErrors > 0) ORDER BY CreatedDate DESC LIMIT ${ROW_CAP}`,
   );
-  return rows.map((r) => {
+  const events = rows.map((r) => {
     const name = ident(field(r, "ApexClass.Name"), 80);
     const ns = ident(field(r, "ApexClass.NamespacePrefix"), 15);
     const known = name ? ctx.model.classes.get(key(name)) : undefined;
@@ -340,6 +441,7 @@ function asyncApexErrors(ctx: Ctx): IncidentEvent[] {
     const at = iso(r.CompletedDate) ?? iso(r.CreatedDate) ?? ctx.since.toISOString();
     return event("async-apex", component, [], classifyError(r.ExtendedStatus as string | undefined, ctx.vocab), at);
   });
+  return { events, notes: capped(rows, "failed jobs") };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -348,7 +450,7 @@ function asyncApexErrors(ctx: Ctx): IncidentEvent[] {
 
 const AGENT_STEP_DMO = "ssot__AiAgentInteractionStep__dlm";
 
-function agentErrors(ctx: Ctx): IncidentEvent[] {
+function agentErrors(ctx: Ctx): Collected {
   let fields: { name: string; type: string }[];
   try {
     fields = describeFields(ctx, AGENT_STEP_DMO);
@@ -360,6 +462,7 @@ function agentErrors(ctx: Ctx): IncidentEvent[] {
   const nameField = find(/^ssot__Name__c$/);
   const errorField = find(/ErrorMessageText/i);
   const topicField = find(/TopicApiName/i);
+  const typeField = find(/StepType/i);
   const timeField =
     find(/^ssot__StartTimestamp__c$/) ??
     fields.find((f) => /datetime/i.test(f.type) && /start|created/i.test(f.name))?.name;
@@ -367,11 +470,21 @@ function agentErrors(ctx: Ctx): IncidentEvent[] {
   const rows = query(
     ctx.run,
     ctx.org,
-    `SELECT ${[nameField, topicField, errorField, timeField].filter(Boolean).join(", ")} FROM ${AGENT_STEP_DMO} WHERE ${errorField} != null AND ${timeField} >= ${soqlDateTime(ctx.since)} LIMIT 2000`,
+    // "<>" rather than "!=": Windows quoting can't pass "!" to the CLI.
+    `SELECT ${[nameField, topicField, typeField, errorField, timeField].filter(Boolean).join(", ")} FROM ${AGENT_STEP_DMO} WHERE ${errorField} <> null AND ${timeField} >= ${soqlDateTime(ctx.since)} LIMIT ${ROW_CAP}`,
   );
-  return rows.flatMap((r) => {
+  let unnamed = 0;
+  const events = rows.flatMap((r) => {
+    // Only action steps: model and topic-selection steps aren't agent actions.
+    const type = typeField && typeof r[typeField] === "string" ? (r[typeField] as string) : "";
+    if (type && !/action|function/i.test(type)) return [];
+    const message = typeof r[errorField] === "string" ? (r[errorField] as string) : "";
+    if (!message.trim()) return [];
     const name = ident(r[nameField], 80);
-    if (!name) return [];
+    if (!name) {
+      unnamed++;
+      return [];
+    }
     const topic = topicField ? ident(r[topicField], 80) : undefined;
     const at = iso(r[timeField]) ?? ctx.since.toISOString();
     return [
@@ -379,11 +492,18 @@ function agentErrors(ctx: Ctx): IncidentEvent[] {
         "agent",
         { kind: "AgentAction", name, ...(topic ? { element: topic } : {}) },
         [],
-        classifyError(r[errorField] as string | undefined, ctx.vocab),
+        classifyError(message, ctx.vocab),
         at,
       ),
     ];
   });
+  return {
+    events,
+    notes: [
+      ...capped(rows, "failed steps"),
+      ...(unnamed ? [`${unnamed} failed step${unnamed === 1 ? "" : "s"} without an action API name skipped`] : []),
+    ],
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -461,7 +581,7 @@ export function groupIncidents(events: IncidentEvent[]): Incident[] {
       s.category,
       s.statusCode ?? "",
       s.exceptionType ?? "",
-      s.validationRule ?? "",
+      s.validationRules,
       s.fields,
     ]);
     const g = groups.get(k);
@@ -494,7 +614,7 @@ export interface CollectOptions {
   imported?: { raw: unknown; file: string };
 }
 
-const COLLECTORS: Record<Exclude<IncidentSource, "imported">, (ctx: Ctx) => IncidentEvent[]> = {
+const COLLECTORS: Record<Exclude<IncidentSource, "imported">, (ctx: Ctx) => Collected> = {
   flow: flowErrors,
   apex: apexErrors,
   "async-apex": asyncApexErrors,
@@ -513,15 +633,24 @@ export function collectIncidents(opts: CollectOptions): IncidentCollection {
     try {
       alias = (run(["org", "display", "--target-org", org]) as { alias?: unknown } | undefined)?.alias;
     } catch (err) {
-      throw new SfError(`Could not use org "${orgLabel(org)}": ${clip(redactEmails((err as Error).message))}`);
+      throw new SfError(`Could not use org "${orgLabel(org)}": ${noteOf(err)}`);
     }
     label = orgLabel(org, alias);
-    const ctx: Ctx = { run, org, since: opts.since, vocab: opts.vocab, model: opts.model };
+    const ctx: Ctx = { run, org, since: opts.since, until, vocab: opts.vocab, model: opts.model };
     for (const source of opts.sources ?? (Object.keys(COLLECTORS) as Exclude<IncidentSource, "imported">[])) {
       try {
-        const found = COLLECTORS[source](ctx).filter((e) => e.lastSeen <= until.toISOString());
+        const collected = COLLECTORS[source](ctx);
+        const found = collected.events.filter((e) => e.lastSeen <= until.toISOString());
         events.push(...found);
-        sources.push({ source, label: SOURCE_LABEL[source], status: "ok", events: found.length });
+        const notes = (collected.notes ?? []).filter(Boolean);
+        sources.push({
+          source,
+          label: SOURCE_LABEL[source],
+          status: "ok",
+          events: found.length,
+          ...(notes.length ? { note: clip(scrub(notes.join("; ")), 400) } : {}),
+          ...(collected.coverage ? { coverage: collected.coverage } : {}),
+        });
       } catch (err) {
         const unavailable = err instanceof Unavailable;
         sources.push({
@@ -529,7 +658,7 @@ export function collectIncidents(opts: CollectOptions): IncidentCollection {
           label: SOURCE_LABEL[source],
           status: unavailable ? "unavailable" : "error",
           events: 0,
-          note: clip(redactEmails((err as Error).message)),
+          note: noteOf(err),
         });
       }
     }
@@ -578,7 +707,7 @@ export function componentDatesInOrg(
     try {
       fn();
     } catch (err) {
-      errors.push(`${label}: ${clip(redactEmails((err as Error).message))}`);
+      errors.push(`${label}: ${noteOf(err)}`);
     }
   };
   for (const [type, sobject] of [
