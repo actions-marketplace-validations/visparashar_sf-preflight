@@ -18,6 +18,9 @@ inputs:
   config:
     description: "Policy file (rule overrides, ignores, quality gate). Defaults to .preflight.json in the project, then the repository root."
     default: ""
+  policy-from-base:
+    description: "On pull requests, read the policy from the base branch, so a pull request can't loosen the gate it's checked against. Set to false to use the pull request's own policy."
+    default: "true"
   evidence:
     description: "Write the change's evidence pack and upload it as a workflow artifact."
     default: "true"
@@ -188,15 +191,36 @@ runs:
             core.info(`Could not read pull request reviews (${err.message}), so approvals are unknown.`);
             return;
           }
+          // Who wrote the change can't approve it: the pull request's author and every commit author.
+          const authors = new Set([pr.user.login]);
+          try {
+            const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: pr.number, per_page: 100 });
+            for (const c of commits) {
+              if (c.author?.login) authors.add(c.author.login);
+              if (c.committer?.login && c.committer.login !== "web-flow") authors.add(c.committer.login);
+            }
+          } catch (err) {
+            core.info(`Could not list the pull request's commits (${err.message}); only its author is excluded.`);
+          }
           // The latest decisive review per reviewer counts; comments don't change it, dismissals do.
           const latest = new Map();
           for (const r of reviews) {
-            if (!r.user || r.user.login === pr.user.login || r.state === "COMMENTED" || r.state === "PENDING") continue;
+            if (!r.user || r.state === "COMMENTED" || r.state === "PENDING") continue;
             latest.set(r.user.login, r);
           }
+          const trusted = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
           const approvals = [...latest.values()]
             .filter((r) => r.state === "APPROVED")
+            // People with access to the repository, approving the latest commit, who didn't write it.
+            .filter((r) => trusted.has(r.author_association))
+            .filter((r) => r.user.type !== "Bot")
+            .filter((r) => r.commit_id === pr.head.sha)
+            .filter((r) => !authors.has(r.user.login))
             .map((r) => ({ reviewer: r.user.login, submittedAt: r.submitted_at }));
+          core.info(`${approvals.length} approval(s) count: ${approvals.map((a) => a.reviewer).join(", ") || "none"}.`);
+          core.setOutput("pr_number", String(pr.number));
+          core.setOutput("pr_head_sha", pr.head.sha);
+          core.setOutput("pr_url", pr.html_url);
           fs.writeFileSync(process.env.APPROVALS_FILE, JSON.stringify(approvals));
           core.setOutput("file", process.env.APPROVALS_FILE);
 
@@ -213,17 +237,27 @@ runs:
         CONFIG: ${{ inputs.config }}
         APPROVALS: ${{ steps.approvals.outputs.file }}
         EVIDENCE: ${{ inputs.evidence }}
+        POLICY_FROM_BASE: ${{ inputs.policy-from-base }}
+        IS_PR: ${{ github.event.pull_request && 'true' || '' }}
+        PR_NUMBER: ${{ steps.approvals.outputs.pr_number }}
+        PR_HEAD_SHA: ${{ steps.approvals.outputs.pr_head_sha }}
+        PR_URL: ${{ steps.approvals.outputs.pr_url }}
       run: |
         set -euo pipefail
         OUT="$RUNNER_TEMP/sf-preflight"
         mkdir -p "$OUT"
-        EVIDENCE_ARGS=()
-        if [ "$EVIDENCE" = "true" ]; then EVIDENCE_ARGS=(--evidence-out "$OUT/evidence.json"); fi
+        ARGS=()
+        if [ "$EVIDENCE" = "true" ]; then ARGS+=(--evidence-out "$OUT/evidence.json"); fi
+        # On pull requests the policy comes from the base branch, so the change can't loosen it.
+        if [ -n "$IS_PR" ] && [ "$POLICY_FROM_BASE" = "true" ]; then ARGS+=(--config-ref "$BASE"); fi
+        if [ -n "$PR_NUMBER" ]; then
+          ARGS+=(--pr-number "$PR_NUMBER" --pr-head-sha "$PR_HEAD_SHA" --pr-url "$PR_URL")
+        fi
         # Exit code 2 means the gate failed: report first, fail in the last step.
         set +e
         $RUN analyze --project "$PROJECT" --base "$BASE" --depth "$DEPTH" ${ORG:+--org "$ORG"} \
           --gate ${FAIL_ON:+--fail-on "$FAIL_ON"} ${CONFIG:+--config "$CONFIG"} ${APPROVALS:+--approvals "$APPROVALS"} \
-          "${EVIDENCE_ARGS[@]}" \
+          ${ARGS[@]+"${ARGS[@]}"} \
           --format md --out "$OUT/report.md" --json-out "$OUT/report.json" --sarif-out "$OUT/report.sarif"
         code=$?
         set -e
@@ -252,7 +286,7 @@ runs:
             `high=${r.summary.findingsBySeverity.high}`,
             `medium=${r.summary.findingsBySeverity.medium}`,
             `ai_assisted_commits=${r.provenance ? r.provenance.aiAssistedCommits : 0}`,
-            `gate=${r.gate ? r.gate.status : "pass"}`,
+            `gate=${r.gate ? r.gate.status : "fail"}`,
             `evidence_digest=${e ? e.digest.value : ""}`,
           ];
           require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, out.join("\n") + "\n");
@@ -268,12 +302,19 @@ runs:
 
     - name: Sign evidence
       id: attest
-      if: inputs.attest == 'true' && steps.analyze.outputs.evidence != ''
+      # Fork pull requests get no OIDC token, so they can't sign; the rest of the run still reports.
+      if: inputs.attest == 'true' && steps.analyze.outputs.evidence != '' && !github.event.pull_request.head.repo.fork
+      continue-on-error: true
       uses: actions/attest@v4
       with:
         subject-path: ${{ steps.analyze.outputs.evidence }}
         predicate-type: https://github.com/visparashar/sf-preflight/evidence/v1
         predicate-path: ${{ steps.analyze.outputs.evidence }}
+
+    - name: Warn when the evidence isn't signed
+      if: inputs.attest == 'true' && steps.analyze.outputs.evidence != '' && steps.attest.outcome != 'success'
+      shell: bash
+      run: echo "::warning title=sf-preflight::The evidence pack was not signed (fork pull request, or missing id-token/attestations permissions).
 
     - name: Comment on pull request
       if: inputs.comment == 'true' && github.event.pull_request

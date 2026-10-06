@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { summarizeFindings } from "./analyze.js";
-import { gitRoot } from "./changes.js";
+import { gitRoot, gitShow } from "./changes.js";
 import { RULES } from "./rules.js";
 import type { AnalysisResult, Severity } from "./types.js";
 
@@ -113,20 +114,78 @@ export function parseConfig(json: unknown, file = CONFIG_FILE): PreflightConfig 
   return config;
 }
 
-/**
- * Load `.preflight.json` from an explicit path, else the project directory, else the git root.
- * Returns an empty config when there is none.
- */
-export function loadConfig(projectDir: string, explicit?: string): { config: PreflightConfig; file?: string } {
-  const candidates = explicit
+const configCandidates = (projectDir: string, explicit?: string) =>
+  explicit
     ? [path.resolve(explicit)]
     : [
         path.join(projectDir, CONFIG_FILE),
         ...(() => {
           const root = gitRoot(projectDir);
-          return root ? [path.join(root, CONFIG_FILE)] : [];
+          return root && path.resolve(root) !== path.resolve(projectDir) ? [path.join(root, CONFIG_FILE)] : [];
         })(),
       ];
+
+const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
+
+export interface LoadedPolicy {
+  config: PreflightConfig;
+  /** The policy file, relative to the project, e.g. ".preflight.json" or "../.preflight.json". */
+  file?: string;
+  /** The git ref it was read from, when not the checkout. */
+  ref?: string;
+  sha256?: string;
+  /** Set when the policy was read from a git ref and the checked-out copy differs. */
+  warning?: string;
+}
+
+/**
+ * Load the policy. With `ref`, it's read from git at that ref (for example the pull request's
+ * base branch), so a change can't loosen the policy it's checked against.
+ */
+export function loadPolicy(projectDir: string, opts: { explicit?: string; ref?: string } = {}): LoadedPolicy {
+  if (!opts.ref) {
+    const { config, file } = loadConfig(projectDir, opts.explicit);
+    if (!file) return { config };
+    const rel = path.relative(projectDir, file).split(path.sep).join("/") || CONFIG_FILE;
+    return { config, file: rel, sha256: sha256(readFileSync(file)) };
+  }
+  for (const abs of configCandidates(projectDir, opts.explicit)) {
+    const rel = path.relative(projectDir, abs).split(path.sep).join("/");
+    const content = gitShow(projectDir, opts.ref, rel);
+    const local = existsSync(abs) ? readFileSync(abs, "utf8") : undefined;
+    if (content === undefined) {
+      if (local === undefined) continue;
+      return {
+        config: {},
+        warning: `This change adds ${rel}; it takes effect once merged. This run used the default policy, as at ${opts.ref}.`,
+      };
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(content);
+    } catch (err) {
+      throw new Error(`${rel} at ${opts.ref}: invalid JSON (${(err as Error).message})`);
+    }
+    return {
+      config: parseConfig(json, `${rel} at ${opts.ref}`),
+      file: rel,
+      ref: opts.ref,
+      sha256: sha256(content),
+      ...(local !== undefined && local !== content
+        ? { warning: `This change edits ${rel}; this run used the version at ${opts.ref}.` }
+        : {}),
+    };
+  }
+  if (opts.explicit) throw new Error(`Config file not found at ${opts.ref}: ${opts.explicit}`);
+  return { config: {} };
+}
+
+/**
+ * Load `.preflight.json` from an explicit path, else the project directory, else the git root.
+ * Returns an empty config when there is none.
+ */
+export function loadConfig(projectDir: string, explicit?: string): { config: PreflightConfig; file?: string } {
+  const candidates = configCandidates(projectDir, explicit);
   for (const file of candidates) {
     if (!existsSync(file)) {
       if (explicit) throw new Error(`Config file not found: ${explicit}`);
@@ -157,10 +216,13 @@ export function globMatch(pattern: string, file: string): boolean {
     if (cached !== undefined) return cached;
     let r: boolean;
     if (i === p.length) r = j === f.length;
-    else if (p.startsWith("**", i)) {
-      // "**/" also matches no folders at all.
-      const next = p[i + 2] === "/" ? i + 3 : i + 2;
-      r = match(next, j) || (j < f.length && match(i, j + 1));
+    else if (p.startsWith("**/", i)) {
+      // "**/" matches zero or more whole folders: skip it, or consume the folder that starts at j.
+      const slash = f.indexOf("/", j);
+      r = match(i + 3, j) || (slash >= 0 && match(i, slash + 1));
+    } else if (p.startsWith("**", i)) {
+      // A "**" that isn't followed by "/" matches anything, across folders.
+      r = match(i + 2, j) || (j < f.length && match(i, j + 1));
     } else if (p[i] === "*") r = match(i + 1, j) || (j < f.length && f[j] !== "/" && match(i, j + 1));
     else if (p[i] === "?") r = j < f.length && f[j] !== "/" && match(i + 1, j + 1);
     else r = j < f.length && p[i] === f[j] && match(i + 1, j + 1);

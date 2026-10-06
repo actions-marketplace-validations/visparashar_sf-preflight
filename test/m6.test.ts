@@ -14,6 +14,7 @@ import {
   gateToMarkdown,
   globMatch,
   loadConfig,
+  loadPolicy,
   parseApprovals,
   parseConfig,
   run,
@@ -111,7 +112,8 @@ describe("config discovery", () => {
     const project = path.join(dir, "sfdx");
     expect(loadConfig(project).file).toBe(path.join(dir, ".preflight.json"));
     const result = run({ projectDir: project, files: [path.join(project, FIELD)] });
-    expect(result.config).toEqual({ file: "../.preflight.json" });
+    expect(result.config).toMatchObject({ file: "../.preflight.json", ref: undefined });
+    expect(result.config!.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(result.findings.some((f) => f.rule === "recursion-cycle")).toBe(false);
     expect(toMarkdown(result)).toContain("_Policy: `../.preflight.json`_");
     const ignored = run({ projectDir: project, files: [path.join(project, FIELD)], config: false });
@@ -246,7 +248,6 @@ describe("evidence pack", () => {
       version: "9.9.9",
       approvals,
       tests: { tests: [{ method: "a", kind: "bulk", title: "A" }], validation: validation("passed") },
-      configFile: result.config?.file,
     });
   };
 
@@ -358,5 +359,121 @@ describe("JUnit output", () => {
     expect(xml).toContain(">ef</failure>");
     r.findings = [];
     expect(toJunit(r)).toContain('<testcase classname="sf-preflight.findings" name="No findings"></testcase>');
+  });
+});
+
+describe("review fixes", () => {
+  it("matches ** only across whole folders", () => {
+    expect(globMatch("force-app/**/Legacy*", "force-app/main/default/classes/NotLegacyService.cls")).toBe(false);
+    expect(globMatch("force-app/**/Legacy*", "force-app/main/default/classes/LegacyService.cls")).toBe(true);
+    expect(globMatch("**/Foo.cls", "classes/NotFoo.cls")).toBe(false);
+    expect(globMatch("**/Foo.cls", "Foo.cls")).toBe(true);
+    expect(globMatch("**/Foo.cls", "a/b/Foo.cls")).toBe(true);
+    expect(globMatch("a/**", "a/b/c.xml")).toBe(true);
+    expect(globMatch("a/**/z", "a/z")).toBe(true);
+    expect(globMatch("a/**/z", "a/xz")).toBe(false);
+  });
+
+  it("passes the tests check when the change generates no tests, and fails AI approvals on shallow clones", () => {
+    const result = fieldResult();
+    const none = evaluateGate({ result, config: { failOn: "none", requireTestsPassed: true }, testsGenerated: 0 });
+    expect(none.checks.find((c) => c.id === "tests-passed")).toMatchObject({ status: "pass" });
+    const unknown = evaluateGate({ result, config: { failOn: "none", requireTestsPassed: true } });
+    expect(unknown.checks.find((c) => c.id === "tests-passed")).toMatchObject({ status: "fail" });
+    const shallow: AnalysisResult = {
+      ...result,
+      provenance: { range: "a..b", shallow: true, commits: 1, aiAssistedCommits: 0, tools: [], details: [] },
+    };
+    const g = evaluateGate({ result: shallow, config: { failOn: "none", aiAssistedApprovals: 1 }, approvals: [] });
+    expect(g.checks.find((c) => c.id === "ai-approvals")).toMatchObject({ status: "fail" });
+    expect(g.checks.find((c) => c.id === "ai-approvals")!.detail).toContain("shallow clone");
+  });
+
+  it("marks medium findings as JUnit failures when failing on medium", () => {
+    const result = fieldResult();
+    const medium = result.findings.filter((f) => f.severity === "high" || f.severity === "medium").length;
+    expect(toJunit(result, "medium")).toContain(`failures="${medium}"`);
+  });
+
+  it("refuses anything that isn't an evidence pack", () => {
+    expect(verifyEvidence(null)).toBe(false);
+    expect(verifyEvidence([])).toBe(false);
+    expect(verifyEvidence({ digest: { algorithm: "sha256", value: "x" } })).toBe(false);
+  });
+});
+
+describe("policy from a git ref, and evidence hygiene", () => {
+  let repo: string;
+  let project: string;
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=Dev", "-c", "user.email=dev@example.com", ...args], {
+      cwd: repo,
+      stdio: "pipe",
+    })
+      .toString()
+      .trim();
+  beforeAll(() => {
+    repo = mkdtempSync(path.join(tmpdir(), "sf-preflight-m6-ref-"));
+    project = path.join(repo, "sfdx");
+    cpSync(FIXTURE, project, { recursive: true });
+    writeFileSync(path.join(project, ".preflight.json"), JSON.stringify({ gate: { failOn: "high" } }));
+    git("init", "-q", "-b", "main");
+    git("remote", "add", "origin", "https://user:pa/ss@word@github.com/acme/sf-app.git");
+    git("add", ".");
+    git("commit", "-q", "-m", "base");
+    const vr = path.join(project, VR);
+    writeFileSync(vr, readFileSync(vr, "utf8").replace("Closed Won", "Closed  Won"));
+    git("commit", "-q", "-am", "Fix rule, ping jane@example.com");
+  });
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("uses the policy at the ref and says when the change edits it", () => {
+    writeFileSync(path.join(project, ".preflight.json"), JSON.stringify({ gate: { failOn: "none" } }));
+    const fromRef = loadPolicy(project, { ref: "HEAD" });
+    expect(fromRef).toMatchObject({ config: { gate: { failOn: "high" } }, file: ".preflight.json", ref: "HEAD" });
+    expect(fromRef.warning).toBe("This change edits .preflight.json; this run used the version at HEAD.");
+    const result = run({ projectDir: project, base: "HEAD~1", head: "HEAD", configRef: "HEAD" });
+    expect(result.config).toMatchObject({ file: ".preflight.json", ref: "HEAD" });
+    expect(result.warnings).toContain("This change edits .preflight.json; this run used the version at HEAD.");
+    expect(toMarkdown(result)).toContain("_Policy: `.preflight.json` at `HEAD`_");
+    // A policy the change adds doesn't apply until it's merged.
+    rmSync(path.join(project, ".preflight.json"));
+    git("rm", "-q", "--cached", "sfdx/.preflight.json");
+    git("commit", "-q", "-m", "Remove policy");
+    writeFileSync(path.join(project, ".preflight.json"), JSON.stringify({ gate: { failOn: "none" } }));
+    expect(loadPolicy(project, { ref: "HEAD" })).toEqual({
+      config: {},
+      warning:
+        "This change adds .preflight.json; it takes effect once merged. This run used the default policy, as at HEAD.",
+    });
+  });
+
+  it("keeps credentials, emails and usernames out of the evidence, and records the pull request", () => {
+    const result = run({ projectDir: project, base: "HEAD~1", head: "HEAD" });
+    const e = buildEvidence({
+      result,
+      gate: evaluateGate({ result }),
+      version: "1",
+      tests: { validation: { ...validation("passed"), org: "admin@acme.com" } },
+      pullRequest: { number: 12, headSha: "a".repeat(40), url: "https://github.com/acme/sf-app/pull/12" },
+    });
+    const text = JSON.stringify(e);
+    expect(e.repository!.url).toBe("https://github.com/acme/sf-app.git");
+    expect(text).not.toContain("pa/ss");
+    expect(text).not.toContain("jane@example.com");
+    expect(text).not.toContain("admin@acme.com");
+    expect(e.tests.validation!.org).toBe("target org");
+    expect(e.change.pullRequest).toEqual({
+      number: 12,
+      headSha: "a".repeat(40),
+      url: "https://github.com/acme/sf-app/pull/12",
+    });
+    const bad = buildEvidence({
+      result,
+      gate: evaluateGate({ result }),
+      version: "1",
+      pullRequest: { number: 3, headSha: "nope", url: "javascript:alert(1)" },
+    });
+    expect(bad.change.pullRequest).toEqual({ number: 3, headSha: undefined, url: undefined });
   });
 });

@@ -27,10 +27,11 @@ your pipeline stages:
    your DevOps Center setup can't promote it until the check passes. How DevOps Center reports a
    blocked merge depends on its version, so verify the behaviour you rely on.
 
-DevOps Center's built-in testing runs Apex tests, Flow tests and Salesforce Code Analyzer as
-quality gates; providers from other tools are partner integrations that aren't open to other
-tools yet. preflight complements them: it checks what a change *sets off* across automation,
-permissions and agents, and leaves running unit tests to the built-in providers.
+DevOps Center Testing has built-in providers (Apex tests, Flow tests and Salesforce Code
+Analyzer) and partner providers installed from AppExchange. There's no documented way yet for
+other tools to register as a provider, so preflight plugs in through the pull requests instead.
+It complements the providers: it checks what a change *sets off* across automation, permissions
+and agents, and leaves running unit tests to them.
 
 ## GitLab CI
 

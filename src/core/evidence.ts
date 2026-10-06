@@ -6,6 +6,7 @@ import { git, gitBlob, gitRoot, isShallow } from "./changes.js";
 import type { Approval, GateResult } from "./gate.js";
 import type { ValidationResult } from "./org/validate.js";
 import type { AnalysisResult, ChangeType, ComponentType, Severity, TestKind } from "./types.js";
+import { redactEmails } from "./util.js";
 
 /**
  * The evidence pack: one self-contained, verifiable record per change of what changed, who (or
@@ -34,6 +35,8 @@ export interface EvidencePack {
   change: {
     base?: { ref: string; sha?: string };
     head: { ref: string; sha?: string; uncommitted?: boolean };
+    /** The pull request, when the pipeline provides it (its head can differ from a CI merge commit). */
+    pullRequest?: { number: number; headSha?: string; url?: string };
     authorship?: {
       /** False when the repository is a shallow clone, so commits before its cut-off are missing. */
       complete: boolean;
@@ -70,9 +73,13 @@ export interface EvidencePack {
   /** Approvals provided to the run (e.g. pull request reviews); absent when unknown. */
   approvals?: Approval[];
   gate: GateResult;
-  /** The policy file the gate used, with its digest. */
-  config?: { file: string; sha256: string };
-  /** SHA-256 over the canonical JSON of every other field. */
+  /** The policy the gate used: file relative to the repository, the ref it was read from, its digest. */
+  config?: { file: string; ref?: string; sha256?: string };
+  /**
+   * SHA-256 over the canonical JSON of every other field. It detects accidental changes; anyone
+   * who can edit the file can recompute it, so proof of origin comes from a signature (the GitHub
+   * Action's artifact attestation) or a copy of the digest kept elsewhere.
+   */
   digest: { algorithm: "sha256"; value: string };
 }
 
@@ -108,14 +115,47 @@ export function evidenceDigest(pack: Omit<EvidencePack, "digest"> | EvidencePack
   return sha256(canonicalJson(rest));
 }
 
-export function verifyEvidence(pack: EvidencePack): boolean {
-  return pack.digest?.algorithm === "sha256" && pack.digest.value === evidenceDigest(pack);
+/** Is this an evidence pack whose digest matches its content? */
+export function verifyEvidence(pack: unknown): pack is EvidencePack {
+  if (typeof pack !== "object" || pack === null || Array.isArray(pack)) return false;
+  const p = pack as Partial<EvidencePack>;
+  return (
+    p.evidenceVersion === 1 &&
+    p.predicateType === EVIDENCE_PREDICATE_TYPE &&
+    typeof p.digest === "object" &&
+    p.digest !== null &&
+    p.digest.algorithm === "sha256" &&
+    p.digest.value === evidenceDigest(p as EvidencePack)
+  );
 }
 
 /** Remote URL without credentials (`https://user:token@host/…` → `https://host/…`). */
-function cleanUrl(url: string): string {
-  return url.trim().replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, "$1");
+function cleanUrl(raw: string): string | undefined {
+  const url = raw.trim();
+  const parse = (u: string) => {
+    try {
+      const parsed = new URL(u);
+      parsed.username = "";
+      parsed.password = "";
+      return parsed.toString();
+    } catch {
+      return undefined;
+    }
+  };
+  const scheme = /^[a-z][a-z0-9+.-]*:\/\//i.exec(url)?.[0];
+  if (scheme) {
+    // Drop everything up to the last "@": unencoded "/" or "@" in a password would otherwise
+    // let part of it through as a host or path.
+    const at = url.lastIndexOf("@");
+    return parse(at > scheme.length ? scheme + url.slice(at + 1) : url);
+  }
+  // scp-style "git@github.com:org/repo.git" has no credentials beyond the user name.
+  return /^[\w.-]+@[\w.-]+:[\w./-]+$/.test(url) ? url : undefined;
 }
+
+/** Org label from a tests-result file: an alias, never a username. */
+const orgName = (org: unknown) =>
+  typeof org === "string" && /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/.test(org) && !org.includes("@") ? org : "target org";
 
 const tryGit = (cwd: string, args: string[]) => {
   try {
@@ -137,8 +177,7 @@ export interface EvidenceOptions {
   version: string;
   approvals?: Approval[];
   tests?: TestsResultFile;
-  /** Path of the config file the gate used (absolute or project-relative). */
-  configFile?: string;
+  pullRequest?: { number: number; headSha?: string; url?: string };
 }
 
 export function buildEvidence(opts: EvidenceOptions): EvidencePack {
@@ -163,12 +202,8 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
   };
 
   const v = opts.tests?.validation;
-  const count = (o: string) => v?.tests.filter((t) => t.outcome === o).length ?? 0;
-  const configFile = opts.configFile
-    ? path.isAbsolute(opts.configFile)
-      ? opts.configFile
-      : path.join(projectDir, opts.configFile)
-    : undefined;
+  const count = (o: string) => (Array.isArray(v?.tests) ? v.tests.filter((t) => t.outcome === o).length : 0);
+  const pr = opts.pullRequest;
 
   const pack: Omit<EvidencePack, "digest"> = {
     evidenceVersion: 1,
@@ -196,16 +231,24 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
         sha: root ? tryGit(root, ["rev-parse", "--verify", `${headRef}^{commit}`]) : undefined,
         ...(uncommitted ? { uncommitted: true } : {}),
       },
+      pullRequest:
+        pr && Number.isInteger(pr.number) && pr.number > 0
+          ? {
+              number: pr.number,
+              headSha: pr.headSha && /^[0-9a-f]{40}$/.test(pr.headSha) ? pr.headSha : undefined,
+              url: pr.url && /^https:\/\/[^\s@]+$/.test(pr.url) ? pr.url : undefined,
+            }
+          : undefined,
       authorship: result.provenance
         ? {
-            complete: !(root && isShallow(root)),
+            complete: !result.provenance.shallow && !(root && isShallow(root)),
             commits: result.provenance.commits,
             aiAssistedCommits: result.provenance.aiAssistedCommits,
             tools: result.provenance.tools,
             // Name only: the commit SHA already identifies the author's email in the repository.
             details: result.provenance.details.map((d) => ({
               sha: d.sha,
-              subject: d.subject,
+              subject: redactEmails(d.subject),
               author: withoutEmail(d.author),
               aiTools: d.aiTools,
             })),
@@ -239,26 +282,26 @@ export function buildEvidence(opts: EvidenceOptions): EvidencePack {
       generated: opts.tests?.tests?.map((t) => ({ method: t.method, kind: t.kind, title: t.title })),
       validation: v
         ? {
-            org: v.org,
+            org: orgName(v.org),
             status: v.status,
             passed: count("pass"),
             failed: count("fail"),
             setupFailed: count("setup failed"),
             notRun: count("not run"),
-            componentErrors: v.componentErrors.length,
+            componentErrors: Array.isArray(v.componentErrors) ? v.componentErrors.length : 0,
             deployId: v.deployId,
           }
         : undefined,
     },
     approvals: opts.approvals,
     gate: opts.gate,
-    config:
-      configFile && existsSync(configFile)
-        ? {
-            file: root ? path.relative(root, configFile).split(path.sep).join("/") : path.basename(configFile),
-            sha256: sha256(readFileSync(configFile)),
-          }
-        : undefined,
+    config: result.config
+      ? {
+          file: path.posix.normalize(path.posix.join(projectPath || ".", result.config.file)),
+          ref: result.config.ref,
+          sha256: result.config.sha256,
+        }
+      : undefined,
   };
   return { ...pack, digest: { algorithm: "sha256", value: evidenceDigest(pack) } };
 }
@@ -303,7 +346,7 @@ export function evidenceToMarkdown(e: EvidencePack): string {
       "Approvals",
       e.approvals ? (e.approvals.length ? e.approvals.map((x) => x.reviewer).join(", ") : "none") : "not provided",
     ],
-    ["Policy", e.config ? `\`${e.config.file}\`` : "defaults"],
+    ["Policy", e.config ? `\`${e.config.file}\`${e.config.ref ? ` at \`${e.config.ref}\`` : ""}` : "defaults"],
     ["Tool", `sf-preflight ${e.tool.version}`],
     ["Digest", `\`sha256:${e.digest.value}\``],
   ];

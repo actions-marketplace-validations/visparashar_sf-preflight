@@ -382,6 +382,8 @@ export interface CommitProvenance {
 
 export interface Provenance {
   range: string;
+  /** The repository is a shallow clone, so commits before its cut-off are missing. */
+  shallow?: boolean;
   commits: number;
   aiAssistedCommits: number;
   tools: string[];
@@ -545,7 +547,8 @@ export interface AnalysisResult {
   /** Present when analyzed with `--org`: read-only context from a Salesforce org. */
   org?: OrgContext;
   /** The `.preflight.json` applied to the findings (project-relative path). */
-  config?: { file: string };
+  /** The policy file applied (project-relative), the git ref it came from, and its digest. */
+  config?: { file: string; ref?: string; sha256?: string };
   /** Present when the quality gate was evaluated (`--gate`). */
   gate?: GateResult;
 }

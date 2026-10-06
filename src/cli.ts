@@ -3,18 +3,20 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, Option } from "commander";
-import type { AnalysisResult, EvidencePack, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
+import type { AnalysisResult, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
 import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
   allAgentActions,
+  analyzeChange,
+  assertSafeRef,
   buildEvidence,
   evaluateGate,
   evidenceToMarkdown,
   explainAgent,
   GENERIC_ORG_LABEL,
   gateToMarkdown,
-  loadConfig,
+  generateTests,
   loadProject,
   parseApprovals,
   run,
@@ -44,10 +46,10 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
 
 type Format = "md" | "json" | "sarif" | "junit";
 
-function render(result: AnalysisResult, format: Format): string {
+function render(result: AnalysisResult, format: Format, failOn?: FailOn): string {
   if (format === "json") return JSON.stringify(result, null, 2);
   if (format === "sarif") return JSON.stringify(toSarif(result, { toolVersion: version }), null, 2);
-  if (format === "junit") return toJunit(result);
+  if (format === "junit") return toJunit(result, result.gate?.failOn ?? failOn);
   return toMarkdown(result);
 }
 
@@ -69,13 +71,21 @@ interface PolicyOptions {
   failOn?: FailOn;
   /** Path, or false for --no-config. */
   config?: string | false;
+  configRef?: string;
   approvals?: string;
   testsResult?: string;
+  prNumber?: number;
+  prHeadSha?: string;
+  prUrl?: string;
 }
+
+const pullRequestOf = (opts: PolicyOptions) =>
+  opts.prNumber ? { number: opts.prNumber, headSha: opts.prHeadSha, url: opts.prUrl } : undefined;
 
 /** Analyze, then evaluate the quality gate from `.preflight.json`, approvals and test results. */
 function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
-  const result = run({
+  if (opts.configRef) assertSafeRef(opts.configRef, "config ref");
+  const { model, result, policy } = analyzeChange({
     projectDir: opts.project,
     base: opts.base,
     head: opts.head,
@@ -83,16 +93,26 @@ function analyzeWithPolicy(opts: PolicyOptions, withGate: boolean) {
     maxDepth: opts.depth,
     org: opts.org,
     config: opts.config,
+    configRef: opts.configRef,
   });
   const approvals = opts.approvals ? parseApprovals(readJson(opts.approvals, "approvals"), opts.approvals) : undefined;
   const tests = opts.testsResult ? (readJson(opts.testsResult, "tests result") as TestsResultFile) : undefined;
   if (withGate) {
-    const { config } = opts.config === false ? { config: {} } : loadConfig(path.resolve(opts.project), opts.config);
+    // When the policy needs passing tests but none were run, check whether the change has any.
+    let testsGenerated = Array.isArray(tests?.tests) ? tests.tests.length : undefined;
+    if (policy.gate?.requireTestsPassed && !tests) {
+      try {
+        testsGenerated = generateTests(model, result).tests.length;
+      } catch {
+        testsGenerated = undefined;
+      }
+    }
     result.gate = evaluateGate({
       result,
-      config: { ...config.gate, ...(opts.failOn ? { failOn: opts.failOn } : {}) },
+      config: { ...policy.gate, ...(opts.failOn ? { failOn: opts.failOn } : {}) },
       approvals,
       validation: tests?.validation,
+      testsGenerated,
     });
   }
   return { result, approvals, tests };
@@ -114,8 +134,12 @@ const policyOptions = (cmd: Command) =>
     .option("--org <alias>", "add read-only context from an org authorized with `sf org login` (beta)")
     .option("--config <file>", "policy file (default: .preflight.json in the project, then the git root)")
     .option("--no-config", "ignore .preflight.json")
+    .option("--config-ref <ref>", "read the policy from git at this ref, e.g. the pull request's base branch")
     .option("--approvals <file>", "JSON list of approvals (reviewer names), for the gate and evidence")
-    .option("--tests-result <file>", "output of `preflight tests --validate --format json`, for the gate and evidence");
+    .option("--tests-result <file>", "output of `preflight tests --validate --format json`, for the gate and evidence")
+    .option("--pr-number <n>", "pull request number, recorded in the evidence", (v) => Number.parseInt(v, 10))
+    .option("--pr-head-sha <sha>", "pull request head commit, recorded in the evidence")
+    .option("--pr-url <url>", "pull request URL, recorded in the evidence");
 
 policyOptions(
   program.command("analyze").description("Analyze a change (git diff or explicit files) in an SFDX project"),
@@ -148,13 +172,13 @@ policyOptions(
       },
     ) => {
       const { result, approvals, tests } = analyzeWithPolicy(opts, !!opts.gate || !!opts.evidenceOut);
-      const output = render(result, opts.format);
+      const output = render(result, opts.format, opts.failOn);
       if (opts.out) writeFileSync(opts.out, `${output}\n`);
       else process.stdout.write(`${output}\n`);
       if (opts.mdOut) writeFileSync(opts.mdOut, `${render(result, "md")}\n`);
       if (opts.jsonOut) writeFileSync(opts.jsonOut, `${render(result, "json")}\n`);
       if (opts.sarifOut) writeFileSync(opts.sarifOut, `${render(result, "sarif")}\n`);
-      if (opts.junitOut) writeFileSync(opts.junitOut, `${render(result, "junit")}\n`);
+      if (opts.junitOut) writeFileSync(opts.junitOut, `${render(result, "junit", opts.failOn)}\n`);
       if (opts.evidenceOut) {
         const pack = buildEvidence({
           result,
@@ -162,7 +186,7 @@ policyOptions(
           version,
           approvals,
           tests,
-          configFile: result.config?.file,
+          pullRequest: pullRequestOf(opts),
         });
         writeFileSync(opts.evidenceOut, `${JSON.stringify(pack, null, 2)}\n`);
       }
@@ -187,13 +211,17 @@ policyOptions(
   .option("--verify <file>", "check an evidence file's digest instead of creating one")
   .action((opts: PolicyOptions & { out: string; gate?: boolean; verify?: string }) => {
     if (opts.verify) {
-      const pack = readJson(opts.verify, "evidence") as EvidencePack;
+      const pack = readJson(opts.verify, "evidence");
       if (!verifyEvidence(pack)) {
-        process.stderr.write(`${opts.verify}: digest does not match its content (modified or not an evidence pack).\n`);
+        process.stderr.write(
+          `${opts.verify}: not an sf-preflight evidence pack, or its digest doesn't match its content.\n`,
+        );
         process.exitCode = 1;
         return;
       }
-      process.stdout.write(`${opts.verify}: digest OK (sha256:${pack.digest.value}).\n`);
+      process.stdout.write(
+        `${opts.verify}: digest matches (sha256:${pack.digest.value}). This shows the file is intact; to show who produced it, verify its attestation (see docs/EVIDENCE.md).\n`,
+      );
       return;
     }
     const { result, approvals, tests } = analyzeWithPolicy(opts, true);
@@ -203,7 +231,7 @@ policyOptions(
       version,
       approvals,
       tests,
-      configFile: result.config?.file,
+      pullRequest: pullRequestOf(opts),
     });
     writeFileSync(opts.out, `${JSON.stringify(pack, null, 2)}\n`);
     process.stdout.write(`${evidenceToMarkdown(pack)}\n\n${gateToMarkdown(pack.gate)}\n`);

@@ -36,11 +36,13 @@ export interface GateInput {
   approvals?: Approval[];
   /** Result of running the generated tests (`preflight tests --validate`); undefined when not run. */
   validation?: ValidationResult;
+  /** How many tests the change generates, when known (0 means there is nothing to run). */
+  testsGenerated?: number;
 }
 
 const RANK: Record<Severity, number> = { info: 0, low: 1, medium: 2, high: 3 };
 
-export function evaluateGate({ result, config = {}, approvals, validation }: GateInput): GateResult {
+export function evaluateGate({ result, config = {}, approvals, validation, testsGenerated }: GateInput): GateResult {
   const failOn: FailOn = config.failOn ?? "high";
   const checks: GateCheck[] = [];
 
@@ -69,6 +71,14 @@ export function evaluateGate({ result, config = {}, approvals, validation }: Gat
     const label = `AI-assisted changes approved by ${needed} reviewer${needed === 1 ? "" : "s"}`;
     if (!result.provenance) {
       checks.push({ id: "ai-approvals", label, status: "pass", detail: "No commit range was analyzed." });
+    } else if (!ai && result.provenance.shallow) {
+      checks.push({
+        id: "ai-approvals",
+        label,
+        status: "fail",
+        detail:
+          "The repository is a shallow clone, so commits may be missing and AI assistance can't be ruled out. Check out with fetch-depth: 0.",
+      });
     } else if (!ai) {
       checks.push({ id: "ai-approvals", label, status: "pass", detail: "No AI-assisted commits." });
     } else if (!approvals) {
@@ -105,7 +115,9 @@ export function evaluateGate({ result, config = {}, approvals, validation }: Gat
 
   if (config.requireTestsPassed) {
     const label = "Generated tests passed in an org";
-    if (!validation) {
+    if (!validation && testsGenerated === 0) {
+      checks.push({ id: "tests-passed", label, status: "pass", detail: "The change generates no tests to run." });
+    } else if (!validation) {
       checks.push({
         id: "tests-passed",
         label,
