@@ -55,7 +55,8 @@ command = "npx"
 args = ["-y", "sf-preflight", "mcp"]
 ```
 
-**GitHub Copilot in VS Code**: `.vscode/mcp.json`
+**GitHub Copilot in VS Code**: the [sf-preflight extension](../vscode/README.md) offers the server
+to agent mode by itself (VS Code 1.101+). Without the extension, `.vscode/mcp.json`:
 
 ```json
 {
