@@ -12,6 +12,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The VS Code extension (`vscode/`, released separately as `extension-vX.Y.Z`): findings in the
   Problems panel, the blast-radius view, analysis on change, test generation, save order, the
   agent skill and the MCP tools for agent mode. See [vscode/README.md](vscode/README.md).
+- Extension 0.2.0: the blast radius graph, with the change at the centre and what it sets off
+  around it by distance, coloured by risk, with recursion drawn; click a node to open its file.
 
 ### Changed
 

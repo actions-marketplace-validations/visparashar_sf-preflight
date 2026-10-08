@@ -51,7 +51,12 @@ before(async () => {
   writeFileSync(handler, `${readFileSync(handler, "utf8")}\n// edited\n`);
   vscode.__state.root = repo;
   extension = require(path.join(ext, "dist", "extension.js"));
-  await extension.activate({ subscriptions: [], extensionPath: ext, extension: { packageJSON: { version: "9.9.9" } } });
+  await extension.activate({
+    subscriptions: [],
+    extensionPath: ext,
+    extensionUri: vscode.Uri.file(ext),
+    extension: { packageJSON: { version: "9.9.9" } },
+  });
   await until(() => vscode.__state.diagnostics.size > 0, "problems");
 });
 
@@ -103,6 +108,50 @@ test("shows the blast radius and the status", () => {
   const item = tree.getTreeItem(findings.children[0]);
   assert.equal(item.command.command, "vscode.open");
   assert.match(vscode.__state.status.text, /Preflight: [1-9]\d* high/);
+});
+
+test("shows the blast-radius graph, and opens only the project's files from it", async () => {
+  // The tree's risk item opens the graph.
+  const tree = vscode.__state.trees.get("sfPreflight.blastRadius");
+  assert.equal(tree.getTreeItem(tree.getChildren()[0]).command.command, "sfPreflight.showGraph");
+
+  await vscode.__state.commands.get("sfPreflight.showGraph")();
+  const panel = vscode.__state.panels.at(-1);
+  assert.equal(panel.viewType, "sfPreflight.graph");
+  // Scripts only from the extension's media folder, with a nonce; no inline code.
+  const html = panel.webview.html;
+  const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+  assert.match(csp, /default-src 'none'/);
+  assert.match(csp, /script-src 'nonce-[A-Za-z0-9+/=]+'/);
+  assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/);
+  assert.match(html, /<script nonce="[^"]+" src="vscode-webview:\/\/[^"]+media\/graph\.js">/);
+  assert.equal(panel.options.localResourceRoots[0].fsPath, path.join(ext, "media"));
+
+  // Nothing is sent until the page says it's ready; then the graph, without file paths.
+  assert.equal(panel.posted.length, 0);
+  await panel.receive({ type: "ready" });
+  const msg = panel.posted.at(-1);
+  assert.equal(msg.type, "graph");
+  assert.equal(msg.meta.risk, "high");
+  assert.match(msg.meta.summary, /1 changed/);
+  const nodes = msg.graph.nodes;
+  assert.equal(msg.graph.center, `f:${SRC}/classes/ContactTriggerHandler.cls`);
+  assert.ok(nodes.length > 3);
+  assert.ok(nodes.every((n) => !("file" in n) && typeof n.openable === "boolean"));
+  assert.ok(!JSON.stringify(msg).includes(repo), "no local paths reach the webview");
+
+  // Opening a node by id opens its file; unknown ids and anything outside the project don't.
+  const trigger = nodes.find((n) => n.label === "ContactTrigger");
+  vscode.__state.opened = [];
+  await panel.receive({ type: "open", id: trigger.id });
+  assert.deepEqual(vscode.__state.opened, [path.join(repo, SRC, "triggers", "ContactTrigger.trigger")]);
+  for (const bad of [{ type: "open", id: "f:../../etc/passwd" }, { type: "open", id: 42 }, { type: "open" }, null, "x"])
+    await panel.receive(bad);
+  assert.equal(vscode.__state.opened.length, 1);
+
+  // Showing it again reuses the panel.
+  await vscode.__state.commands.get("sfPreflight.showGraph")();
+  assert.equal(vscode.__state.panels.at(-1), panel);
 });
 
 test("offers the bundled MCP server to agent mode", () => {

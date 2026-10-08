@@ -2,7 +2,7 @@
   "name": "sf-preflight",
   "displayName": "sf-preflight: Salesforce change impact",
   "description": "See what a Salesforce change sets off before it ships: flows, triggers, validation rules, roll-ups, permissions and Agentforce actions, with findings in the Problems panel and the blast radius beside your code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "visparashar",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -94,6 +94,12 @@
         "icon": "$(preview)"
       },
       {
+        "command": "sfPreflight.showGraph",
+        "title": "Show blast-radius graph",
+        "category": "sf-preflight",
+        "icon": "$(type-hierarchy)"
+      },
+      {
         "command": "sfPreflight.explainSaveOrder",
         "title": "Explain what runs when an object is saved\u2026",
         "category": "sf-preflight"
@@ -116,6 +122,11 @@
           "command": "sfPreflight.analyze",
           "when": "view == sfPreflight.blastRadius",
           "group": "navigation@1"
+        },
+        {
+          "command": "sfPreflight.showGraph",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@0"
         },
         {
           "command": "sfPreflight.chooseBase",

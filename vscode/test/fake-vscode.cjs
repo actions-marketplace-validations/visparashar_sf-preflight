@@ -39,6 +39,9 @@ class Uri {
   static parse(s) {
     return new Uri(undefined, s);
   }
+  static joinPath(base, ...parts) {
+    return new Uri(path.join(base.fsPath, ...parts));
+  }
   toString() {
     return this.raw ?? `file://${this.fsPath}`;
   }
@@ -109,7 +112,7 @@ const vscode = {
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   ProgressLocation: { Notification: 15 },
-  ViewColumn: { One: 1 },
+  ViewColumn: { One: 1, Beside: -2 },
   languages: {
     createDiagnosticCollection: () => ({
       clear: () => state.diagnostics.clear(),
@@ -132,7 +135,45 @@ const vscode = {
     showTextDocument: async (uri) => {
       state.opened = [...(state.opened ?? []), uri.fsPath];
     },
-    showErrorMessage: async () => undefined,
+    showErrorMessage: async (msg) => {
+      state.errors = [...(state.errors ?? []), msg];
+    },
+    createWebviewPanel: (viewType, title, _column, options) => {
+      const handlers = { message: [], dispose: [] };
+      const panel = {
+        viewType,
+        title,
+        options,
+        posted: [],
+        webview: {
+          html: "",
+          cspSource: "vscode-webview:",
+          asWebviewUri: (uri) => Uri.parse(`vscode-webview://${uri.fsPath}`),
+          postMessage: async (m) => {
+            panel.posted.push(m);
+            return true;
+          },
+          onDidReceiveMessage: (fn) => {
+            handlers.message.push(fn);
+            return { dispose() {} };
+          },
+        },
+        /** Simulate a message from the webview. */
+        receive: async (m) => {
+          for (const fn of handlers.message) await fn(m);
+        },
+        reveal() {},
+        onDidDispose: (fn) => {
+          handlers.dispose.push(fn);
+          return { dispose() {} };
+        },
+        dispose: () => {
+          for (const fn of handlers.dispose) fn();
+        },
+      };
+      state.panels = [...(state.panels ?? []), panel];
+      return panel;
+    },
     showQuickPick: async () => undefined,
     activeTextEditor: undefined,
   },
