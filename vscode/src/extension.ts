@@ -6,6 +6,7 @@ import { Worker } from "node:worker_threads";
 import * as vscode from "vscode";
 import { installSkill } from "../../src/core/skill.js";
 import type { AnalysisResult, SaveEvent, SaveProcedure, Severity } from "../../src/core/types.js";
+import { GraphPanel, type GraphSource } from "./graph-panel.js";
 import { isMetadataFile, problemsOf, RULES_URL, statusOf, type TreeNode, treeOf } from "./model.js";
 import type { WorkerRequest } from "./worker.js";
 
@@ -161,6 +162,7 @@ class BlastRadiusProvider implements vscode.TreeDataProvider<TreeNode> {
     item.description = node.description;
     item.tooltip = node.tooltip;
     if (node.icon) item.iconPath = new vscode.ThemeIcon(node.icon);
+    if (node.command) item.command = { command: node.command, title: node.label };
     if (node.file && existsSync(node.file)) {
       const line = node.line ?? 0;
       item.command = {
@@ -249,6 +251,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           : undefined;
     status.show();
     tree.refresh();
+    GraphPanel.refresh();
   }
 
   async function analyzeOnce(p: ProjectState): Promise<void> {
@@ -469,6 +472,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (!p.markdown) await analyze(p);
         if (p.markdown) await showMarkdown(p.markdown);
         else if (p.error) throw new Error(p.error);
+      }),
+    ),
+
+    vscode.commands.registerCommand(
+      "sfPreflight.showGraph",
+      guarded(async () => {
+        const p = await pickProject();
+        if (!p) {
+          void vscode.window.showInformationMessage("sf-preflight: no sfdx-project.json in this workspace.");
+          return;
+        }
+        const dir = p.dir;
+        const source = (): GraphSource | undefined => {
+          const q = projects.get(dir);
+          return q && { dir, label: q.label, result: q.result, error: q.error, busy: Boolean(q.inflight) };
+        };
+        GraphPanel.show(
+          context.extensionUri,
+          source,
+          () => projects.size > 1,
+          (d) => {
+            const md = projects.get(d)?.markdown;
+            if (md) void showMarkdown(md);
+          },
+        );
+        if (!p.result && !p.inflight) await analyze(p);
       }),
     ),
 

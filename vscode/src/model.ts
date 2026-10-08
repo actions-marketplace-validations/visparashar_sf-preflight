@@ -60,6 +60,8 @@ export interface TreeNode {
   children?: TreeNode[];
   /** Expanded by default. */
   expanded?: boolean;
+  /** Command run on click, when there's no file to open. */
+  command?: string;
 }
 
 const SEVERITY_ICON: Record<Severity, string> = {
@@ -101,7 +103,8 @@ export function treeOf(result: AnalysisResult, label?: string): TreeNode[] {
     label: `Risk: ${s.risk}`,
     description: [label, counts || "no findings"].filter(Boolean).join(" · "),
     icon: s.risk === "high" ? "error" : s.risk === "medium" ? "warning" : "pass",
-    tooltip: `${s.changedComponents} changed component(s), ${s.impactedObjects} impacted object(s), ${s.automationsInvolved} automation(s) involved${result.base ? `, compared with ${result.base}` : ""}`,
+    tooltip: `${s.changedComponents} changed component(s), ${s.impactedObjects} impacted object(s), ${s.automationsInvolved} automation(s) involved${result.base ? `, compared with ${result.base}` : ""}. Click for the graph.`,
+    ...(result.changes.length ? { command: "sfPreflight.showGraph" } : {}),
   });
 
   if (!result.changes.length) {
