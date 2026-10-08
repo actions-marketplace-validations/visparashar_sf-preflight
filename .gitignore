@@ -7,3 +7,4 @@ coverage/
 .sfdx/
 .preflight/
 preflight-tests/
+*.vsix

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,8 @@ export interface InstallSkillOptions {
   dirs?: string[];
   /** Replace an existing copy. */
   force?: boolean;
+  /** The skill folder to copy (default: the one in this package). */
+  source?: string;
 }
 
 /** Skills directories agents read: the shared `.agents/skills` and Claude's `.claude/skills`. */
@@ -45,7 +47,7 @@ export function defaultSkillDirs(base: string): string[] {
 
 /** Copy the skill into each skills directory; returns the folders written. */
 export function installSkill(opts: InstallSkillOptions = {}): string[] {
-  const source = bundledSkillDir();
+  const source = opts.source ?? bundledSkillDir();
   const dirs = opts.dirs?.length
     ? opts.dirs.map((d) => path.resolve(d))
     : defaultSkillDirs(opts.global ? os.homedir() : path.resolve(opts.projectDir ?? "."));
@@ -54,10 +56,34 @@ export function installSkill(opts: InstallSkillOptions = {}): string[] {
   if (existing.length && !opts.force) {
     throw new Error(`Already installed in ${existing.join(", ")}. Pass --force to update it.`);
   }
+  if (!opts.dirs?.length) {
+    // A symbolic link in the way (a committed .claude or .agents link) could redirect the copy,
+    // and the removal before it, outside the project.
+    const base = opts.global ? os.homedir() : path.resolve(opts.projectDir ?? ".");
+    for (const target of targets) assertNoLinkBetween(base, target);
+  }
   for (const target of targets) {
     if (path.resolve(target) === path.resolve(source)) continue;
     rmSync(target, { recursive: true, force: true });
     cpSync(source, target, { recursive: true });
   }
   return targets;
+}
+
+/** Refuse when any folder from `base` (exclusive) down to `target` is a symbolic link. */
+function assertNoLinkBetween(base: string, target: string): void {
+  const rel = path.relative(base, target);
+  let current = base;
+  for (const part of rel.split(path.sep)) {
+    current = path.join(current, part);
+    let isLink = false;
+    try {
+      isLink = lstatSync(current).isSymbolicLink();
+    } catch {
+      return; // doesn't exist yet: nothing further down exists either
+    }
+    if (isLink) {
+      throw new Error(`${current} is a symbolic link (to ${realpathSync(current)}); refusing to install through it.`);
+    }
+  }
 }

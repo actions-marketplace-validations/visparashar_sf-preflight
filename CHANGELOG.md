@@ -7,6 +7,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The VS Code extension (`vscode/`, released separately as `extension-vX.Y.Z`): findings in the
+  Problems panel, the blast-radius view, analysis on change, test generation, save order, the
+  agent skill and the MCP tools for agent mode. See [vscode/README.md](vscode/README.md).
+
+### Changed
+
+- A git-based analysis only counts changes inside the project's package directories (from
+  `sfdx-project.json`): files elsewhere in the project, such as generated tests in
+  `preflight-tests/`, aren't deployed, so they're listed as ignored instead. Files named with
+  `--files` are analyzed as before.
+- `preflight skill install` refuses to copy through a symbolic link in `.agents` or `.claude`,
+  so a committed link can't redirect it outside the project.
+
 ## [0.7.0] - 2026-10-06
 
 sf-preflight for AI coding agents of any kind: an agent skill in the open Agent Skills format,

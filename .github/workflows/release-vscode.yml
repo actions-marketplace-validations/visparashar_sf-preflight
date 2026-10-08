@@ -1,0 +1,118 @@
+name: Release VS Code extension
+
+on:
+  push:
+    tags: ["extension-v*.*.*"]
+  # Re-run a release by choosing the tag under "Use workflow from".
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-vscode-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test and package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require an extension version tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Run this workflow from an extension-vX.Y.Z tag (Use workflow from → Tags)."
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vscode/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: vscode
+      - name: Verify tag matches the extension version
+        working-directory: vscode
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "extension-v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match vscode/package.json version $VERSION"
+            exit 1
+          fi
+      - run: npm run typecheck
+        working-directory: vscode
+      - name: Package (minified build)
+        run: npx vsce package --no-dependencies -o sf-preflight.vsix
+        working-directory: vscode
+      - name: Test the build that ships
+        run: node --test test/extension.test.mjs
+        working-directory: vscode
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sf-preflight-vsix
+          path: vscode/sf-preflight.vsix
+          retention-days: 7
+
+  publish:
+    name: Publish to the VS Code Marketplace and Open VSX
+    needs: build
+    runs-on: ubuntu-latest
+    environment: vscode-marketplace
+    permissions:
+      contents: write # create the GitHub release with the .vsix
+    env:
+      # Whether each token is set, readable in step conditions (a step's own env isn't).
+      HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
+      HAS_OVSX_PAT: ${{ secrets.OVSX_PAT != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            vscode/package.json
+            vscode/package-lock.json
+            vscode/CHANGELOG.md
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      # Only the pinned publishing tools (vsce, ovsx), without running install scripts.
+      - run: npm ci --ignore-scripts
+        working-directory: vscode
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sf-preflight-vsix
+          path: vscode
+      - name: Publish to the VS Code Marketplace
+        if: env.HAS_VSCE_PAT == 'true'
+        working-directory: vscode
+        run: npx vsce publish --no-dependencies --packagePath sf-preflight.vsix --skip-duplicate
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish to Open VSX (Cursor, Windsurf, Code Builder and other VS Code-based editors)
+        if: env.HAS_OVSX_PAT == 'true'
+        working-directory: vscode
+        run: npx ovsx publish sf-preflight.vsix --skip-duplicate
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      - name: Say what wasn't published
+        if: env.HAS_VSCE_PAT != 'true' || env.HAS_OVSX_PAT != 'true'
+        run: |
+          [ "$HAS_VSCE_PAT" = "true" ] || echo "::warning::VSCE_PAT isn't set: not published to the VS Code Marketplace."
+          [ "$HAS_OVSX_PAT" = "true" ] || echo "::warning::OVSX_PAT isn't set: not published to Open VSX."
+      - name: Create the GitHub release with the .vsix
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" vscode/sf-preflight.vsix --clobber
+          else
+            # Not "latest": that stays the CLI and GitHub Action release.
+            gh release create "$GITHUB_REF_NAME" vscode/sf-preflight.vsix --verify-tag --latest=false \
+              --title "VS Code extension ${GITHUB_REF_NAME#extension-v}" --notes-file vscode/CHANGELOG.md
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
