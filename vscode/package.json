@@ -6,6 +6,13 @@
   "publisher": "visparashar",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0A0C0F",
+    "theme": "dark"
+  },
+  "preview": true,
+  "pricing": "Free",
+  "qna": "https://github.com/visparashar/sf-preflight/discussions",
   "repository": {
     "type": "git",
     "url": "https://github.com/visparashar/sf-preflight.git",
@@ -21,16 +28,21 @@
   "categories": [
     "Linters",
     "Testing",
+    "AI",
     "Other"
   ],
   "keywords": [
     "salesforce",
     "sfdx",
+    "salesforce dx",
     "apex",
     "flow",
     "agentforce",
     "devops",
-    "impact analysis"
+    "impact analysis",
+    "order of execution",
+    "code review",
+    "mcp"
   ],
   "activationEvents": [
     "workspaceContains:**/sfdx-project.json"

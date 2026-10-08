@@ -9,6 +9,19 @@ analyzer for Salesforce DX. The analysis runs locally on your source and git his
 connection, no credentials, and the extension sends nothing anywhere. (When an AI agent in the
 editor calls its tools, the results go to that agent's model provider, like any other context.)
 
+> **Preview.** The analysis engine is the same as the sf-preflight CLI (0.7), used on pull requests;
+> the editor integration is new. Please [report anything odd](https://github.com/visparashar/sf-preflight/issues).
+
+## Get started
+
+1. Open a Salesforce DX project (a folder with `sfdx-project.json`) that's in a git repository,
+   and trust the workspace when asked.
+2. Change some metadata: an Apex class, a flow, a validation rule, a field. Save it.
+3. Open **sf-preflight** in the activity bar, or click **Preflight** in the status bar. Findings
+   are also in the Problems panel (`Ctrl+Shift+M` / `Cmd+Shift+M`).
+
+Nothing to configure, and no org login needed.
+
 ## What you get
 
 - **Problems panel**: each finding on the file it's about (at the line, when known), with a link
@@ -68,5 +81,21 @@ Marketplace or Open VSX.
 Only Salesforce source in the project's package directories counts as part of a change, so
 generated tests in `preflight-tests/` don't show up as changes until you move them into one.
 
+## More of sf-preflight
+
+The same analysis runs in other places your changes go through:
+
+- **Pull requests**: the [GitHub Action](https://github.com/visparashar/sf-preflight#on-pull-requests-github-action)
+  posts the blast radius as a comment and can gate merges.
+- **Terminal and any CI**: `npm install -g sf-preflight`, then `preflight analyze`.
+- **AI coding agents** outside VS Code (Claude Code, Codex, Cursor, Gemini CLI and others): the
+  [agent skill and MCP server](https://github.com/visparashar/sf-preflight/blob/main/docs/AI_AGENTS.md).
+
 Org-connected features (production incidents, partial rollback, Testing Center runs, check-only
 test runs) are in the [CLI](https://github.com/visparashar/sf-preflight#readme).
+
+## Feedback
+
+Questions and ideas: [Discussions](https://github.com/visparashar/sf-preflight/discussions).
+Bugs: [Issues](https://github.com/visparashar/sf-preflight/issues). sf-preflight is open source
+under the Apache-2.0 licence.

@@ -32,6 +32,7 @@ sf-preflight
 <a href="#how">How it works</a>
 <a href="#features">Features</a>
 <a href="#findings">Findings</a>
+<a href="#surfaces">Editor &amp; agents</a>
 <a href="#roadmap">Roadmap</a>
 <a href="https://github.com/visparashar/sf-preflight" style="color:#E6E9ED;border:1px solid #2F3945;border-radius:8px;padding:10px 16px;min-height:20px">GitHub</a>
 </nav>
@@ -49,7 +50,7 @@ sf-preflight
 <a href="https://www.npmjs.com/package/sf-preflight" style="color:#E6E9ED;border:1px solid #2F3945;border-radius:8px;padding:12px 22px;font-size:16px">View on npm</a>
 </div>
 <div style="margin-top:28px;background:#12161B;border:1px solid #232A33;border-radius:10px;padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#E6E9ED;overflow-x:auto;white-space:nowrap"><span style="color:#9AA4B0">$</span> npm install -g sf-preflight</div>
-<div style="margin-top:12px;font-size:14px;color:#9AA4B0">Works offline on SFDX source. No org credentials needed to get value.</div>
+<div style="margin-top:12px;font-size:14px;color:#9AA4B0">Works offline on SFDX source. No org credentials needed to get value. Also in <a href="#surfaces" style="color:#E6E9ED;text-decoration:underline;text-underline-offset:3px">VS Code and your AI coding agent</a>.</div>
 </div>
 
 <div style="flex:1 1 480px;min-width:0;background:#12161B;border:1px solid #232A33;border-radius:14px;overflow:hidden">
@@ -142,7 +143,7 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 <div id="features" style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
 <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">Features</div>
 <h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Execution-layer depth, not another screen tester.</h2>
-<div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">
+<div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
 <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">ANALYZE</div>
 <h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Offline blast-radius analysis</h3>
@@ -169,9 +170,19 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 <div style="color:#9AA4B0;font-size:15px">One pack per change: author, tests, results and approvals, signed with GitHub artifact attestations. JUnit output for the CI systems you already use.</div>
 </div>
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
-<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">MCP</div>
-<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Built for coding agents</h3>
-<div style="color:#9AA4B0;font-size:15px">An MCP server lets Claude Code, Cursor and other agents ask what a change will set off before they commit it. AI-assisted commits are detected and flagged.</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">PRODUCTION</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">From an error back to its change</h3>
+<div style="color:#9AA4B0;font-size:15px">Reads failed flows, Apex exceptions and Agentforce action errors from an org, read-only, and traces each to the merged change most likely to have caused it. Then plans a partial rollback that ships as a pull request.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">AI AGENTS</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">Built for coding agents, any model</h3>
+<div style="color:#9AA4B0;font-size:15px">An agent skill in the open Agent Skills format teaches Copilot, Codex, Cursor, Gemini CLI and Claude to check their own Salesforce changes, and the MCP server gives them the tools. AI-assisted commits are detected and flagged.</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:28px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#52E0A1">EDITOR</div>
+<h3 style="margin:10px 0 8px;font-family:'Bricolage Grotesque',sans-serif;font-size:24px;font-weight:700">In VS Code as you work</h3>
+<div style="color:#9AA4B0;font-size:15px">Findings in the Problems panel and the blast radius beside your code, refreshed on every save, checkout and pull. Works in Cursor and Code Builder too.</div>
 </div>
 </div>
 </div>
@@ -218,24 +229,40 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 </div>
 
 <!-- SURFACES -->
-<div style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
+<div id="surfaces" style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
 <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">One engine, many surfaces</div>
 <h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Runs where your changes already flow.</h2>
+<p style="margin:16px 0 0;color:#9AA4B0;max-width:640px">From the editor and the coding agent that writes the change, to the pull request, the pipeline and production. Same engine, same findings everywhere.</p>
 <div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px">
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
 <h3 style="margin:0 0 14px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">CLI</h3>
 <pre style="background:#0A0C0F;border:1px solid #232A33;border-radius:8px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;overflow-x:auto;color:#E6E9ED"><span style="color:#9AA4B0">$</span> preflight analyze --base main --head HEAD
 <span style="color:#9AA4B0">$</span> preflight tests --validate --org my-sandbox
 <span style="color:#9AA4B0">$</span> preflight agents
-<span style="color:#9AA4B0">$</span> preflight agent-tests</pre>
+<span style="color:#9AA4B0">$</span> preflight agent-tests --org my-sandbox
+<span style="color:#9AA4B0">$</span> preflight incidents --org prod</pre>
 </div>
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
 <h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">GitHub Action</h3>
 <div style="color:#9AA4B0;font-size:15px">Posts a blast-radius comment on every pull request, uploads SARIF and JUnit, and enforces the quality gate. Make it a required check and DevOps Center honors it too.</div>
 </div>
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
-<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">MCP server</h3>
-<div style="color:#9AA4B0;font-size:15px">Gives Claude Code, Cursor and other coding agents the same engine, including tools such as explain_agent, so they can check a change before proposing it.</div>
+<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">VS Code extension</h3>
+<div style="color:#9AA4B0;font-size:15px">Problems panel, a blast-radius view and order of execution for any object, on every save. Offers the MCP tools to Copilot agent mode. From the VS Code Marketplace or Open VSX.</div>
+<pre style="margin-top:14px;background:#0A0C0F;border:1px solid #232A33;border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;overflow-x:auto;color:#E6E9ED">ext install visparashar.sf-preflight</pre>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
+<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">AI coding agents</h3>
+<div style="color:#9AA4B0;font-size:15px">One agent skill and an MCP server, for any model: Copilot, Codex, Cursor, Gemini CLI, Claude Code, Agentforce Vibes and other MCP clients.</div>
+<pre style="margin-top:14px;background:#0A0C0F;border:1px solid #232A33;border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;overflow-x:auto;color:#E6E9ED"><span style="color:#9AA4B0">$</span> npx sf-preflight skill install
+<span style="color:#9AA4B0"># MCP server for any client</span>
+<span style="color:#9AA4B0">$</span> npx -y sf-preflight mcp</pre>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
+<h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Claude Code plugin</h3>
+<div style="color:#9AA4B0;font-size:15px">The skill, the MCP server and a hook that checks each Salesforce file Claude edits, in one install.</div>
+<pre style="margin-top:14px;background:#0A0C0F;border:1px solid #232A33;border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;overflow-x:auto;color:#E6E9ED">/plugin marketplace add visparashar/sf-preflight
+/plugin install sf-preflight@sf-preflight</pre>
 </div>
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:24px;min-width:0">
 <h3 style="margin:0 0 10px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Any pipeline</h3>
@@ -315,7 +342,7 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 <!-- ROADMAP -->
 <div id="roadmap" style="max-width:1200px;margin:0 auto;padding:72px 24px 40px">
 <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1">Roadmap</div>
-<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Seven milestones shipped. Production feedback is next.</h2>
+<h2 style="margin:12px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-0.01em;max-width:760px">Eight milestones shipped. From the editor to production.</h2>
 <div style="margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
 <div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
 <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M1 · SHIPPED</div>
@@ -341,10 +368,13 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M6 · SHIPPED</div>
 <div style="margin-top:8px;font-weight:600">Policy gate, signed evidence packs</div>
 </div>
-<div style="background:#12161B;border:1px dashed #3A4553;border-radius:12px;padding:20px;grid-column:span 2">
-<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#F5B041">M7 · NEXT</div>
-<div style="margin-top:8px;font-weight:600">Production feedback loop</div>
-<div style="margin-top:4px;color:#9AA4B0;font-size:15px">Map Flow and Apex errors and Agentforce session traces back to the change that introduced them, and suggest a partial rollback.</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M7 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Production incidents, partial rollback</div>
+</div>
+<div style="background:#12161B;border:1px solid #232A33;border-radius:12px;padding:20px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#52E0A1">M8 · SHIPPED</div>
+<div style="margin-top:8px;font-weight:600">Agent skill, Claude Code plugin, VS Code extension</div>
 </div>
 </div>
 </div>
@@ -353,7 +383,7 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 <div style="max-width:1200px;margin:0 auto;padding:72px 24px 96px">
 <div style="background:#12161B;border:1px solid #232A33;border-radius:16px;padding:56px 32px;text-align:center">
 <h2 style="margin:0 auto;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(30px,4.4vw,48px);line-height:1.1;letter-spacing:-0.01em;max-width:720px">Preflight your next pull request.</h2>
-<p style="margin:16px auto 0;color:#9AA4B0;max-width:520px">Install it, point it at a branch, and see what your change will set off.</p>
+<p style="margin:16px auto 0;color:#9AA4B0;max-width:520px">Install it, point it at a branch, and see what your change will set off. Or add the VS Code extension and see it as you type.</p>
 <div style="margin:28px auto 0;display:inline-block;background:#0A0C0F;border:1px solid #232A33;border-radius:10px;padding:14px 20px;font-family:'JetBrains Mono',monospace;font-size:14px;max-width:100%;overflow-x:auto;white-space:nowrap"><span style="color:#9AA4B0">$</span> npm install -g sf-preflight</div>
 <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
 <a href="https://github.com/visparashar/sf-preflight" style="background:#52E0A1;color:#04110B;font-weight:600;border-radius:8px;padding:13px 22px;font-size:16px">Star on GitHub</a>
@@ -366,7 +396,7 @@ Opportunity <span style="color:#9AA4B0">(update)</span>
 <div style="border-top:1px solid #232A33">
 <div style="max-width:1200px;margin:0 auto;padding:28px 24px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;font-size:14px;color:#9AA4B0">
 <span style="font-family:'JetBrains Mono',monospace">sf-preflight · Apache-2.0 · DCO</span>
-<span style="display:flex;gap:20px;flex-wrap:wrap"><a href="https://github.com/visparashar/sf-preflight">GitHub</a><a href="https://www.npmjs.com/package/sf-preflight">npm</a></span>
+<span style="display:flex;gap:20px;flex-wrap:wrap"><a href="https://github.com/visparashar/sf-preflight">GitHub</a><a href="https://www.npmjs.com/package/sf-preflight">npm</a><a href="https://marketplace.visualstudio.com/items?itemName=visparashar.sf-preflight">VS Code Marketplace</a><a href="https://open-vsx.org/extension/visparashar/sf-preflight">Open VSX</a></span>
 </div>
 </div>
 
