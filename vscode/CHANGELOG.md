@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0]
+
+- **Blast radius graph**: the change at the centre and what it sets off around it, one ring per
+  hop: the objects it saves, the flows, triggers, validation rules and roll-ups that run, what
+  references it, and the Agentforce actions it reaches. Nodes are coloured by their worst finding
+  (impacted, collision, high risk), automation cycles are drawn as recursion arrows, and hovering
+  a node lists its findings. Click a node to open its file. Opens from the graph button on the
+  Blast radius view, the risk line in it, or **sf-preflight: Show blast-radius graph**, and
+  follows every re-analysis. Several changes gather round a hub. Large graphs keep the 80
+  nearest and riskiest nodes.
+
 ## [0.1.0]
 
 First release.

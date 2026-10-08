@@ -24,6 +24,11 @@ Nothing to configure, and no org login needed.
 
 ## What you get
 
+![The blast radius graph for a change to Opportunity.Contract_Signed_Date__c: the field at the centre, the objects, flows, validation rules, roll-up, permission set and agent action it reaches around it, with two recursion arrows](media/graph.png)
+
+- **Blast radius graph**: the change at the centre and everything it sets off around it, one ring
+  per hop, coloured by risk, with automation cycles drawn as recursion arrows. Hover a node for
+  its findings; click it to open the file. Open it with the graph button on the Blast radius view.
 - **Problems panel**: each finding on the file it's about (at the line, when known), with a link
   to the rule's explanation. High findings are errors, medium are warnings.
 - **Blast radius view** (activity bar): the change's risk, its findings, the changed components,
@@ -39,6 +44,7 @@ Commands (`sf-preflight:` in the Command Palette):
 | Command | What it does |
 |---|---|
 | Analyze changes | Run the analysis now |
+| Show blast-radius graph | The change and what it sets off, as a graph beside your code |
 | Compare with branch… | Choose what your changes are compared with |
 | Show report | The full Markdown report, as posted on pull requests |
 | Explain what runs when an object is saved… | Order of execution for any object and event |

@@ -1,0 +1,317 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+body {
+  --bg: var(--vscode-editor-background, #0d1117);
+  --fg: var(--vscode-editor-foreground, #e6e9ed);
+  --muted: var(--vscode-descriptionForeground, #8b949e);
+  --line: color-mix(in srgb, var(--fg) 22%, transparent);
+  --ring: color-mix(in srgb, var(--fg) 14%, transparent);
+  --pill: color-mix(in srgb, var(--bg) 82%, var(--fg) 6%);
+  --impacted: #3dd6b5;
+  --collision: #f5b041;
+  --high: #ff6b5b;
+  --changed: #ffb547;
+  --focus: var(--vscode-focusBorder, #3dd6b5);
+  --mono: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --sans: var(--vscode-font-family, system-ui, sans-serif);
+}
+body.vscode-light {
+  --impacted: #0b8f74;
+  --collision: #b56d00;
+  --high: #d63b2b;
+  --changed: #c97a00;
+}
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --line: var(--fg);
+  --ring: var(--muted);
+}
+
+/* Rules that set display (.empty) must not reveal hidden elements, which would cover the graph. */
+[hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: the hidden attribute must always win */
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+header {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 14px;
+  background: linear-gradient(var(--bg) 70%, transparent);
+  z-index: 2;
+}
+header h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--impacted);
+  font-family: var(--mono);
+}
+header .summary {
+  color: var(--muted);
+}
+header .risk {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.risk.high {
+  color: var(--high);
+}
+.risk.medium {
+  color: var(--collision);
+}
+.risk.low {
+  color: var(--impacted);
+}
+header .spacer {
+  flex: 1;
+}
+header button {
+  font: inherit;
+  color: var(--vscode-button-secondaryForeground, var(--fg));
+  background: var(--vscode-button-secondaryBackground, transparent);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+header button:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--pill));
+}
+header button:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  user-select: none;
+}
+svg.panning {
+  cursor: grabbing;
+}
+
+.ring {
+  fill: none;
+  stroke: var(--ring);
+  stroke-dasharray: 2 6;
+}
+.ring-label {
+  fill: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.edge {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.4;
+}
+.edge.recursion {
+  stroke: var(--high);
+  stroke-width: 2.2;
+}
+.edge-label {
+  fill: var(--high);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+#arrow path {
+  fill: var(--high);
+}
+
+.node {
+  cursor: default;
+}
+.node.openable {
+  cursor: pointer;
+}
+.node .pill {
+  fill: var(--pill);
+  stroke: var(--impacted);
+  stroke-width: 1.5;
+}
+.node.medium .pill {
+  stroke: var(--collision);
+}
+.node.high .pill {
+  stroke: var(--high);
+}
+.node.changed .pill {
+  fill: color-mix(in srgb, var(--changed) 16%, var(--bg));
+  stroke: var(--changed);
+  stroke-width: 2;
+}
+.node .dot {
+  fill: var(--impacted);
+}
+.node.medium .dot {
+  fill: var(--collision);
+}
+.node.high .dot {
+  fill: var(--high);
+}
+.label {
+  fill: var(--fg);
+  font-size: 13px;
+}
+.kind {
+  fill: var(--muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+}
+.node:focus {
+  outline: none;
+}
+.node:focus-visible .pill,
+.node.hover .pill {
+  stroke-width: 2.6;
+}
+
+.center .halo {
+  fill: var(--changed);
+  opacity: 0.16;
+}
+.center .disc {
+  fill: var(--changed);
+}
+.center .glyph {
+  fill: #1a1206;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 30px;
+}
+.center .tag {
+  fill: color-mix(in srgb, var(--changed) 14%, var(--bg));
+  stroke: var(--changed);
+  stroke-width: 1;
+}
+.tag-text {
+  fill: var(--changed);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.tag-kind {
+  fill: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.dim {
+  opacity: 0.18;
+}
+.node,
+.edge,
+.edge-label {
+  transition: opacity 120ms ease;
+}
+
+.legend {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  z-index: 2;
+}
+.legend span::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--impacted);
+}
+.legend .medium::before {
+  background: var(--collision);
+}
+.legend .high::before {
+  background: var(--high);
+}
+.legend .changed::before {
+  border-radius: 2px;
+  background: var(--changed);
+}
+.legend .recursion::before {
+  width: 14px;
+  height: 2px;
+  border-radius: 0;
+  vertical-align: middle;
+  background: var(--high);
+}
+.hint {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  z-index: 2;
+}
+
+.tip {
+  position: absolute;
+  max-width: 340px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--vscode-editorHoverWidget-background, var(--pill));
+  color: var(--vscode-editorHoverWidget-foreground, var(--fg));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--line));
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  z-index: 3;
+}
+.tip b {
+  display: block;
+  font-size: 13px;
+}
+.tip .meta {
+  color: var(--muted);
+}
+.tip ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+.tip li.high {
+  color: var(--high);
+}
+.tip li.medium {
+  color: var(--collision);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+  padding: 24px;
+}
