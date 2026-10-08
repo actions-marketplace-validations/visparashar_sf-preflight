@@ -236,6 +236,14 @@ there's also a plugin that bundles both and checks each metadata edit as it happ
 Setup for each agent, and an `AGENTS.md` snippet for agents without skills:
 [docs/AI_AGENTS.md](docs/AI_AGENTS.md). MCP tools: [docs/MCP.md](docs/MCP.md).
 
+### In VS Code
+
+The [sf-preflight extension](vscode/README.md) shows findings in the Problems panel as you work,
+the blast radius (what runs, in order, on every impacted object) beside your code, and the risk
+in the status bar. It re-analyzes when metadata changes, generates tests, explains save order,
+and offers the MCP tools to GitHub Copilot and other agents in the editor. It works in VS Code and
+editors built on it (Cursor, Salesforce Code Builder).
+
 ### With org context (beta)
 
 ```bash

@@ -1,0 +1,197 @@
+{
+  "name": "sf-preflight",
+  "displayName": "sf-preflight: Salesforce change impact",
+  "description": "See what a Salesforce change sets off before it ships: flows, triggers, validation rules, roll-ups, permissions and Agentforce actions, with findings in the Problems panel and the blast radius beside your code.",
+  "version": "0.1.0",
+  "publisher": "visparashar",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/visparashar/sf-preflight.git",
+    "directory": "vscode"
+  },
+  "homepage": "https://github.com/visparashar/sf-preflight/blob/main/vscode/README.md",
+  "bugs": {
+    "url": "https://github.com/visparashar/sf-preflight/issues"
+  },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Linters",
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "salesforce",
+    "sfdx",
+    "apex",
+    "flow",
+    "agentforce",
+    "devops",
+    "impact analysis"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/sfdx-project.json"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sfPreflight",
+          "title": "sf-preflight",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "sfPreflight": [
+        {
+          "id": "sfPreflight.blastRadius",
+          "name": "Blast radius",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "sfPreflight.blastRadius",
+        "contents": "Open a Salesforce DX project (a folder with sfdx-project.json) to see what your changes set off.\n[Analyze changes](command:sfPreflight.analyze)",
+        "when": "!sfPreflight.hasProject"
+      }
+    ],
+    "commands": [
+      {
+        "command": "sfPreflight.analyze",
+        "title": "Analyze changes",
+        "category": "sf-preflight",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sfPreflight.chooseBase",
+        "title": "Compare with branch\u2026",
+        "category": "sf-preflight",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "sfPreflight.showReport",
+        "title": "Show report",
+        "category": "sf-preflight",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "sfPreflight.explainSaveOrder",
+        "title": "Explain what runs when an object is saved\u2026",
+        "category": "sf-preflight"
+      },
+      {
+        "command": "sfPreflight.generateTests",
+        "title": "Generate Apex tests for this change",
+        "category": "sf-preflight",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "sfPreflight.installSkill",
+        "title": "Install the agent skill in this project",
+        "category": "sf-preflight"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sfPreflight.analyze",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sfPreflight.chooseBase",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sfPreflight.showReport",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@3"
+        },
+        {
+          "command": "sfPreflight.generateTests",
+          "when": "view == sfPreflight.blastRadius",
+          "group": "navigation@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "sf-preflight",
+      "properties": {
+        "sfPreflight.baseRef": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Branch or commit to compare with. Empty: the repository's default branch (`origin/HEAD`, `origin/main`, \u2026), from where your branch left it. `HEAD`: only uncommitted changes.",
+          "scope": "resource"
+        },
+        "sfPreflight.analyzeOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze again after saving Salesforce metadata.",
+          "scope": "resource"
+        },
+        "sfPreflight.minSeverity": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "info"
+          ],
+          "default": "low",
+          "description": "Lowest finding severity shown in the Problems panel (info findings appear as information)."
+        },
+        "sfPreflight.depth": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "How many levels of automation cascade to follow.",
+          "scope": "resource"
+        },
+        "sfPreflight.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer the sf-preflight MCP server to agent mode (GitHub Copilot and other agents in the editor)."
+        }
+      }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "sfPreflight.mcp",
+        "label": "sf-preflight"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "vsce package --no-dependencies -o sf-preflight.vsix",
+    "vscode:prepublish": "node esbuild.mjs --minify"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/vscode": "1.96.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "ovsx": "1.2.0",
+    "typescript": "7.0.2"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "sf-preflight runs git and writes generated tests and the agent skill into the project, so it needs a trusted workspace."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "sf-preflight reads the project from disk and runs git."
+    }
+  }
+}

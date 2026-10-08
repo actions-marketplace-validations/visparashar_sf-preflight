@@ -6,7 +6,7 @@ import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./c
 import { applyConfig, loadPolicy, type PreflightConfig } from "./config.js";
 import { enrichWithOrg } from "./org/enrich.js";
 import type { SfRunner } from "./org/sf.js";
-import { loadProject } from "./project.js";
+import { loadProject, sourceRoots } from "./project.js";
 import { gitProvenance } from "./provenance.js";
 import { generateTests, type TestGenOptions, type TestGenResult } from "./testgen/generate.js";
 import type { AnalysisResult, ChangeType, OrgModel } from "./types.js";
@@ -134,7 +134,21 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
   } else {
     throw new Error("Provide either --base <git ref> or --files <paths...>");
   }
-  const { changes, ignored } = toChanges(changedFiles);
+  // Only package directories are Salesforce source: changes elsewhere in the project (generated
+  // tests in preflight-tests/, scripts, docs) aren't deployed, so a git diff leaves them out.
+  const outside: string[] = [];
+  if (!opts.files?.length) {
+    const roots = sourceRoots(projectDir).map((r) => path.posix.normalize(r).replace(/\/$/, ""));
+    if (!roots.includes(".")) {
+      changedFiles = changedFiles.filter((f) => {
+        const inside = roots.some((r) => f.file === r || f.file.startsWith(`${r}/`));
+        if (!inside) outside.push(f.file);
+        return inside;
+      });
+    }
+  }
+  const { changes, ignored: notMetadata } = toChanges(changedFiles);
+  const ignored = [...notMetadata, ...outside];
   const root = gitRoot(projectDir);
   const result = analyze({
     model,

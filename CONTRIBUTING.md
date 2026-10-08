@@ -55,6 +55,9 @@ src/core/testgen/     Apex test generation (preflight tests)
 src/core/org/         read-only org context via the sf CLI (--org)
 src/cli.ts            command-line entry point
 src/mcp.ts            MCP server (stdio) for coding agents
+skills/sf-preflight/  the agent skill (Agent Skills format)
+.claude-plugin/, hooks/   the Claude Code plugin and marketplace
+vscode/               the VS Code extension (its own package; bundles src/)
 action.yml            GitHub Action (composite)
 fixtures/sample-org/  SFDX project with deliberate failure modes
 scripts/              repository maintenance scripts (license-header check)
@@ -173,3 +176,21 @@ The **Release** workflow then runs the checks, publishes to npm with provenance,
 GitHub release and moves the major tag (`v0`) that the GitHub Action uses. If a run fails
 part-way, re-run it from the tag (Actions → Release → Run workflow → choose the tag); it skips
 steps that already succeeded.
+
+### The VS Code extension
+
+The extension in `vscode/` has its own version and tags, `extension-vX.Y.Z`, and bundles the
+library from `src/` at that commit.
+
+1. Bump `version` in `vscode/package.json` (`npm version X.Y.Z --no-git-tag-version` in
+   `vscode/`) and add the release to `vscode/CHANGELOG.md`, in a pull request.
+2. After merging, tag and push: `git tag -a extension-vX.Y.Z origin/main -m "sf-preflight for VS Code X.Y.Z"`.
+
+The **Release VS Code extension** workflow builds, tests and packages the `.vsix`, publishes it
+to the VS Code Marketplace (secret `VSCE_PAT`, a Personal Access Token for the `visparashar`
+publisher) and Open VSX (secret `OVSX_PAT`), and attaches it to a GitHub release. A missing
+token skips that registry with a warning. Put both secrets in the `vscode-marketplace`
+environment.
+
+To try a build locally: `cd vscode && npm ci && npm run build && npx vsce package --no-dependencies`,
+then **Extensions → … → Install from VSIX**.
