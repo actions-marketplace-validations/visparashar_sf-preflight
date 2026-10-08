@@ -92,11 +92,11 @@
 
     // Ring radii: far enough apart, and wide enough for the pills on them.
     const rings = Math.max(0, ...g.nodes.map((n) => n.ring));
-    const widths = new Array(rings + 1).fill(0);
-    for (const n of g.nodes) widths[n.ring] += n.w + 26;
+    const widths = new Map();
+    for (const n of g.nodes) widths.set(n.ring, (widths.get(n.ring) ?? 0) + n.w + 26);
     const radius = [0];
     for (let k = 1; k <= rings; k++)
-      radius[k] = Math.max(radius[k - 1] + (k === 1 ? 175 : 135), widths[k] / (2 * Math.PI));
+      radius.push(Math.max(radius[k - 1] + (k === 1 ? 175 : 135), (widths.get(k) ?? 0) / (2 * Math.PI)));
 
     // Angles: each subtree gets at least the angle its pills need on their rings, and a share of
     // what's left by its number of leaves, so deep chains get room to spread.
@@ -441,13 +441,56 @@
     if (!moved) fit();
   });
 
+  // Messages only come from VS Code, which hosts this page on its own origin. The graph is
+  // rebuilt from known fields with checked types, so nothing else in a message is used.
+  const str = (v, max = 300) => (typeof v === "string" ? v.slice(0, max) : undefined);
+  const int = (v, max) => (Number.isInteger(v) && v >= 0 ? Math.min(v, max) : 0);
+  const SEVERITIES = ["high", "medium", "low", "info"];
+  function clean(g) {
+    if (!g || !Array.isArray(g.nodes) || !Array.isArray(g.edges)) return undefined;
+    const nodes = g.nodes.slice(0, 200).map((n) => ({
+      id: str(n?.id) ?? "",
+      label: str(n?.label) ?? "",
+      kind: Object.hasOwn(KIND, n?.kind) ? n.kind : "Other",
+      detail: str(n?.detail),
+      depth: int(n?.depth, 32),
+      changed: n?.changed === true,
+      severity: SEVERITIES.includes(n?.severity) ? n.severity : undefined,
+      findings: Array.isArray(n?.findings) ? n.findings.slice(0, 20).map((f) => str(f) ?? "") : [],
+      openable: n?.openable === true,
+    }));
+    const ids = new Set(nodes.map((n) => n.id));
+    const edges = g.edges
+      .slice(0, 1000)
+      .map((e) => ({ from: str(e?.from) ?? "", to: str(e?.to) ?? "", recursion: e?.recursion === true }))
+      .filter((e) => ids.has(e.from) && ids.has(e.to));
+    const center = str(g.center) ?? "";
+    if (!ids.has(center)) return undefined;
+    return {
+      center,
+      nodes,
+      edges,
+      risk: SEVERITIES.includes(g.risk) ? g.risk : undefined,
+      omitted: int(g.omitted, 1e6),
+    };
+  }
+
   let lastMeta = {};
   window.addEventListener("message", (ev) => {
+    if (ev.origin !== window.location.origin) return;
     const msg = ev.data;
     if (msg?.type !== "graph") return;
-    const sameChange = graph && msg.graph && graph.center === msg.graph.center;
-    graph = msg.graph;
-    lastMeta = msg.meta || {};
+    const next = clean(msg.graph);
+    const sameChange = graph && next && graph.center === next.center;
+    graph = next;
+    const meta = msg.meta || {};
+    lastMeta = {
+      title: str(meta.title),
+      risk: SEVERITIES.includes(meta.risk) ? meta.risk : undefined,
+      summary: str(meta.summary),
+      busy: meta.busy === true,
+      error: str(meta.error),
+    };
     if (!sameChange) moved = false;
     draw(graph, lastMeta);
   });
