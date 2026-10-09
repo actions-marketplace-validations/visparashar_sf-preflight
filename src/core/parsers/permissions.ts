@@ -35,6 +35,18 @@ export function parsePermissionContainer(
       .filter((u) => bool(u.enabled))
       .map((u) => text(u.name) ?? "")
       .filter(Boolean),
+    classes: enabledNames(body.classAccesses, "apexClass"),
+    pages: enabledNames(body.pageAccesses, "apexPage"),
+    customPermissions: enabledNames(body.customPermissions, "name"),
+    userLicense: text(body.userLicense),
     file,
   };
+}
+
+/** Names from `<classAccesses><apexClass>X</apexClass><enabled>true</enabled></classAccesses>` and the like. */
+function enabledNames(value: unknown, field: string): string[] {
+  return nodes(value)
+    .filter((n) => bool(n.enabled))
+    .map((n) => text(n[field]) ?? "")
+    .filter(Boolean);
 }

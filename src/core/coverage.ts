@@ -28,6 +28,9 @@ const DEEP_METADATA: ReadonlySet<string> = new Set([
   "CustomMetadata",
   "ApexPage",
   "ApexComponent",
+  "SharingRules",
+  "PermissionSetGroup",
+  "MutingPermissionSet",
 ]);
 
 export const isAnalyzedInDepth = (c: ComponentRef): boolean =>

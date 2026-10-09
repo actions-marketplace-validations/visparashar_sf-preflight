@@ -1,4 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import {
+  accessRemovedFindings,
+  groupsIncluding,
+  guestFindings,
+  mutingFindings,
+  parseMuting,
+  parsePermissionSetGroup,
+  parseSharingModel,
+  parseSharingRules,
+  permissionSetGroupFindings,
+  sharingModelFindings,
+  sharingRuleFindings,
+} from "./access.js";
 import {
   actionsForAgentChange,
   actionTarget,
@@ -120,6 +136,13 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const coverage = buildCoverage(model, changes);
 
   const addFinding = (f: Finding) => findings.push(f);
+  const readCurrent = (file: string): string | undefined => {
+    try {
+      return readFileSync(path.join(model.projectDir, file), "utf8");
+    } catch {
+      return undefined;
+    }
+  };
   const changeRef = (c: Change): AutomationRef => ({ kind: "Change", name: c.component.name, file: c.component.file });
 
   /** A changed Lightning Web Component or Aura bundle. */
@@ -493,7 +516,14 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           }
         }
         const { findings: permFindings, tests: permTests } = permissionDelta(current, previous);
+        // A permission set can also reach users through permission set groups.
+        const groups = comp.type === "PermissionSet" ? groupsIncluding(model, comp.name) : [];
+        for (const f of permFindings)
+          if (groups.length && (f.rule === "permission-escalation" || f.rule === "permission-system"))
+            f.detail += ` It also reaches everyone assigned permission set group(s) ${groups.join(", ")}.`;
         findings.push(...permFindings);
+        findings.push(...accessRemovedFindings(model, current, previous));
+        findings.push(...guestFindings(current, previous));
         tests.push(...permTests);
         break;
       }
@@ -501,6 +531,18 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "CustomObject":
       case "ObjectChild":
         if (comp.object && !deleted) roots.push({ object: comp.object, event: "update", via: changeRef(change) });
+        if (comp.type === "CustomObject" && comp.object && !deleted) {
+          const base = opts.readBase?.(comp.file);
+          if (base)
+            findings.push(
+              ...sharingModelFindings(
+                comp.object,
+                comp.file,
+                parseSharingModel(readCurrent(comp.file)),
+                parseSharingModel(base),
+              ),
+            );
+        }
         if (comp.type === "ObjectChild" && comp.file.endsWith(".recordType-meta.xml")) {
           findings.push(...recordTypeFindings(model, comp, deleted, opts.readBase?.(comp.file)));
         }
@@ -545,6 +587,48 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         }
         if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
           analyzePage(change);
+          break;
+        }
+        if (comp.metadataType === "SharingRules") {
+          if (!deleted)
+            findings.push(
+              ...sharingRuleFindings(
+                comp.name,
+                comp.file,
+                parseSharingRules(readCurrent(comp.file)),
+                opts.readBase ? parseSharingRules(opts.readBase(comp.file)) : undefined,
+              ),
+            );
+          break;
+        }
+        if (comp.metadataType === "PermissionSetGroup") {
+          if (!deleted) {
+            const base = opts.readBase?.(comp.file);
+            findings.push(
+              ...permissionSetGroupFindings(
+                model,
+                comp.name,
+                comp.file,
+                parsePermissionSetGroup(readCurrent(comp.file)),
+                base === undefined && change.changeType !== "added" ? undefined : parsePermissionSetGroup(base),
+                SENSITIVE_USER_PERMS,
+              ),
+            );
+          }
+          break;
+        }
+        if (comp.metadataType === "MutingPermissionSet") {
+          const xml = deleted ? undefined : readCurrent(comp.file);
+          if (xml) {
+            const base = opts.readBase?.(comp.file);
+            findings.push(
+              ...mutingFindings(
+                model,
+                parseMuting(xml, comp.name, comp.file),
+                base ? parseMuting(base, comp.name, comp.file) : undefined,
+              ),
+            );
+          }
           break;
         }
         if (comp.metadataType === "CustomLabels") {

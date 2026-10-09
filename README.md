@@ -40,7 +40,7 @@ It is open source, runs offline on your source code, and needs no org credential
 | **After-save self-updates** | Re-runs the whole save procedure for the record |
 | **Automation density** | Many overlapping automations or multiple triggers on one object hide ordering bugs |
 | **DML/SOQL in loops** | In changed Apex and in Apex inside the blast radius |
-| **Permission escalations** | New Modify All / View All, delete access, sensitive system permissions — diffed against the base |
+| **Access and sharing** | New Modify All / View All, delete access and sensitive system permissions; access taken away (and the components that need it); guest user exposure; organization-wide defaults; sharing rules; permission set groups and muting — diffed against the base |
 | **Broken references** | Deleted fields, flows or classes that are still used |
 | **Lightning components** | Components that use a changed field or call a changed Apex class, what a changed component saves through Apex, and fields or classes it uses that the project lacks |
 | **Labels, custom metadata and Visualforce** | Removed labels still in use, who reads a changed custom metadata record, Visualforce pages tied to a changed Apex class or naming a missing one |
