@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHash } from "node:crypto";
 import {
   ApexErrorListener,
   ApexParserFactory,
@@ -608,3 +609,14 @@ function createdType(n: NewExpressionContext): TypeInfo | undefined {
   const isArray = !!n.creator()?.arrayCreatorRest();
   return { name: id, collection: isArray };
 }
+
+/**
+ * Identifies this analyzer's code, so cached results are dropped when it changes. (Hashes the
+ * source text of the analyzer and its helpers; a change to a data table elsewhere is covered by
+ * CACHE_VERSION in parseCache.ts.)
+ */
+export const ANALYZER_FINGERPRINT = createHash("sha256")
+  .update(
+    [Analyzer, analyzeApexAst, parse, walk, findFirst, closest, typeOf, createdType, lc].map(String).join("\u0000"),
+  )
+  .digest("hex");

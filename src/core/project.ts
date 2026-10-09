@@ -2,6 +2,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { applyCallGraph } from "./callGraph.js";
+import { ParseCache } from "./parseCache.js";
 import {
   agentFileKind,
   emptyAgentMetadata,
@@ -14,12 +15,12 @@ import {
   parseGenAiPlugin,
   parsePlanner,
 } from "./parsers/agents.js";
-import { parseApexClass, parseApexTrigger } from "./parsers/apex.js";
+import { parseApexClass, parseApexTrigger, stripApex } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
-import type { ComponentRef, ObjectDef, OrgModel } from "./types.js";
+import type { ApexClassDef, ApexTriggerDef, ComponentRef, ObjectDef, OrgModel } from "./types.js";
 import { key, redactEmails, toPosix } from "./util.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".sfdx", ".sf", ".vscode", ".idea", "dist"]);
@@ -109,7 +110,7 @@ function ensureObject(model: OrgModel, name: string): ObjectDef {
 }
 
 /** Load and parse every supported metadata file in an SFDX project. */
-export function loadProject(projectDirInput: string): OrgModel {
+export function loadProject(projectDirInput: string, opts: { cache?: boolean } = {}): OrgModel {
   const projectDir = path.resolve(projectDirInput);
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
     throw new Error(`Project directory not found: ${projectDir}`);
@@ -142,6 +143,7 @@ export function loadProject(projectDirInput: string): OrgModel {
     if (ref.type === "CustomObject") ensureObject(model, ref.name).file = ref.file;
   }
   const projectObjects = new Set(model.objects.keys());
+  const cache = new ParseCache(projectDir, projectObjects, opts.cache);
 
   const read = (rel: string) => readFileSync(path.join(projectDir, rel), "utf8");
   const safely = (ref: ComponentRef, fn: () => void) => {
@@ -190,7 +192,18 @@ export function loadProject(projectDirInput: string): OrgModel {
       case "ApexTrigger":
         if (!ref.file.endsWith(".trigger")) break;
         safely(ref, () => {
-          const trig = parseApexTrigger(read(ref.file), ref.name, ref.file, projectObjects);
+          const source = read(ref.file);
+          const { def } = cache.get(ref.file, source, () => {
+            const t = parseApexTrigger(source, ref.name, ref.file, projectObjects);
+            if (!t) return {};
+            const { stripped: _s, file: _f, ...rest } = t;
+            return { def: rest };
+          });
+          const trig: ApexTriggerDef | undefined = def && {
+            ...(def as Omit<ApexTriggerDef, "stripped" | "file">),
+            stripped: stripApex(source),
+            file: ref.file,
+          };
           if (trig) model.triggers.set(key(trig.name), trig);
           else model.warnings.push(`No trigger header found in ${ref.file}`);
         });
@@ -198,7 +211,17 @@ export function loadProject(projectDirInput: string): OrgModel {
       case "ApexClass":
         if (!ref.file.endsWith(".cls")) break;
         safely(ref, () => {
-          const cls = parseApexClass(read(ref.file), ref.name, ref.file, projectObjects);
+          const source = read(ref.file);
+          const rest = cache.get(ref.file, source, () => {
+            const {
+              stripped: _s,
+              name: _n,
+              file: _f,
+              ...r
+            } = parseApexClass(source, ref.name, ref.file, projectObjects);
+            return r;
+          });
+          const cls: ApexClassDef = { ...rest, stripped: stripApex(source), name: ref.name, file: ref.file };
           model.classes.set(key(cls.name), cls);
         });
         break;
@@ -256,6 +279,7 @@ export function loadProject(projectDirInput: string): OrgModel {
     }
   }
 
+  cache.save();
   model.agents = linkAgents(agentMeta, model.warnings);
   applyCallGraph(model);
   for (const def of [...model.classes.values(), ...model.triggers.values()]) {
