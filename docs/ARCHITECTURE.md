@@ -102,6 +102,39 @@ A rule should push a `Finding` with a stable `rule` id (kebab-case), a severity,
 reads well in a table, a detail that explains *why it matters*, and the files involved. If the
 rule implies something worth testing, also push a `SuggestedTest`.
 
+## Metadata types and coverage
+
+Every Salesforce metadata type is recognized by name, from a table generated out of Salesforce's
+metadata registry (`scripts/gen-metadata-types.mjs` writes `src/core/metadataTypes.ts`; the
+registry is not a run-time dependency). Types with their own analysis (fields, validation rules,
+flows, Apex, permissions, Agentforce) are "analyzed in depth". Every other changed component
+(layouts, Lightning components, flexipages, labels, custom metadata, ...) is a `Metadata`
+component: it appears in the changed components, raises an info finding
+(`metadata-not-analyzed`), and the result's `coverage` lists, per component, the project files
+that mention its API name (`c-my-cmp`, `c/myCmp` and `c:myCmp` for Lightning components).
+`coverage.deep` and `coverage.basic` give the "analyzed in depth: N of M" line in reports. The
+mention search is by name: it finds where to look and does not follow what those files do.
+
+### Lightning components
+
+Lightning Web Component and Aura bundles are the exception: they are parsed (`parsers/lightning.ts`,
+regular expressions over the bundle's `.js`, `.html` and `.cmp` files) into `model.lightning`, so
+the existing analysis can follow them. They are found as references to fields (schema imports and
+`'Object.Field'` strings), as callers of Apex classes (`@salesforce/apex/...` imports, an Aura
+`controller=`), and as embedders of other components (`<c-my-cmp>`, `<c:myCmp>`, `from 'c/myCmp'`).
+A changed component adds the writes of the Apex it calls to the cascade. Not followed: components
+placed on pages (flexipages are Tier 1B), wire adapters that name fields only in variables, dynamic
+imports, and Aura `{!v.record.Field}` expressions.
+
+### Layouts and Lightning pages
+
+`parsers/pages.ts` reads page layouts (`<field>` tags; the object is the part of the name before the
+first dash) and Lightning pages (`<componentName>`, `{!Record.Field}` in visibility filters, the
+record page's `sobjectType`). A bare component name on a page is a component of the page's own
+namespace; `c:name` is a custom component; any other prefix is standard or managed and is not
+checked. Not followed: fields on related lists and compact layouts, quick actions and buttons on
+layouts, dynamic forms field sections, and Experience Cloud pages.
+
 ## Known limitations
 
 - Apex type resolution covers locals, parameters, for-each variables, class fields and
@@ -111,6 +144,27 @@ rule implies something worth testing, also push a `SuggestedTest`.
 - The call graph merges overloads by method name and does not follow interfaces, virtual
   dispatch or dynamic `Type.forName` instantiation.
 - Files that fail to parse use the regex fallback and are listed in the report's warnings.
+- Types listed under *Metadata types and coverage* above are reported by name only.
 - Process Builder, legacy workflow rules, duplicate rules, assignment rules, escalation rules
   and sharing recalculation are not modelled yet.
 - Order *within* a phase is alphabetical; Salesforce's flow trigger order is not yet read.
+
+### Picklists and record types
+
+`picklists.ts` compares a changed picklist field with its base version (`opts.readBase`) and lists
+active values that are gone or inactive. Each removed value is looked up in record types
+(`model.recordTypes`) and as a quoted literal (`'v'`, `"v"`, `&quot;v&quot;`, `<stringValue>`) in
+Apex, flows, validation rules, formulas and workflow, but only in files that also name the field,
+so a common word like `Open` does not match everything. Record types get the same base
+comparison, and a deleted one is searched for by developer name in files that mention
+`RecordType`. The text scan is a heuristic and says "written as text", never "used".
+
+### Labels, custom metadata and Visualforce
+
+`usage.ts` reads project files on demand (once each, 1 MB cap) and answers by text search; it adds
+no model maps. A removed label (base file via `opts.readBase`) is searched as `Label.X`,
+`$Label.X`, `$Label.c.X` and `@salesforce/label/c.X`. A custom metadata record `Type.Record` is
+tied to files that mention `Type__mdt`; a deleted record is only a finding if one of them also
+quotes its name. Visualforce pages and components are parsed for `controller=` and `extensions=`
+(`standardController` and namespaced classes are ignored), which feeds `apex-used-by-page` for
+changed or deleted classes and `visualforce-missing-reference` for changed pages.

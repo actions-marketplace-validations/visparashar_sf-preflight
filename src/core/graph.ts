@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ApexClassDef, ApexTriggerDef, AutomationRef, FlowDef, OrgModel, Write } from "./types.js";
+
+import { customComponent } from "./parsers/pages.js";
+import type {
+  ApexClassDef,
+  ApexTriggerDef,
+  AutomationRef,
+  FlexiPageDef,
+  FlowDef,
+  LightningDef,
+  OrgModel,
+  Write,
+} from "./types.js";
 import { key, uniqBy } from "./util.js";
 
 const MAX_DEPTH = 4;
@@ -93,7 +104,33 @@ export function callersOfClass(model: OrgModel, className: string): AutomationRe
       callers.push({ kind: "ApexClass", name: cls.name, file: cls.file });
     }
   }
+  for (const lc of lightningCallingClass(model, className)) {
+    callers.push({ kind: "LightningComponent", name: lc.name, file: lc.file });
+  }
   return callers;
+}
+
+/** Lightning Web Components and Aura components that call methods of an Apex class. */
+export function lightningCallingClass(model: OrgModel, className: string): LightningDef[] {
+  const k = key(className);
+  return [...model.lightning.values()].filter((lc) => lc.apex.some((a) => key(a.cls) === k));
+}
+
+/** Lightning components that embed the component `name`. */
+export function lightningEmbedding(model: OrgModel, name: string): LightningDef[] {
+  const k = key(name);
+  return [...model.lightning.values()].filter((lc) => lc.children.some((c) => key(c) === k));
+}
+
+/** Lightning pages that place the custom component `name` (c:name, or a bare name for the page's own namespace). */
+export function flexipagesPlacing(model: OrgModel, name: string): FlexiPageDef[] {
+  const k = key(name);
+  return [...model.flexipages.values()].filter((p) =>
+    p.components.some((c) => {
+      const custom = customComponent(c);
+      return custom !== undefined && key(custom) === k;
+    }),
+  );
 }
 
 /** Flows that call `flowName` as a subflow. */

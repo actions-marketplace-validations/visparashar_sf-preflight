@@ -41,6 +41,11 @@ It is open source, runs offline on your source code, and needs no org credential
 | **DML/SOQL in loops** | In changed Apex and in Apex inside the blast radius |
 | **Permission escalations** | New Modify All / View All, delete access, sensitive system permissions — diffed against the base |
 | **Broken references** | Deleted fields, flows or classes that are still used |
+| **Lightning components** | Components that use a changed field or call a changed Apex class, what a changed component saves through Apex, and fields or classes it uses that the project lacks |
+| **Labels, custom metadata and Visualforce** | Removed labels still in use, who reads a changed custom metadata record, Visualforce pages tied to a changed Apex class or naming a missing one |
+| **Picklists and record types** | Removed or deactivated picklist values still offered by record types or written in code; record types that drop values or are deleted while code names them |
+| **Layouts and Lightning pages** | Where a changed field or component is shown, fields or components a page names that the project lacks, and what a changed page no longer shows |
+| **Everything else that changed** | Layouts, Lightning components, flexipages, labels and every other metadata type are listed with the files that mention them, and the report says how much of the change was analyzed in depth |
 | **Affected agent actions** | Agentforce actions the change reaches, their Testing Center coverage and what their runtime user needs |
 
 Every run also produces a **suggested test plan**: bulk, recursion, validation-collision,
@@ -236,6 +241,16 @@ there's also a plugin that bundles both and checks each metadata edit as it happ
 Setup for each agent, and an `AGENTS.md` snippet for agents without skills:
 [docs/AI_AGENTS.md](docs/AI_AGENTS.md). MCP tools: [docs/MCP.md](docs/MCP.md).
 
+### In the Salesforce CLI
+
+```sh
+sf plugins install sf-plugin-preflight
+sf preflight analyze --base origin/main --target-org my-sandbox
+```
+
+The plugin (`sf-plugin/`) is a thin wrapper: it runs this CLI, mapping `--target-org` to `--org` and
+`--json` to `--format json`. See [sf-plugin/README.md](sf-plugin/README.md).
+
 ### In VS Code
 
 The [sf-preflight extension](vscode/README.md) shows findings in the Problems panel as you work,
@@ -273,6 +288,33 @@ const result = run({ projectDir: ".", base: "origin/main" });
 console.log(result.summary.risk, result.findings.length);
 console.log(toMarkdown(result));
 ```
+
+## Performance
+
+Measured on [NPSP](https://github.com/SalesforceFoundation/NPSP) (1,035 Apex classes, 765 fields,
+26 triggers), changing one class, on a 2-core Xeon 2.1 GHz with Node 22 (median of 3):
+
+| Scenario | Time | Peak memory |
+|---|---:|---:|
+| First run, 1 thread | 26.8 s | 1,309 MB |
+| First run, 2 threads | 22.5 s | 1,763 MB |
+| Repeat run (cached) | 1.0 s | 189 MB |
+| Repeat run after editing one class | 1.3 s | 219 MB |
+
+Parsing Apex is nearly all of the cost, so results are cached per file in `~/.cache/sf-preflight`
+(content-hashed; set `PREFLIGHT_CACHE_DIR` to move it or `PREFLIGHT_NO_CACHE=1` to turn it off), and
+a first run parses on worker threads (`PREFLIGHT_JOBS=1` to turn that off). Small projects take
+about a second either way (apex-recipes, 139 classes: 2 s). The editor extension gets the same
+speed-up, so saving a file re-analyzes in about a second. Gains from threads depend on the
+machine; on this 2-core box they were modest. Run it on your own project:
+
+```bash
+npm run build
+node scripts/bench.mjs path/to/your/sfdx-project --runs 3
+```
+
+It uses a temporary cache (yours is never touched) and, for the "after editing" row, appends a
+comment to one Apex file and puts it back.
 
 ## How it works
 

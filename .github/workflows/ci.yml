@@ -91,6 +91,35 @@ jobs:
           path: vscode/sf-preflight.vsix
           retention-days: 14
 
+  sf-plugin:
+    name: sf CLI plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # The plugin depends on this version of the CLI, which is not on npm until the release
+      # publishes it. Test against the build from this checkout instead.
+      - name: Install the plugin against the local CLI
+        working-directory: sf-plugin
+        run: |
+          npm pkg delete dependencies.sf-preflight
+          npm install
+          npm install --no-save ..
+      - run: npm run typecheck
+        working-directory: sf-plugin
+      - run: npm test
+        working-directory: sf-plugin
+      - name: Build the manifest and check what would be published
+        working-directory: sf-plugin
+        run: |
+          npm run manifest
+          npm pack --dry-run
+
   action:
     name: Action self-test
     runs-on: ubuntu-latest

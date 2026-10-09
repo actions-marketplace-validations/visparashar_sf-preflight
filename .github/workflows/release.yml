@@ -3,6 +3,10 @@ name: Release
 on:
   push:
     tags: ["v*.*.*"]
+    # Merging a release pull request (one that changes the version in package.json) releases it:
+    # the `plan` job below tags the commit, then everything publishes in this same run.
+    branches: [main]
+    paths: [package.json]
   # Re-run a release by choosing the tag under "Use workflow from".
   workflow_dispatch:
 
@@ -14,21 +18,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Decide what to release
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      tag: ${{ steps.plan.outputs.tag }}
+    permissions:
+      contents: write # create the version tag when a release pull request is merged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Work out the tag
+        id: plan
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            # Started from a tag (or re-run for one): release exactly that tag.
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "main" ]; then
+            if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "Tag $TAG already exists: the version did not change, nothing to release."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+            else
+              git tag "$TAG" "$GITHUB_SHA"
+              git push origin "refs/tags/$TAG"
+              echo "release=true" >> "$GITHUB_OUTPUT"
+              echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::error::Run the release workflow from a vX.Y.Z tag (Use workflow from → Tags)."
+            exit 1
+          fi
+
   publish:
     name: Publish to npm and create GitHub release
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
     runs-on: ubuntu-latest
     environment: npm
     permissions:
       contents: write # create the GitHub release
       id-token: write # npm provenance / trusted publishing
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
     steps:
-      - name: Require a version tag
-        if: github.ref_type != 'tag'
-        run: |
-          echo "::error::Run the release workflow from a vX.Y.Z tag (Use workflow from → Tags)."
-          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.plan.outputs.tag }}
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -43,8 +83,8 @@ jobs:
         id: version
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version v$VERSION"
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match package.json version v$VERSION"
             exit 1
           fi
           NAME="$(node -p "require('./package.json').name")"
@@ -59,15 +99,72 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
           else
-            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+            gh release create "$TAG" --verify-tag --generate-notes
           fi
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Move the major version tag for the GitHub Action (e.g. v0)
         run: |
-          MAJOR="${GITHUB_REF_NAME%%.*}"
-          git tag -f "$MAJOR" "$GITHUB_REF_NAME^{commit}"
+          MAJOR="${TAG%%.*}"
+          git tag -f "$MAJOR" "$TAG^{commit}"
           git push -f origin "refs/tags/$MAJOR"
+
+  publish-plugin:
+    name: Publish the sf CLI plugin
+    # After the CLI is on npm: the plugin depends on this exact release of it.
+    needs: [plan, publish]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm provenance / trusted publishing
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Use an npm version that supports trusted publishing
+        run: npm install -g npm@latest
+      - name: Check the plugin has this release's version
+        id: version
+        working-directory: sf-plugin
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::sf-plugin is at $VERSION but the release is $TAG. Run: node scripts/version.mjs <version>"
+            exit 1
+          fi
+          if npm view "sf-plugin-preflight@$VERSION" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install, build and test against the published CLI
+        if: steps.version.outputs.already_published != 'true'
+        run: |
+          npm ci
+          npm run build
+          cd sf-plugin
+          # The CLI was published moments ago; wait for the registry to serve it.
+          ok=0
+          for i in 1 2 3 4 5 6; do
+            if npm install; then ok=1; break; fi
+            sleep 20
+          done
+          [ "$ok" = 1 ]
+          npm run typecheck
+          SF_PREFLIGHT_CLI="$GITHUB_WORKSPACE/dist/cli.js" npm test
+      - name: Publish
+        if: steps.version.outputs.already_published != 'true'
+        working-directory: sf-plugin
+        run: npm publish --provenance --access public
+        env:
+          # Leave unset when using npm trusted publishing (OIDC); set it for token-based publishing.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

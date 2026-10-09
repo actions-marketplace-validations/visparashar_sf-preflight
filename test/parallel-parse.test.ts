@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -50,5 +51,21 @@ describe.skipIf(!built)("parallel parsing", () => {
       source: `public class ${c.name} { }`,
     }));
     expect(parseInParallel(jobs, [], 2).size).toBe(jobs.length);
+  });
+
+  it("still works when launched with node -e (workers must not inherit its flags)", () => {
+    const script = `
+      const { loadProject } = await import(${JSON.stringify(pathToFileURL(path.resolve("dist/core/project.js")).href)});
+      console.log(loadProject(${JSON.stringify(work)}, { cache: false }).classes.size);
+    `;
+    const t = Date.now();
+    const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+      encoding: "utf8",
+      env: { ...process.env, PREFLIGHT_JOBS: "2" },
+      timeout: 60_000,
+    });
+    expect(r.stdout.trim()).toBe("181");
+    // Before the fix the threads never started and the run waited out a long deadline.
+    expect(Date.now() - t).toBeLessThan(40_000);
   });
 });

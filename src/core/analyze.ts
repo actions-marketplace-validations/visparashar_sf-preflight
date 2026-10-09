@@ -7,17 +7,32 @@ import {
   stillReferenced,
   targetRef,
 } from "./agentImpact.js";
-import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
+import { buildCoverage } from "./coverage.js";
+import {
+  callersOfClass,
+  callersOfFlow,
+  classWrites,
+  flexipagesPlacing,
+  flowWrites,
+  knownClassRefs,
+  lightningCallingClass,
+  lightningEmbedding,
+  writersOf,
+} from "./graph.js";
 import { saveProcedure } from "./orderOfExecution.js";
+import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
+import { picklistFindings, recordTypeFindings } from "./picklists.js";
 import type {
   AnalysisResult,
   ApexAnalysis,
   AutomationRef,
   CascadeNode,
   Change,
+  ComponentRef,
   DmlOp,
   Finding,
+  FlexiPageDef,
   LoopIssue,
   OrgModel,
   PermissionContainerDef,
@@ -28,6 +43,7 @@ import type {
   Severity,
   SuggestedTest,
 } from "./types.js";
+import { customMetadataFindings, labelFindings, pagesUsingClass, visualforceFindings } from "./usage.js";
 import { key, uniq, uniqBy } from "./util.js";
 
 export interface AnalyzeOptions {
@@ -87,6 +103,9 @@ const describe = (a: AutomationRef) => {
   }
 };
 
+const isLightningBundle = (c: ComponentRef): boolean =>
+  c.metadataType === "LightningComponentBundle" || c.metadataType === "AuraDefinitionBundle";
+
 export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const { model, changes } = opts;
   const maxDepth = opts.maxDepth ?? 4;
@@ -96,9 +115,123 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const tests: SuggestedTest[] = [];
   const changedFiles = new Set(changes.map((c) => c.component.file));
   const changedAutomation = new Set<string>(); // "Kind:name" lower
+  const coverage = buildCoverage(model, changes);
 
   const addFinding = (f: Finding) => findings.push(f);
   const changeRef = (c: Change): AutomationRef => ({ kind: "Change", name: c.component.name, file: c.component.file });
+
+  /** A changed Lightning Web Component or Aura bundle. */
+  const analyzeLightning = (change: Change) => {
+    const comp = change.component;
+    const lc = model.lightning.get(
+      `${comp.metadataType === "AuraDefinitionBundle" ? "aura" : "lwc"}:${key(comp.name)}`,
+    );
+    if (change.changeType === "deleted" || !lc) {
+      const embedders = lightningEmbedding(model, comp.name);
+      const pages = flexipagesPlacing(model, comp.name);
+      if (embedders.length || pages.length) {
+        const users = [...embedders.map((e) => e.name), ...pages.map((p) => `page ${p.name}`)];
+        addFinding({
+          rule: "deleted-still-referenced",
+          severity: "high",
+          title: `Deleted component ${comp.name} is still used`,
+          detail: `Used by ${users.join(", ")}. The deployment will fail or the pages will break.`,
+          files: uniq([comp.file, ...embedders.map((e) => e.file), ...pages.map((p) => p.file)]),
+        });
+      }
+      return;
+    }
+    const placedOn = flexipagesPlacing(model, comp.name);
+    if (placedOn.length) {
+      addFinding({
+        rule: "lightning-on-page",
+        severity: "info",
+        title: `${comp.name} is placed on ${placedOn.length} Lightning page(s)`,
+        detail: `${placedOn.map((p) => p.name).join(", ")}. Open them to check the component renders and behaves as intended.`,
+        files: uniq([lc.file, ...placedOn.map((p) => p.file)]),
+      });
+    }
+    // What the component saves through the Apex it calls.
+    for (const cls of uniqBy(lc.apex, (a) => key(a.cls)).flatMap((a) => model.classes.get(key(a.cls)) ?? [])) {
+      for (const w of classWrites(model, cls))
+        roots.push({ object: w.object, event: opToEvent(w.op), via: changeRef(change) });
+    }
+    // Things it names that the project does not have.
+    const missing: string[] = [];
+    for (const f of lc.fields) {
+      const [object, field] = f.split(".") as [string, string];
+      const def = model.objects.get(key(object));
+      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+    }
+    for (const a of lc.apex) if (!model.classes.has(key(a.cls))) missing.push(`Apex class ${a.cls}`);
+    if (missing.length) {
+      addFinding({
+        rule: "lightning-missing-reference",
+        severity: "medium",
+        title: `${comp.name} uses ${missing.length} thing(s) that are not in the project`,
+        detail: `${uniq(missing).join(", ")}. The deployment fails unless they exist in the target org already.`,
+        files: [lc.file],
+      });
+    }
+  };
+
+  /** A changed page layout or Lightning page: what it no longer shows, and what it names that the project lacks. */
+  const analyzePage = (change: Change) => {
+    const comp = change.component;
+    if (change.changeType === "deleted") return;
+    const layout = comp.metadataType === "Layout";
+    const cur = layout ? model.layouts.get(key(comp.name)) : model.flexipages.get(key(comp.name));
+    if (!cur) return;
+    const baseXml = opts.readBase?.(comp.file);
+    const prev = baseXml
+      ? layout
+        ? parseLayout(baseXml, comp.name, comp.file)
+        : parseFlexiPage(baseXml, comp.name, comp.file)
+      : undefined;
+    const object = "object" in cur ? cur.object : undefined;
+    const fieldNames = (page: typeof cur): string[] =>
+      "object" in page && layout ? page.fields.map((f) => `${page.object}.${f}`) : page.fields;
+
+    const missing: string[] = [];
+    for (const f of fieldNames(cur)) {
+      const [obj, field] = f.split(".") as [string, string];
+      const def = model.objects.get(key(obj));
+      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+    }
+    if (!layout) {
+      for (const c of (cur as FlexiPageDef).components) {
+        const custom = customComponent(c);
+        if (custom && !model.lightning.has(`lwc:${key(custom)}`) && !model.lightning.has(`aura:${key(custom)}`))
+          missing.push(`component ${c}`);
+      }
+    }
+    if (missing.length) {
+      addFinding({
+        rule: "page-missing-reference",
+        severity: "medium",
+        title: `${comp.name} uses ${missing.length} thing(s) that are not in the project`,
+        detail: `${uniq(missing).join(", ")}. The deployment fails unless they exist in the target org already.`,
+        object,
+        files: [comp.file],
+      });
+    }
+
+    if (prev) {
+      const now = new Set([...fieldNames(cur), ...(layout ? [] : (cur as FlexiPageDef).components)].map(key));
+      const before = [...fieldNames(prev), ...(layout ? [] : (prev as FlexiPageDef).components)];
+      const removed = uniq(before.filter((x) => !now.has(key(x))));
+      if (removed.length) {
+        addFinding({
+          rule: "page-element-removed",
+          severity: "low",
+          title: `${comp.name} no longer shows ${removed.length} item(s)`,
+          detail: `${removed.slice(0, 8).join(", ")}${removed.length > 8 ? ` and ${removed.length - 8} more` : ""}. Users of ${layout ? "this layout" : "this page"} lose them; confirm that is intended.`,
+          object,
+          files: [comp.file],
+        });
+      }
+    }
+  };
 
   // ------------------------------------------------------------------------------------
   // 1. Seed roots, references and change-specific findings
@@ -126,6 +259,29 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             files: uniq([comp.file, ...nonPermRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
           });
         }
+        const lightningRefs = refs.filter((r) => r.from.kind === "LightningComponent");
+        if (!deleted && lightningRefs.length) {
+          addFinding({
+            rule: "field-used-by-lightning",
+            severity: "low",
+            title: `${comp.name} is used by ${lightningRefs.length} Lightning component(s)`,
+            detail: `${lightningRefs.map((r) => r.from.name).join(", ")} read or show this field. Check the component after changing its type, values or access.`,
+            object,
+            files: uniq([comp.file, ...lightningRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
+          });
+        }
+        const pageRefs = refs.filter((r) => r.from.kind === "Layout" || r.from.kind === "FlexiPage");
+        if (!deleted && pageRefs.length) {
+          addFinding({
+            rule: "field-on-page",
+            severity: "info",
+            title: `${comp.name} is on ${pageRefs.length} page layout(s) or Lightning page(s)`,
+            detail: `${pageRefs.map((r) => `${r.from.kind === "Layout" ? "layout" : "page"} ${r.from.name}`).join(", ")}. A changed label, type or access shows up there.`,
+            object,
+            files: uniq([comp.file, ...pageRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
+          });
+        }
+        if (!deleted) findings.push(...picklistFindings(model, comp, object, field, opts.readBase?.(comp.file)));
         const vrRefs = refs.filter((r) => r.from.kind === "ValidationRule");
         for (const r of vrRefs) {
           const vr = model.validationRules.find((v) => v.name === r.from.name && key(v.object) === key(object));
@@ -255,6 +411,16 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         const cls = model.classes.get(key(comp.name));
         if (deleted || !cls) {
           const callers = callersOfClass(model, comp.name);
+          const vfUsers = pagesUsingClass(model, comp.name);
+          if (vfUsers.length) {
+            addFinding({
+              rule: "apex-used-by-page",
+              severity: "high",
+              title: `Deleted class ${comp.name} is still the controller of ${vfUsers.length} Visualforce page(s)`,
+              detail: `${vfUsers.map((p) => p.name).join(", ")} name it as controller or extension and will not save.`,
+              files: uniq([comp.file, ...vfUsers.map((p) => p.file)]),
+            });
+          }
           if (callers.length) {
             addFinding({
               rule: "deleted-still-referenced",
@@ -267,6 +433,26 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           break;
         }
         if (cls.isTest) break;
+        const vfPages = pagesUsingClass(model, cls.name);
+        if (vfPages.length) {
+          addFinding({
+            rule: "apex-used-by-page",
+            severity: "info",
+            title: `${cls.name} is the controller or extension of ${vfPages.length} Visualforce page(s)`,
+            detail: `${vfPages.map((p) => p.name).join(", ")} render through it, so changed properties or actions reach users directly.`,
+            files: uniq([comp.file, ...vfPages.map((p) => p.file)]),
+          });
+        }
+        const lightningCallers = lightningCallingClass(model, cls.name);
+        if (lightningCallers.length) {
+          addFinding({
+            rule: "apex-called-from-lightning",
+            severity: "low",
+            title: `${cls.name} is called from ${lightningCallers.length} Lightning component(s)`,
+            detail: `${lightningCallers.map((l) => l.name).join(", ")} call it from the browser, so a changed signature, result shape or error behaviour reaches users directly.`,
+            files: uniq([comp.file, ...lightningCallers.map((l) => l.file)]),
+          });
+        }
         const via: AutomationRef = { kind: "ApexClass", name: cls.name, file: cls.file };
         const entryPoints = transitiveEntryPoints(model, cls.name);
         for (const ep of entryPoints) {
@@ -310,6 +496,9 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "CustomObject":
       case "ObjectChild":
         if (comp.object && !deleted) roots.push({ object: comp.object, event: "update", via: changeRef(change) });
+        if (comp.type === "ObjectChild" && comp.file.endsWith(".recordType-meta.xml")) {
+          findings.push(...recordTypeFindings(model, comp, deleted, opts.readBase?.(comp.file)));
+        }
         break;
 
       case "AgentMetadata": {
@@ -343,6 +532,43 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           files: [comp.file],
         });
         break;
+
+      case "Metadata": {
+        if (isLightningBundle(comp)) {
+          analyzeLightning(change);
+          break;
+        }
+        if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
+          analyzePage(change);
+          break;
+        }
+        if (comp.metadataType === "CustomLabels") {
+          findings.push(...labelFindings(model, comp, deleted, opts.readBase?.(comp.file)));
+          break;
+        }
+        if (comp.metadataType === "CustomMetadata") {
+          findings.push(...customMetadataFindings(model, comp, deleted));
+          break;
+        }
+        if (comp.metadataType === "ApexPage" || comp.metadataType === "ApexComponent") {
+          if (!deleted) findings.push(...visualforceFindings(model, comp));
+          break;
+        }
+        // Recognized by name only: say so, and point at the files that mention it.
+        const type = comp.metadataType ?? "Metadata";
+        const mentions = coverage?.mentions.find((m) => m.type === type && m.component === comp.name);
+        const where = mentions
+          ? ` Mentioned in ${mentions.files.slice(0, 5).join(", ")}${mentions.files.length + mentions.more > 5 ? ` and ${mentions.files.length + mentions.more - 5} more` : ""}.`
+          : "";
+        addFinding({
+          rule: "metadata-not-analyzed",
+          severity: "info",
+          title: `${type} ${deleted ? "deleted" : "changed"}: ${comp.name}`,
+          detail: `sf-preflight recognizes this metadata type but does not analyze it in depth yet, so what it affects is not in this report.${where}`,
+          files: [comp.file],
+        });
+        break;
+      }
 
       default:
         break;
@@ -609,6 +835,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     findings: finalFindings,
     suggestedTests: uniqBy(tests, (t) => `${t.kind}|${t.description}`),
     agents: agentAnalysis.impacts,
+    coverage,
     summary: {
       risk,
       changedComponents: changes.length,
@@ -687,6 +914,18 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
   for (const pc of model.permissionContainers.values()) {
     if (pc.fields.some((g) => key(g.field) === tk))
       refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
+  }
+  for (const lc of model.lightning.values()) {
+    if (lc.fields.some((f) => key(f) === tk))
+      refs.push({ from: { kind: "LightningComponent", name: lc.name, file: lc.file }, to: target });
+  }
+  for (const l of model.layouts.values()) {
+    if (key(l.object) === key(object) && l.fields.some((f) => key(f) === fk))
+      refs.push({ from: { kind: "Layout", name: l.name, file: l.file }, to: target });
+  }
+  for (const p of model.flexipages.values()) {
+    if (p.fields.some((f) => key(f) === tk))
+      refs.push({ from: { kind: "FlexiPage", name: p.name, file: p.file }, to: target });
   }
   return refs;
 }

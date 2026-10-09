@@ -33,6 +33,23 @@ that is only inside the blast radius).
 | [`agent-runtime-overprivileged`](#agent-runtime-overprivileged) | Medium | With --org: an affected agent's runtime user holds broad access such as Modify All Data. |
 | [`agent-action-no-confirmation`](#agent-action-no-confirmation) | Medium | An agent action deletes records without asking the user for confirmation. |
 | [`legacy-workflow`](#legacy-workflow) | Info | A legacy workflow rule changed. |
+| [`field-used-by-lightning`](#field-used-by-lightning) | Low | A changed field is used by Lightning Web Components or Aura components. |
+| [`apex-called-from-lightning`](#apex-called-from-lightning) | Low | A changed Apex class is called from Lightning components. |
+| [`lightning-missing-reference`](#lightning-missing-reference) | Medium | A changed Lightning component uses a field or Apex class that is not in the project. |
+| [`picklist-value-removed`](#picklist-value-removed) | Medium | Picklist values were removed or deactivated while record types, formulas, flows or Apex still use them. |
+| [`record-type-values-removed`](#record-type-values-removed) | Low | A record type no longer offers picklist values it offered before. |
+| [`record-type-deactivated`](#record-type-deactivated) | Low | A record type was deactivated. |
+| [`record-type-still-referenced`](#record-type-still-referenced) | Medium | A deleted record type is still named in Apex, flows or formulas. |
+| [`label-removed-still-used`](#label-removed-still-used) | High | A custom label was removed but Apex, Visualforce, Lightning or flows still use it. |
+| [`cmdt-record-still-referenced`](#cmdt-record-still-referenced) | Medium | A deleted custom metadata record is still named in code that reads its type. |
+| [`cmdt-record-changed`](#cmdt-record-changed) | Info | A custom metadata record changed; files that read its type are listed. |
+| [`visualforce-missing-reference`](#visualforce-missing-reference) | Medium | A Visualforce page or component names an Apex controller or extension the project does not have. |
+| [`apex-used-by-page`](#apex-used-by-page) | Info | An Apex class is the controller or extension of Visualforce pages (high when the class is deleted). |
+| [`field-on-page`](#field-on-page) | Info | A changed field is on page layouts or Lightning pages. |
+| [`lightning-on-page`](#lightning-on-page) | Info | A changed Lightning component is placed on Lightning pages. |
+| [`page-missing-reference`](#page-missing-reference) | Medium | A changed layout or Lightning page uses a field or component that is not in the project. |
+| [`page-element-removed`](#page-element-removed) | Low | A changed layout or Lightning page no longer shows fields or components it showed before. |
+| [`metadata-not-analyzed`](#metadata-not-analyzed) | Info | A changed component is of a metadata type that is not analyzed in depth. |
 
 ## recursion-cycle
 
@@ -233,3 +250,139 @@ Require confirmation for destructive actions so a misunderstood request can't de
 A legacy workflow rule changed.
 
 Workflow rules are not analyzed yet; consider migrating them to flows.
+
+## field-used-by-lightning
+
+**FieldUsedByLightning** · default severity: Low
+
+A changed field is used by Lightning Web Components or Aura components.
+
+Components read and show the field directly. After changing its type, values or access, check the component and the pages it sits on.
+
+## apex-called-from-lightning
+
+**ApexCalledFromLightning** · default severity: Low
+
+A changed Apex class is called from Lightning components.
+
+Lightning components call Apex from the browser, so a changed signature, result shape or error behaviour reaches users without a flow or trigger in between. Re-test the component.
+
+## lightning-missing-reference
+
+**LightningMissingReference** · default severity: Medium
+
+A changed Lightning component uses a field or Apex class that is not in the project.
+
+Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.
+
+## picklist-value-removed
+
+**PicklistValueRemoved** · default severity: Medium
+
+Picklist values were removed or deactivated while record types, formulas, flows or Apex still use them.
+
+Records keep the old value, but saves that set it fail or take the wrong branch. Remove it from the record types and replace it in the formulas, flows and code, or keep it active.
+
+## record-type-values-removed
+
+**RecordTypeValuesRemoved** · default severity: Low
+
+A record type no longer offers picklist values it offered before.
+
+Users of that record type can no longer pick them. Existing records keep their values.
+
+## record-type-deactivated
+
+**RecordTypeDeactivated** · default severity: Low
+
+A record type was deactivated.
+
+New records can no longer use it. Flows or Apex that create records of this type may fail.
+
+## record-type-still-referenced
+
+**RecordTypeStillReferenced** · default severity: Medium
+
+A deleted record type is still named in Apex, flows or formulas.
+
+Comparing against a record type by name does not fail the deployment; it quietly stops matching. Update the code, flows and formulas that name it.
+
+## label-removed-still-used
+
+**LabelRemovedStillUsed** · default severity: High
+
+A custom label was removed but Apex, Visualforce, Lightning or flows still use it.
+
+Code that names a missing label fails to compile. Restore the label or update what uses it.
+
+## cmdt-record-still-referenced
+
+**CmdtRecordStillReferenced** · default severity: Medium
+
+A deleted custom metadata record is still named in code that reads its type.
+
+Lookups by the record's name return nothing after the delete. Update the code, or keep the record.
+
+## cmdt-record-changed
+
+**CmdtRecordChanged** · default severity: Info
+
+A custom metadata record changed; files that read its type are listed.
+
+Custom metadata is configuration that code reads at run time. Check the readers behave with the new values.
+
+## visualforce-missing-reference
+
+**VisualforceMissingReference** · default severity: Medium
+
+A Visualforce page or component names an Apex controller or extension the project does not have.
+
+The page cannot be saved without its classes. Deploy them together or fix the name.
+
+## apex-used-by-page
+
+**ApexUsedByPage** · default severity: Info
+
+An Apex class is the controller or extension of Visualforce pages (high when the class is deleted).
+
+Changes to its properties and actions reach users through those pages. A deleted class breaks them.
+
+## field-on-page
+
+**FieldOnPage** · default severity: Info
+
+A changed field is on page layouts or Lightning pages.
+
+A changed label, type or access shows up on those pages. Open one to check it still reads well.
+
+## lightning-on-page
+
+**LightningOnPage** · default severity: Info
+
+A changed Lightning component is placed on Lightning pages.
+
+Open the pages to check the component renders and behaves as intended where it is placed.
+
+## page-missing-reference
+
+**PageMissingReference** · default severity: Medium
+
+A changed layout or Lightning page uses a field or component that is not in the project.
+
+A page that names a missing field or component fails the deployment. Add it to the project, or make sure the target org already has it.
+
+## page-element-removed
+
+**PageElementRemoved** · default severity: Low
+
+A changed layout or Lightning page no longer shows fields or components it showed before.
+
+Users of the page lose them. Confirm that is intended, and that nothing in their process depends on seeing them.
+
+## metadata-not-analyzed
+
+**MetadataNotAnalyzed** · default severity: Info
+
+A changed component is of a metadata type that is not analyzed in depth.
+
+sf-preflight recognizes the type (layouts, Lightning components, page layouts, labels, ...) but only lists it and the files that mention it. Review what depends on it yourself, and turn the rule off in .preflight.json if the noise is not useful.

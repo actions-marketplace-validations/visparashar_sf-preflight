@@ -68,6 +68,15 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
         "The analysis is the same either way — but AI-generated changes deserve a deliberate look at the findings below.",
     );
   }
+  const cov = result.coverage;
+  if (cov) {
+    const types = cov.basicByType.map((t) => `${t.type} ×${t.count}`).join(", ");
+    out.push(
+      "",
+      `_Analyzed in depth: **${cov.deep}** of **${cov.deep + cov.basic}** changed component(s). ` +
+        `Recognized but not analyzed in depth: ${types}._`,
+    );
+  }
   if (result.config) {
     out.push("", `_Policy: \`${result.config.file}\`${result.config.ref ? ` at \`${result.config.ref}\`` : ""}_`);
   }
@@ -97,6 +106,26 @@ export function toMarkdown(result: AnalysisResult, opts: MarkdownOptions = {}): 
     }
     if (result.findings.length > maxFindings)
       out.push("", `_…and ${result.findings.length - maxFindings} more in the JSON report._`);
+    out.push("");
+  }
+
+  // Components without a dedicated analysis, and where the project mentions them
+  if (cov?.mentions.length) {
+    out.push(
+      "### Not analyzed in depth",
+      "",
+      "These changed components are of types sf-preflight recognizes but does not analyze yet. Files that mention them:",
+      "",
+      "| Component | Type | Mentioned in |",
+      "|---|---|---|",
+    );
+    for (const m of cov.mentions) {
+      const shown = m.files.slice(0, 5).map((f) => `\`${esc(f)}\``);
+      const rest = m.files.length + m.more - shown.length;
+      out.push(
+        `| \`${esc(m.component)}\` | ${esc(m.type)} | ${shown.join(", ")}${rest > 0 ? ` and ${rest} more` : ""} |`,
+      );
+    }
     out.push("");
   }
 
