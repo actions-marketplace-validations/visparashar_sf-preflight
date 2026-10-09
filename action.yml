@@ -167,7 +167,7 @@ runs:
       id: approvals
       # Approvals of the pull request (or, on push, of the pull request the commit came from).
       continue-on-error: true
-      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         APPROVALS_FILE: ${{ runner.temp }}/sf-preflight-approvals.json
       with:
@@ -328,7 +328,7 @@ runs:
       if: inputs.comment == 'true' && github.event.pull_request
       # Fork PRs get a read-only token; don't fail the check just because commenting isn't allowed.
       continue-on-error: true
-      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         REPORT: ${{ steps.analyze.outputs.md }}
       with:
