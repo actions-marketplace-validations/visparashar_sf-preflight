@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Command, InvalidArgumentError, Option } from "commander";
 import type { AnalysisResult, AppliedRollback, FailOn, SaveEvent, TestsResultFile } from "./core/index.js";
@@ -8,6 +8,7 @@ import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
   agentTestsToMarkdown,
+  alertFromMonitor,
   alertFromResult,
   allAgentActions,
   analyzeChange,
@@ -28,6 +29,8 @@ import {
   incidentsToMarkdown,
   investigateIncidents,
   loadProject,
+  monitorShouldNotify,
+  monitorToMarkdown,
   type NotifyLevel,
   type NotifyTarget,
   noAgentTests,
@@ -39,6 +42,7 @@ import {
   readResult,
   rollbackToMarkdown,
   runAgentTests,
+  runMonitor,
   runTests,
   saveProcedure,
   selectAgentTests,
@@ -720,6 +724,106 @@ program
       } else {
         console.error(`Could not send the alert: ${sent.error}.`);
         if (opts.strict) process.exitCode = 1;
+      }
+    },
+  );
+
+program
+  .command("monitor")
+  .description(
+    "Watch a production org's Setup Audit Trail (read-only) and alert on risky changes: validation rules or flows switched off, broad permissions, Apex, sharing and security settings",
+  )
+  .requiredOption("--org <alias>", "org to watch, read-only (production is fine)")
+  .option("--since <when>", "changes since a duration (1h, 24h, 7d) or a date", "24h")
+  .option("--state <file>", "remember the newest change seen, so each run reports only new ones")
+  .option("-p, --project <dir>", "SFDX project: say whether each change names a component found in the repository")
+  .option(
+    "--ignore-user <names...>",
+    "skip changes made by these users (e.g. your deployment user); names are never shown",
+  )
+  .addOption(new Option("--format <format>", "output format").choices(["md", "json"]).default("md"))
+  .option("-o, --out <file>", "write the report to a file instead of stdout")
+  .addOption(
+    new Option("--notify-on <level>", "send an alert (PREFLIGHT_WEBHOOK_URL) when risk is at least this level").choices(
+      ["medium", "high"],
+    ),
+  )
+  .addOption(
+    new Option("--target <target>", "alert format (default: from the webhook's host name)")
+      .choices(["auto", "slack", "teams", "generic"])
+      .default("auto"),
+  )
+  .option("--link <url>", "https link to show in the alert")
+  .option("--dry-run", "print the alert instead of sending it")
+  .option("--strict", "exit with code 1 when the alert cannot be sent (default: warn and exit 0)")
+  .action(
+    async (opts: {
+      org: string;
+      since: string;
+      state?: string;
+      project?: string;
+      ignoreUser?: string[];
+      format: "md" | "json";
+      out?: string;
+      notifyOn?: "medium" | "high";
+      target: NotifyTarget | "auto";
+      link?: string;
+      dryRun?: boolean;
+      strict?: boolean;
+    }) => {
+      let since = parseSince(opts.since);
+      let exclusive = false;
+      if (opts.state && existsSync(opts.state)) {
+        try {
+          const saved = new Date(
+            (JSON.parse(readFileSync(opts.state, "utf8")) as { lastSeen?: string }).lastSeen ?? "",
+          );
+          if (!Number.isNaN(saved.getTime()) && saved > since) {
+            since = saved;
+            exclusive = true;
+          }
+        } catch {
+          console.error(`Ignoring unreadable state file ${opts.state}.`);
+        }
+      }
+      const raw = process.env.PREFLIGHT_WEBHOOK_URL;
+      if (opts.notifyOn && !raw && !opts.dryRun) {
+        throw new Error("Set PREFLIGHT_WEBHOOK_URL to the webhook URL (from a secret), or use --dry-run.");
+      }
+      const url = raw && opts.notifyOn ? assertSafeWebhook(raw) : undefined;
+      console.error("Reading the Setup Audit Trail (read-only)...");
+      const report = runMonitor({
+        org: opts.org,
+        since,
+        exclusive,
+        model: opts.project ? loadProject(path.resolve(opts.project)) : undefined,
+        ignoreUsers: opts.ignoreUser,
+      });
+      const text = opts.format === "json" ? JSON.stringify(report, null, 2) : monitorToMarkdown(report);
+      if (opts.out) writeFileSync(opts.out, `${text}\n`);
+      else process.stdout.write(`${text}\n`);
+      let delivered = true;
+      if (opts.notifyOn && monitorShouldNotify(report, opts.notifyOn)) {
+        const target: NotifyTarget = opts.target === "auto" ? (url ? detectTarget(url) : "generic") : opts.target;
+        const payload = payloadFor(
+          target,
+          alertFromMonitor(report, { link: opts.link ? { label: "Open", url: opts.link } : undefined }),
+        );
+        if (opts.dryRun || !url) {
+          console.log(JSON.stringify({ target, host: url?.hostname, payload }, null, 2));
+        } else {
+          const sent = await sendWebhook(url, payload);
+          delivered = sent.ok;
+          if (sent.ok) console.error(`Alert sent to ${url.hostname} (${target}).`);
+          else {
+            console.error(`Could not send the alert: ${sent.error}.`);
+            if (opts.strict) process.exitCode = 1;
+          }
+        }
+      }
+      // Move the mark forward only once the alert went out, so a failed send is tried again next run.
+      if (opts.state && report.newest && delivered && !opts.dryRun) {
+        writeFileSync(opts.state, `${JSON.stringify({ lastSeen: report.newest })}\n`);
       }
     },
   );

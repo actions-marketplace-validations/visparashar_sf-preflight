@@ -54,6 +54,17 @@ export {
 } from "./gate.js";
 export * from "./incidents/index.js";
 export {
+  type AuditEntry,
+  alertFromMonitor,
+  classifyAudit,
+  type MonitorFinding,
+  type MonitorReport,
+  monitorShouldNotify,
+  monitorToMarkdown,
+  readAuditTrail,
+  runMonitor,
+} from "./monitor.js";
+export {
   type Alert,
   alertFromResult,
   assertSafeWebhook,
