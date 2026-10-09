@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 const HEADER = "SPDX-License-Identifier: Apache-2.0";
-const PATTERNS = ["*.ts", "*.mts", "*.cts", "*.js", "*.mjs", "*.cjs"];
+const PATTERNS = ["*.ts", "*.tsx", "*.mts", "*.cts", "*.js", "*.mjs", "*.cjs"];
 const EXCLUDE = [/^dist\//, /^coverage\//, /^fixtures\//, /^node_modules\//];
 
 const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...PATTERNS], {
