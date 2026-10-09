@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { analyzeChange } from "../src/core/index.js";
 import {
   alertFromResult,
@@ -214,6 +214,10 @@ describe("sending", () => {
 describe("preflight notify", () => {
   let dir: string;
   let report: string;
+  // These tests run the built CLI. Build it when it isn't there (a release job runs the tests before any build).
+  beforeAll(() => {
+    if (!existsSync("dist/cli.js")) execFileSync("npm", ["run", "build", "--silent"], { stdio: "ignore" });
+  }, 180_000);
   beforeEach(() => {
     dir = mkdtempSync(path.join(tmpdir(), "preflight-notify-"));
     report = path.join(dir, "report.json");
