@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sf-preflight demos</title>
+<meta name="description" content="Short videos of every sf-preflight feature, run on a sample Salesforce org.">
+<meta name="theme-color" content="#0A0C0F">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:#9AA4B0;text-decoration:none}a:hover{color:#E6E9ED}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:24px}
+</style>
+</head>
+<body>
+<div style="background:#0A0C0F;color:#E6E9ED;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:17px;line-height:1.6">
+<div style="border-bottom:1px solid #232A33">
+<div style="max-width:1200px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<a href="./" style="color:#E6E9ED;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:500">sf-preflight</a>
+<nav style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;font-size:15px">
+<a href="./">Home</a>
+<a href="https://github.com/visparashar/sf-preflight#readme">Docs</a>
+<a href="https://github.com/visparashar/sf-preflight" style="color:#E6E9ED;border:1px solid #2F3945;border-radius:8px;padding:10px 16px">GitHub</a>
+</nav>
+</div>
+</div>
+<div style="max-width:1200px;margin:0 auto;padding:64px 24px 24px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#52E0A1;margin-bottom:16px">Demos</div>
+<h1 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:clamp(34px,4.6vw,56px);line-height:1.06;letter-spacing:-0.02em">Every feature, in under a minute.</h1>
+<p style="margin:18px 0 0;color:#9AA4B0;max-width:720px">Each video runs the real command on a small sample org with a branch that changes a field and a validation rule. No sound; captions explain each step. The monitor demo uses a simulated org, and the alert demo is a dry run.</p>
+</div>
+<div style="max-width:1200px;margin:0 auto;padding:24px 24px 72px" class="grid">
+<article id="analyze" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/01-analyze.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/01-analyze.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">See what a change sets off</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight analyze --base main</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">The blast radius of a field and validation-rule change: flows, triggers, roll-ups, automation cycles and the Agentforce actions it reaches.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/README.md#cli" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="quality-gate" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/02-quality-gate.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/02-quality-gate.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Quality gate</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight analyze --base main --gate</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">One pass/fail decision from a policy file in the repo. Exits with code 2 when the change breaks it.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/CONFIG.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="explain" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/03-explain.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/03-explain.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Order of execution</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight explain Opportunity</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">What runs, in order, when a record of an object is saved, and what each step writes.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/ARCHITECTURE.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="tests" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/04-tests.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/04-tests.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Generated Apex tests</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight tests --base main</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Bulk, recursion and idempotency tests built from the cascade of the change.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/TESTS.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="agentforce" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/05-agentforce.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/05-agentforce.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Agentforce impact</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight agents · preflight agent-tests</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Which agent actions a change reaches, what they call and save, and which Testing Center tests to re-run.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/AGENTS.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="incidents" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/06-incidents.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/06-incidents.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Trace production errors to changes</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight incidents --org prod</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Failed flows, Apex exceptions and agent action errors matched to the recent change that probably caused them. Shown here with errors read from a file.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/INCIDENTS.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="rollback" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/07-rollback.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/07-rollback.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Partial rollback</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight rollback &lt;commit&gt; --restore</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Restore or deactivate only the components that need it, then roll back through a pull request.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/INCIDENTS.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="evidence" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/08-evidence.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/08-evidence.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Change evidence</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight evidence --base main</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">A tamper-evident record of what changed, its risk, the tests and the approvals, with a digest anyone can verify.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/EVIDENCE.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="alerts" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/09-alerts.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/09-alerts.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Risk alerts to Slack or Teams</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight notify --result report.json</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">A short message when risk is high. The GitHub Action sends it on every pull request. Shown as a dry run to a placeholder URL.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/GITHUB_ACTION.md#risk-alerts" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="monitor" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/10-monitor.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/10-monitor.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Production change monitor</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight monitor --org prod</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Risky changes made directly in the org, read from the Setup Audit Trail. This demo uses a simulated org with canned sample data.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/MONITOR.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="agent-skill" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/11-agent-skill.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/11-agent-skill.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">Skill for AI coding agents</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">preflight skill install</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Teaches Claude Code, Copilot, Cursor and other agents to run preflight when a task touches Salesforce metadata.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/AI_AGENTS.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="sf-plugin" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/12-sf-plugin.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/12-sf-plugin.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">sf CLI plugin</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">sf preflight analyze</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">The same checks inside the Salesforce CLI, with sf's own flags.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/sf-plugin/README.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+<article id="vscode-graph" style="background:#11151B;border:1px solid #232A33;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+<video controls preload="none" playsinline poster="assets/demos/13-vscode-graph.jpg" style="width:100%;aspect-ratio:16/9;background:#000;display:block"><source src="assets/demos/13-vscode-graph.mp4" type="video/mp4"><track kind="captions" src="assets/demos/captions.vtt" srclang="en" label="English"></video>
+<div style="padding:18px 20px 20px">
+<h2 style="margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:700">VS Code blast radius graph</h2>
+<code style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:13px;color:#52E0A1;background:#0A0C0F;border:1px solid #232A33;border-radius:6px;padding:3px 8px;margin-bottom:10px">SF Preflight: Show graph</code>
+<p style="margin:0 0 10px;color:#9AA4B0;font-size:15px;line-height:1.5">Hover for why a node is flagged, click the legend to highlight a kind. Rendered from the extension's real graph code.</p>
+<a href="https://github.com/visparashar/sf-preflight/blob/main/docs/AI_AGENTS.md" style="font-size:14px;color:#6EA8FF">Read the docs →</a>
+</div></article>
+</div>
+<div style="border-top:1px solid #232A33">
+<div style="max-width:1200px;margin:0 auto;padding:28px 24px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;font-size:14px;color:#9AA4B0">
+<span style="font-family:'JetBrains Mono',monospace">sf-preflight · Apache-2.0 · DCO</span>
+<span style="display:flex;gap:20px;flex-wrap:wrap"><a href="https://github.com/visparashar/sf-preflight">GitHub</a><a href="https://www.npmjs.com/package/sf-preflight">npm</a></span>
+</div>
+</div>
+</div>
+</body>
+</html>
