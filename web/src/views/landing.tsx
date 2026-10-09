@@ -28,6 +28,31 @@ export function Problems({ problems, onDismiss }: { problems: Problem[]; onDismi
   );
 }
 
+/** Asks before opening a file from another site that a link (?url=) points to. */
+export function ConfirmLink({ url, onOpen, onCancel }: { url: URL; onOpen: () => void; onCancel: () => void }) {
+  return (
+    <main id="main" class="landing">
+      <h1>Open this file?</h1>
+      <p class="lede">
+        The link you followed opens a file from <b>{url.host}</b>. Open it only if you trust whoever sent the link: a
+        file can say anything, and an evidence pack's digest shows it's intact, not who made it.
+      </p>
+      <div class="cmd" style={{ marginTop: "28px", maxWidth: "52em" }}>
+        <code>{url.href}</code>
+      </div>
+      <div class="samples" style={{ marginTop: "24px" }}>
+        <button type="button" class="btn primary" onClick={onOpen}>
+          <Icon name="open" size={16} />
+          Open file
+        </button>
+        <button type="button" class="btn" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </main>
+  );
+}
+
 export function Landing({
   problems,
   busy,

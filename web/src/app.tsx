@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { Icon, Mark } from "./components.js";
 import type { Theme } from "./graph.js";
+import { checkLink } from "./lib/links.js";
 import { type Doc, type Loaded, loadFiles, loadText, loadUrl, type Problem } from "./lib/load.js";
 import { EvidenceView } from "./views/evidence.js";
-import { Landing, Problems, type SampleKind } from "./views/landing.js";
+import { ConfirmLink, Landing, Problems, type SampleKind } from "./views/landing.js";
 import { ReportView } from "./views/report.js";
 
 const THEME_KEY = "sf-preflight-viewer:theme";
@@ -63,6 +64,8 @@ export function App() {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  /** A link from the address bar (?url=), opened only once the person confirms it. */
+  const [pending, setPending] = useState<URL>();
   const [theme, toggleTheme] = useTheme();
   const picker = useRef<HTMLInputElement>(null);
 
@@ -89,13 +92,21 @@ export function App() {
     [open],
   );
 
-  // Links can open a sample (?sample=report) or a file on another site (?url=https://…).
+  // Links can open a sample (?sample=report) or a file on another site (?url=https://…). A file on
+  // another site is only fetched once the person has seen where it comes from and chosen to open it.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sample = params.get("sample");
     const url = params.get("url");
     if (sample === "report" || sample === "evidence") void openSample(sample);
-    else if (url) void open(loadUrl(url), { url });
+    else if (url) {
+      const checked = checkLink(url, window.location.href);
+      if ("url" in checked) setPending(checked.url);
+      else {
+        setProblems([{ name: url, message: checked.reason }]);
+        setQuery(undefined);
+      }
+    }
   }, []);
 
   // Drop files anywhere; paste JSON anywhere outside a text field.
@@ -262,6 +273,19 @@ export function App() {
         </>
       ) : busy && new URLSearchParams(window.location.search).size ? (
         <p class="loading">Opening…</p>
+      ) : pending ? (
+        <ConfirmLink
+          url={pending}
+          onOpen={() => {
+            const url = pending.href;
+            setPending(undefined);
+            void open(loadUrl(url), { url });
+          }}
+          onCancel={() => {
+            setPending(undefined);
+            setQuery(undefined);
+          }}
+        />
       ) : (
         <Landing
           problems={problems}

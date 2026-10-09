@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { buildEvidence, evaluateGate, evidenceDigest, run, verifyEvidence } from "../src/core/index.js";
 import { detect, normalizeReport } from "../web/src/lib/detect.js";
 import { checkDigest } from "../web/src/lib/digest.js";
+import { checkLink, isPrivateHost } from "../web/src/lib/links.js";
 
 const FIXTURE = path.resolve(__dirname, "../fixtures/sample-org");
 const FIELD = "force-app/main/default/objects/Opportunity/fields/Contract_Signed_Date__c.field-meta.xml";
@@ -74,5 +75,46 @@ describe("web viewer: evidence digest", () => {
     const none = await checkDigest(unsigned);
     expect(none.recorded).toBeUndefined();
     expect(none.matches).toBe(false);
+  });
+});
+
+describe("web viewer: links", () => {
+  const base = "https://viewer.example.com/?url=x";
+  const ok = (raw: string) => "url" in checkLink(raw, base);
+
+  it("opens https files and the site's own samples", () => {
+    expect(ok("https://raw.githubusercontent.com/o/r/main/preflight.json")).toBe(true);
+    expect(ok("https://gist.githubusercontent.com/u/1/raw/evidence.json")).toBe(true);
+    expect(ok("samples/report.json")).toBe(true);
+  });
+
+  it("refuses other schemes, credentials and private networks", () => {
+    for (const raw of [
+      "http://example.com/r.json",
+      "javascript:alert(1)",
+      "file:///etc/passwd",
+      "https://user:pw@example.com/r.json",
+      "https://localhost/r.json",
+      "https://127.0.0.1/r.json",
+      "https://2130706433/r.json",
+      "https://10.0.0.5/r.json",
+      "https://192.168.1.2/r.json",
+      "https://172.20.0.1/r.json",
+      "https://169.254.169.254/latest/meta-data",
+      "https://[::1]/r.json",
+      "https://[fd00::1]/r.json",
+      "https://intranet/r.json",
+      "https://build.corp/r.json",
+      "https://",
+    ]) {
+      expect(ok(raw), raw).toBe(false);
+    }
+  });
+
+  it("tells private hosts from public ones", () => {
+    expect(isPrivateHost("172.32.0.1")).toBe(false);
+    expect(isPrivateHost("8.8.8.8")).toBe(false);
+    expect(isPrivateHost("example.com")).toBe(false);
+    expect(isPrivateHost("printer.local")).toBe(true);
   });
 });

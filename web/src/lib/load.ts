@@ -8,6 +8,7 @@ import type { EvidencePack } from "../../../src/core/evidence.js";
 import type { AnalysisResult } from "../../../src/core/types.js";
 import { detect } from "./detect.js";
 import { checkDigest, type DigestCheck } from "./digest.js";
+import { checkLink } from "./links.js";
 
 /** Largest file read, and largest total unpacked from one zip. */
 export const MAX_BYTES = 25 * 1024 * 1024;
@@ -123,15 +124,9 @@ export async function loadFiles(files: File[]): Promise<Loaded> {
 
 /** A report or evidence pack from a URL; the server must allow cross-origin reads (CORS). */
 export async function loadUrl(raw: string, displayName?: string): Promise<Loaded> {
-  let url: URL;
-  try {
-    url = new URL(raw, window.location.href);
-  } catch {
-    return problem(raw, "This isn't a valid URL.");
-  }
-  if (url.protocol !== "https:" && url.origin !== window.location.origin) {
-    return problem(raw, "Only https:// URLs can be opened.");
-  }
+  const checked = checkLink(raw, window.location.href);
+  if ("reason" in checked) return problem(raw, checked.reason);
+  const { url } = checked;
   const fileName = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? url.host);
   const name = displayName ?? fileName;
   const origin = url.origin === window.location.origin ? undefined : url.host;

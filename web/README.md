@@ -26,7 +26,7 @@ you open.
 |---|---|
 | `/?sample=report` | The sample report (one field change in [the sample org](../fixtures/sample-org)) |
 | `/?sample=evidence` | The sample evidence pack |
-| `/?url=https://…/preflight.json` | A report or evidence pack from another site. That site must allow cross-origin reads, as `raw.githubusercontent.com` and Gist raw links do. |
+| `/?url=https://…/preflight.json` | A report or evidence pack from another site, after the viewer shows where it comes from and you choose to open it. Only https links to public hosts open, and the site must allow cross-origin reads, as `raw.githubusercontent.com` and Gist raw links do. |
 
 ## Run it locally
 
