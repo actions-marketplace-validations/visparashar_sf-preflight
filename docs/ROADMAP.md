@@ -30,6 +30,7 @@ AI-authored — before it ships:
 | **M6** | Evidence & pipeline integration | `.preflight.json` policy (rule severities, ignores) and a quality gate (severity threshold, approvals for AI-assisted changes, agent test coverage, passing generated tests); evidence pack per change with file digests, authorship, findings, tests, approvals and a digest, signed with GitHub artifact attestations in the Action; the policy is read from the base branch so a change can't loosen its own gate; JUnit output and guides for DevOps Center, GitLab, Azure DevOps, Jenkins and Bitbucket. Next: a native DevOps Center test provider once Salesforce opens provider integrations | ✅ 0.5.0 |
 | **M7** | Production feedback loop | `preflight incidents` reads failed flow interviews, unhandled Apex exceptions, failed async Apex and Agentforce action errors (beta) from an org, read-only, and traces each to the merged change most likely to have caused it (direct, message, blast-radius and finding evidence, weighed by timing in git and in the org); `preflight rollback` and MCP `plan_rollback` plan a partial rollback that stays consistent, shipped as a pull request. Messages are reduced to metadata, never record data | ✅ 0.6.0 |
 | **M8** | Agents and editors | The `sf-preflight` agent skill (open Agent Skills format) for Codex, Copilot, Cursor, Gemini CLI, Claude and others, `preflight skill install`, and a Claude Code plugin with an edit hook; a VS Code extension with findings in the Problems panel, a blast-radius view, analysis on change and the MCP tools for agent mode | ✅ 0.7.0 · extension 0.1.0 |
+| **M9** | Metadata coverage and speed | Every Salesforce metadata type recognized, with a report of how much of a change was analyzed in depth; in-depth analysis of Lightning Web Components and Aura, layouts and Lightning pages, picklist values and record types, custom labels, custom metadata and Visualforce; a parse cache and parallel parsing for large projects; the `sf` CLI plugin (`sf preflight …`) | ✅ 0.8.0 |
 
 ## Next up (M1 follow-ups)
 
@@ -40,7 +41,7 @@ AI-authored — before it ships:
 - [ ] Apex: detect ignored `Database.SaveResult` / `allOrNone=false` failures
 - [ ] Master-detail cascade delete edges
 - [x] Configurable rule severities and ignores (`.preflight.json`)
-- [ ] Performance pass on large orgs (streaming profile parsing, caching)
+- [x] Performance pass on large orgs (parse cache, parallel parsing; see the README's Performance section)
 
 ## Out of scope (for now)
 

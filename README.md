@@ -45,7 +45,7 @@ It is open source, runs offline on your source code, and needs no org credential
 | **Labels, custom metadata and Visualforce** | Removed labels still in use, who reads a changed custom metadata record, Visualforce pages tied to a changed Apex class or naming a missing one |
 | **Picklists and record types** | Removed or deactivated picklist values still offered by record types or written in code; record types that drop values or are deleted while code names them |
 | **Layouts and Lightning pages** | Where a changed field or component is shown, fields or components a page names that the project lacks, and what a changed page no longer shows |
-| **Everything else that changed** | Layouts, Lightning components, flexipages, labels and every other metadata type are listed with the files that mention them, and the report says how much of the change was analyzed in depth |
+| **Everything else that changed** | Every other metadata type (tabs, quick actions, reports, email templates and the rest) is recognized and listed with the files that mention it, and the report says how much of the change was analyzed in depth |
 | **Affected agent actions** | Agentforce actions the change reaches, their Testing Center coverage and what their runtime user needs |
 
 Every run also produces a **suggested test plan**: bulk, recursion, validation-collision,
