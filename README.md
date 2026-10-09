@@ -241,6 +241,16 @@ there's also a plugin that bundles both and checks each metadata edit as it happ
 Setup for each agent, and an `AGENTS.md` snippet for agents without skills:
 [docs/AI_AGENTS.md](docs/AI_AGENTS.md). MCP tools: [docs/MCP.md](docs/MCP.md).
 
+### In the Salesforce CLI
+
+```sh
+sf plugins install sf-plugin-preflight
+sf preflight analyze --base origin/main --target-org my-sandbox
+```
+
+The plugin (`sf-plugin/`) is a thin wrapper: it runs this CLI, mapping `--target-org` to `--org` and
+`--json` to `--format json`. See [sf-plugin/README.md](sf-plugin/README.md).
+
 ### In VS Code
 
 The [sf-preflight extension](vscode/README.md) shows findings in the Problems panel as you work,

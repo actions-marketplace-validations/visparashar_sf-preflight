@@ -14,6 +14,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the files that read its type, and a deleted one is searched for by name. A Visualforce page
   that names a missing controller is flagged, and a changed or deleted Apex class lists the pages
   that use it as controller or extension.
+- A Salesforce CLI plugin, `sf-plugin-preflight` (in `sf-plugin/`): `sf preflight analyze`, `tests`,
+  `agents`, `agent-tests`, `incidents`, `rollback`, `explain` and `evidence`. It runs this CLI, so
+  results match, and maps `--target-org` and `--json` onto it.
 - Picklist values and record types. Removing or deactivating a picklist value lists the record
   types that still offer it and the Apex, flows, validation rules and formulas that write it as
   text (only in files that also name the field). A changed record type reports values it no
