@@ -610,7 +610,24 @@ export interface AgentImpact {
 export interface Reference {
   from:
     | AutomationRef
-    | { kind: "FormulaField" | "PermissionSet" | "Profile" | "Layout" | "FlexiPage"; name: string; file?: string };
+    | {
+        kind:
+          | "FormulaField"
+          | "PermissionSet"
+          | "Profile"
+          | "Layout"
+          | "FlexiPage"
+          | "OutboundMessage"
+          | "Report"
+          | "ReportType"
+          | "ListView"
+          | "EmailTemplate"
+          | "QuickAction"
+          | "CompactLayout"
+          | "FieldSet";
+        name: string;
+        file?: string;
+      };
   to: string;
 }
 

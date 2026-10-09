@@ -9,6 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Integrations are analyzed in depth, each change compared with the base version:
+  - Named credentials that move to another host, authenticate differently or use plain http, with the Apex and
+    flows that call them; external credentials whose authentication changes, with the named credentials using
+    them (`integration-endpoint-changed`, `integration-insecure`).
+  - Remote site settings and CSP trusted sites that are deleted, deactivated or moved while code still calls the
+    host (`integration-allowlist-removed`), that newly allow a host, or that turn off protocol security.
+  - Connected apps that request more OAuth scopes (high for Full) or accept new callback URLs, and consumer
+    secrets committed to source control (`connected-app-access`).
+  - Outbound messages in workflow files that send a session ID, post over http or move host; the fields they send
+    count as references.
 - The save path covers more of Salesforce's order of execution:
   - Duplicate rules (after validation rules) and assignment, auto-response and escalation rules (after the
     after-save triggers) appear in `preflight explain` and the report's order-of-execution tables.

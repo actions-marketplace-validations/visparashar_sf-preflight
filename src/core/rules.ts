@@ -69,6 +69,38 @@ export const RULES: RuleInfo[] = [
     help: "Subscribers run later in their own transaction, so a mismatch shows up as failed event handling rather than a save error. Change publishers and subscribers together and test one event end to end.",
   },
   {
+    id: "integration-endpoint-changed",
+    name: "IntegrationEndpointChanged",
+    defaultSeverity: "medium",
+    summary:
+      "A named credential, external credential, outbound message, remote site or CSP trusted site now points somewhere else or authenticates differently.",
+    help: "Callouts and messages go to the new host with the same data and credentials, and secrets are set up per org rather than deployed. Confirm the host and test each caller the report lists.",
+    security: true,
+  },
+  {
+    id: "integration-insecure",
+    name: "IntegrationInsecure",
+    defaultSeverity: "high",
+    summary: "An integration sends data over plain http, sends a session ID out, or keeps a secret in source control.",
+    help: "Use https everywhere, send session IDs only to services you control, and keep secrets out of metadata (rotate any that were committed).",
+    security: true,
+  },
+  {
+    id: "integration-allowlist-removed",
+    name: "IntegrationAllowlistRemoved",
+    defaultSeverity: "medium",
+    summary: "A remote site setting or CSP trusted site no longer allows a host that code still calls.",
+    help: "Apex callouts or Lightning requests to that host fail at runtime. Keep the setting, or move the callers to a named credential in the same change.",
+  },
+  {
+    id: "connected-app-access",
+    name: "ConnectedAppAccess",
+    defaultSeverity: "medium",
+    summary: "A connected app requests more OAuth scopes or accepts new callback URLs.",
+    help: "Full and refresh-token scopes give broad, long-lived access; callback URLs receive authorization codes. Request only the scopes needed and confirm every callback URL is yours and uses https.",
+    security: true,
+  },
+  {
     id: "after-save-self-update",
     name: "AfterSaveSelfUpdate",
     defaultSeverity: "medium",
