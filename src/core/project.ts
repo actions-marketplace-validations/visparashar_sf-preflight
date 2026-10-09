@@ -20,8 +20,10 @@ import {
 import { stripApex } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
+import { isBundleSource, parseLightningBundle } from "./parsers/lightning.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
+import { looksLikeSObject } from "./standardObjects.js";
 import type { ApexClassDef, ApexTriggerDef, ComponentRef, ObjectDef, OrgModel } from "./types.js";
 import { key, redactEmails, toPosix } from "./util.js";
 
@@ -155,6 +157,41 @@ function ensureObject(model: OrgModel, name: string): ObjectDef {
   return obj;
 }
 
+const MAX_BUNDLE_FILE_BYTES = 1024 * 1024;
+
+/** Read every Lightning Web Component and Aura bundle in the project. */
+function loadLightning(model: OrgModel, projectObjects: Set<string>, read: (rel: string) => string): void {
+  const bundles = new Map<string, { kind: "lwc" | "aura"; name: string; files: string[] }>();
+  for (const ref of model.components.values()) {
+    if (ref.type !== "Metadata") continue;
+    const kind =
+      ref.metadataType === "LightningComponentBundle"
+        ? "lwc"
+        : ref.metadataType === "AuraDefinitionBundle"
+          ? "aura"
+          : undefined;
+    if (!kind) continue;
+    const id = `${kind}:${key(ref.name)}`;
+    const b = bundles.get(id) ?? { kind, name: ref.name, files: [] };
+    b.files.push(ref.file);
+    bundles.set(id, b);
+  }
+  const isObject = (n: string) => looksLikeSObject(n, projectObjects);
+  for (const [id, b] of bundles) {
+    const sources = b.files.filter(isBundleSource).flatMap((path) => {
+      try {
+        const text = read(path);
+        return text.length > MAX_BUNDLE_FILE_BYTES ? [] : [{ path, text }];
+      } catch {
+        return [];
+      }
+    });
+    const main =
+      b.files.find((f) => (b.kind === "lwc" ? /\.js-meta\.xml$/ : /\.(cmp|app)$/).test(f)) ?? b.files[0] ?? "";
+    model.lightning.set(id, parseLightningBundle(b.kind, b.name, main, sources, isObject));
+  }
+}
+
 /** Load and parse every supported metadata file in an SFDX project. */
 export function loadProject(projectDirInput: string, opts: { cache?: boolean } = {}): OrgModel {
   const projectDir = path.resolve(projectDirInput);
@@ -173,6 +210,7 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
     permissionContainers: new Map(),
     agents: new Map(),
     agentTests: [],
+    lightning: new Map(),
     components: new Map(),
     warnings: [],
   };
@@ -327,6 +365,7 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
   }
 
   cache.save();
+  loadLightning(model, projectObjects, read);
   model.agents = linkAgents(agentMeta, model.warnings);
   applyCallGraph(model);
   for (const def of [...model.classes.values(), ...model.triggers.values()]) {

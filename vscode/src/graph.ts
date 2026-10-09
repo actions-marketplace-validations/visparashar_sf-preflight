@@ -20,6 +20,7 @@ export type GraphNodeKind =
   | "PermissionSet"
   | "Profile"
   | "FormulaField"
+  | "LightningComponent"
   | "Agent"
   | "AgentTopic"
   | "AgentAction"
@@ -76,6 +77,7 @@ const AUTOMATION_KIND: Record<AutomationRef["kind"], GraphNodeKind> = {
   ApexClass: "ApexClass",
   ValidationRule: "ValidationRule",
   RollUpSummary: "RollUpSummary",
+  LightningComponent: "LightningComponent",
   Change: "Other",
 };
 
@@ -89,6 +91,7 @@ function kindOfFile(file: string): GraphNodeKind {
   if (/\.profile-meta\.xml$/.test(file)) return "Profile";
   if (/\.field-meta\.xml$/.test(file)) return "Field";
   if (/\.object-meta\.xml$/.test(file)) return "Object";
+  if (/\/(lwc|aura)\//.test(file)) return "LightningComponent";
   if (/\.genAiFunction-meta\.xml$/.test(file)) return "AgentAction";
   if (/\.genAiPlugin-meta\.xml$/.test(file)) return "AgentTopic";
   if (/\.(bot|botVersion)-meta\.xml$|\.genAiPlannerBundle$|\.agent$/.test(file)) return "Agent";

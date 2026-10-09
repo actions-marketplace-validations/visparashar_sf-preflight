@@ -115,6 +115,17 @@ that mention its API name (`c-my-cmp`, `c/myCmp` and `c:myCmp` for Lightning com
 `coverage.deep` and `coverage.basic` give the "analyzed in depth: N of M" line in reports. The
 mention search is by name: it finds where to look and does not follow what those files do.
 
+### Lightning components
+
+Lightning Web Component and Aura bundles are the exception: they are parsed (`parsers/lightning.ts`,
+regular expressions over the bundle's `.js`, `.html` and `.cmp` files) into `model.lightning`, so
+the existing analysis can follow them. They are found as references to fields (schema imports and
+`'Object.Field'` strings), as callers of Apex classes (`@salesforce/apex/...` imports, an Aura
+`controller=`), and as embedders of other components (`<c-my-cmp>`, `<c:myCmp>`, `from 'c/myCmp'`).
+A changed component adds the writes of the Apex it calls to the cascade. Not followed: components
+placed on pages (flexipages are Tier 1B), wire adapters that name fields only in variables, dynamic
+imports, and Aura `{!v.record.Field}` expressions.
+
 ## Known limitations
 
 - Apex type resolution covers locals, parameters, for-each variables, class fields and

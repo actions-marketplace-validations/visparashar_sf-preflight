@@ -57,10 +57,11 @@ describe("coverage", () => {
     dir = mkdtempSync(path.join(tmpdir(), "preflight-cov-"));
     writeFileSync(path.join(dir, "sfdx-project.json"), JSON.stringify({ packageDirectories: [{ path: "force-app" }] }));
     write("classes/Util.cls", "public class Util { public static void run() {} }");
-    write("lwc/priceBadge/priceBadge.js", "export default class PriceBadge {}");
-    write("lwc/priceBadge/priceBadge.html", "<template></template>");
-    write("lwc/dealCard/dealCard.html", "<template><c-price-badge></c-price-badge></template>");
-    write("lwc/dealCard/dealCard.js", "import x from 'c/priceBadge';");
+    write("flexipages/DealHome.flexipage-meta.xml", "<FlexiPage/>");
+    write(
+      "applications/Sales.app-meta.xml",
+      "<CustomApplication><actionOverrides><content>DealHome</content></actionOverrides></CustomApplication>",
+    );
     write("layouts/Opportunity-Deal Layout.layout-meta.xml", "<Layout/>");
     write(
       "profiles/Admin.profile-meta.xml",
@@ -76,25 +77,21 @@ describe("coverage", () => {
       projectDir: dir,
       files: files(
         "classes/Util.cls",
-        "lwc/priceBadge/priceBadge.js",
+        "flexipages/DealHome.flexipage-meta.xml",
         "layouts/Opportunity-Deal Layout.layout-meta.xml",
       ),
     });
     expect(result.coverage?.deep).toBe(1);
     expect(result.coverage?.basic).toBe(2);
     expect(result.coverage?.basicByType).toEqual([
+      { type: "FlexiPage", count: 1 },
       { type: "Layout", count: 1 },
-      { type: "LightningComponentBundle", count: 1 },
     ]);
     const bySlot = Object.fromEntries(result.coverage?.mentions.map((m) => [m.component, m.files]) ?? []);
-    // The bundle's own files do not count; the other component's template and import do.
-    expect(bySlot.priceBadge).toEqual([
-      "force-app/main/default/lwc/dealCard/dealCard.html",
-      "force-app/main/default/lwc/dealCard/dealCard.js",
-    ]);
+    expect(bySlot.DealHome).toEqual(["force-app/main/default/applications/Sales.app-meta.xml"]);
     expect(bySlot["Opportunity-Deal Layout"]).toEqual(["force-app/main/default/profiles/Admin.profile-meta.xml"]);
     expect(result.findings.filter((f) => f.rule === "metadata-not-analyzed")).toHaveLength(2);
-    expect(result.findings.find((f) => f.title.includes("priceBadge"))?.severity).toBe("info");
+    expect(result.findings.find((f) => f.title.includes("DealHome"))?.severity).toBe("info");
   });
 
   it("says so in the report, and says nothing when everything is analyzed in depth", () => {

@@ -8,7 +8,16 @@ import {
   targetRef,
 } from "./agentImpact.js";
 import { buildCoverage } from "./coverage.js";
-import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
+import {
+  callersOfClass,
+  callersOfFlow,
+  classWrites,
+  flowWrites,
+  knownClassRefs,
+  lightningCallingClass,
+  lightningEmbedding,
+  writersOf,
+} from "./graph.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import type {
@@ -17,6 +26,7 @@ import type {
   AutomationRef,
   CascadeNode,
   Change,
+  ComponentRef,
   DmlOp,
   Finding,
   LoopIssue,
@@ -88,6 +98,9 @@ const describe = (a: AutomationRef) => {
   }
 };
 
+const isLightningBundle = (c: ComponentRef): boolean =>
+  c.metadataType === "LightningComponentBundle" || c.metadataType === "AuraDefinitionBundle";
+
 export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const { model, changes } = opts;
   const maxDepth = opts.maxDepth ?? 4;
@@ -101,6 +114,49 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
 
   const addFinding = (f: Finding) => findings.push(f);
   const changeRef = (c: Change): AutomationRef => ({ kind: "Change", name: c.component.name, file: c.component.file });
+
+  /** A changed Lightning Web Component or Aura bundle. */
+  const analyzeLightning = (change: Change) => {
+    const comp = change.component;
+    const lc = model.lightning.get(
+      `${comp.metadataType === "AuraDefinitionBundle" ? "aura" : "lwc"}:${key(comp.name)}`,
+    );
+    if (change.changeType === "deleted" || !lc) {
+      const embedders = lightningEmbedding(model, comp.name);
+      if (embedders.length) {
+        addFinding({
+          rule: "deleted-still-referenced",
+          severity: "high",
+          title: `Deleted component ${comp.name} is still used`,
+          detail: `Embedded by ${embedders.map((e) => e.name).join(", ")}. The deployment will fail or the pages will break.`,
+          files: uniq([comp.file, ...embedders.map((e) => e.file)]),
+        });
+      }
+      return;
+    }
+    // What the component saves through the Apex it calls.
+    for (const cls of uniqBy(lc.apex, (a) => key(a.cls)).flatMap((a) => model.classes.get(key(a.cls)) ?? [])) {
+      for (const w of classWrites(model, cls))
+        roots.push({ object: w.object, event: opToEvent(w.op), via: changeRef(change) });
+    }
+    // Things it names that the project does not have.
+    const missing: string[] = [];
+    for (const f of lc.fields) {
+      const [object, field] = f.split(".") as [string, string];
+      const def = model.objects.get(key(object));
+      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+    }
+    for (const a of lc.apex) if (!model.classes.has(key(a.cls))) missing.push(`Apex class ${a.cls}`);
+    if (missing.length) {
+      addFinding({
+        rule: "lightning-missing-reference",
+        severity: "medium",
+        title: `${comp.name} uses ${missing.length} thing(s) that are not in the project`,
+        detail: `${uniq(missing).join(", ")}. The deployment fails unless they exist in the target org already.`,
+        files: [lc.file],
+      });
+    }
+  };
 
   // ------------------------------------------------------------------------------------
   // 1. Seed roots, references and change-specific findings
@@ -126,6 +182,17 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             detail: `Referenced by ${nonPermRefs.map((r) => `${r.from.kind} ${r.from.name}`).join(", ")}. The deployment will fail or the references will break.`,
             object,
             files: uniq([comp.file, ...nonPermRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
+          });
+        }
+        const lightningRefs = refs.filter((r) => r.from.kind === "LightningComponent");
+        if (!deleted && lightningRefs.length) {
+          addFinding({
+            rule: "field-used-by-lightning",
+            severity: "low",
+            title: `${comp.name} is used by ${lightningRefs.length} Lightning component(s)`,
+            detail: `${lightningRefs.map((r) => r.from.name).join(", ")} read or show this field. Check the component after changing its type, values or access.`,
+            object,
+            files: uniq([comp.file, ...lightningRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
           });
         }
         const vrRefs = refs.filter((r) => r.from.kind === "ValidationRule");
@@ -269,6 +336,16 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           break;
         }
         if (cls.isTest) break;
+        const lightningCallers = lightningCallingClass(model, cls.name);
+        if (lightningCallers.length) {
+          addFinding({
+            rule: "apex-called-from-lightning",
+            severity: "low",
+            title: `${cls.name} is called from ${lightningCallers.length} Lightning component(s)`,
+            detail: `${lightningCallers.map((l) => l.name).join(", ")} call it from the browser, so a changed signature, result shape or error behaviour reaches users directly.`,
+            files: uniq([comp.file, ...lightningCallers.map((l) => l.file)]),
+          });
+        }
         const via: AutomationRef = { kind: "ApexClass", name: cls.name, file: cls.file };
         const entryPoints = transitiveEntryPoints(model, cls.name);
         for (const ep of entryPoints) {
@@ -347,6 +424,10 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         break;
 
       case "Metadata": {
+        if (isLightningBundle(comp)) {
+          analyzeLightning(change);
+          break;
+        }
         // Recognized by name only: say so, and point at the files that mention it.
         const type = comp.metadataType ?? "Metadata";
         const mentions = coverage?.mentions.find((m) => m.type === type && m.component === comp.name);
@@ -707,6 +788,10 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
   for (const pc of model.permissionContainers.values()) {
     if (pc.fields.some((g) => key(g.field) === tk))
       refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
+  }
+  for (const lc of model.lightning.values()) {
+    if (lc.fields.some((f) => key(f) === tk))
+      refs.push({ from: { kind: "LightningComponent", name: lc.name, file: lc.file }, to: target });
   }
   return refs;
 }
