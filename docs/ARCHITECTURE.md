@@ -126,6 +126,15 @@ A changed component adds the writes of the Apex it calls to the cascade. Not fol
 placed on pages (flexipages are Tier 1B), wire adapters that name fields only in variables, dynamic
 imports, and Aura `{!v.record.Field}` expressions.
 
+### Layouts and Lightning pages
+
+`parsers/pages.ts` reads page layouts (`<field>` tags; the object is the part of the name before the
+first dash) and Lightning pages (`<componentName>`, `{!Record.Field}` in visibility filters, the
+record page's `sobjectType`). A bare component name on a page is a component of the page's own
+namespace; `c:name` is a custom component; any other prefix is standard or managed and is not
+checked. Not followed: fields on related lists and compact layouts, quick actions and buttons on
+layouts, dynamic forms field sections, and Experience Cloud pages.
+
 ## Known limitations
 
 - Apex type resolution covers locals, parameters, for-each variables, class fields and
@@ -139,3 +148,13 @@ imports, and Aura `{!v.record.Field}` expressions.
 - Process Builder, legacy workflow rules, duplicate rules, assignment rules, escalation rules
   and sharing recalculation are not modelled yet.
 - Order *within* a phase is alphabetical; Salesforce's flow trigger order is not yet read.
+
+### Picklists and record types
+
+`picklists.ts` compares a changed picklist field with its base version (`opts.readBase`) and lists
+active values that are gone or inactive. Each removed value is looked up in record types
+(`model.recordTypes`) and as a quoted literal (`'v'`, `"v"`, `&quot;v&quot;`, `<stringValue>`) in
+Apex, flows, validation rules, formulas and workflow, but only in files that also name the field,
+so a common word like `Open` does not match everything. Record types get the same base
+comparison, and a deleted one is searched for by developer name in files that mention
+`RecordType`. The text scan is a heuristic and says "written as text", never "used".

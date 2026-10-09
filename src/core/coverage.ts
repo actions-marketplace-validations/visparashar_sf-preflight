@@ -18,9 +18,16 @@ const DEEP: ReadonlySet<ComponentType> = new Set([
   "AgentMetadata",
 ]);
 
-/** Does a changed component have its own analysis? Lightning bundles do; other metadata types don't. */
+/** Metadata types that have their own analysis although they are not a dedicated component type. */
+const DEEP_METADATA: ReadonlySet<string> = new Set([
+  "LightningComponentBundle",
+  "AuraDefinitionBundle",
+  "Layout",
+  "FlexiPage",
+]);
+
 export const isAnalyzedInDepth = (c: ComponentRef): boolean =>
-  DEEP.has(c.type) || c.metadataType === "LightningComponentBundle" || c.metadataType === "AuraDefinitionBundle";
+  DEEP.has(c.type) || (c.metadataType !== undefined && DEEP_METADATA.has(c.metadataType));
 
 const MAX_COMPONENTS = 50;
 const MAX_FILES_PER_COMPONENT = 15;

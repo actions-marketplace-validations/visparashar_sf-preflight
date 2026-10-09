@@ -12,6 +12,7 @@ import {
   callersOfClass,
   callersOfFlow,
   classWrites,
+  flexipagesPlacing,
   flowWrites,
   knownClassRefs,
   lightningCallingClass,
@@ -19,7 +20,9 @@ import {
   writersOf,
 } from "./graph.js";
 import { saveProcedure } from "./orderOfExecution.js";
+import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
+import { picklistFindings, recordTypeFindings } from "./picklists.js";
 import type {
   AnalysisResult,
   ApexAnalysis,
@@ -29,6 +32,7 @@ import type {
   ComponentRef,
   DmlOp,
   Finding,
+  FlexiPageDef,
   LoopIssue,
   OrgModel,
   PermissionContainerDef,
@@ -123,16 +127,28 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     );
     if (change.changeType === "deleted" || !lc) {
       const embedders = lightningEmbedding(model, comp.name);
-      if (embedders.length) {
+      const pages = flexipagesPlacing(model, comp.name);
+      if (embedders.length || pages.length) {
+        const users = [...embedders.map((e) => e.name), ...pages.map((p) => `page ${p.name}`)];
         addFinding({
           rule: "deleted-still-referenced",
           severity: "high",
           title: `Deleted component ${comp.name} is still used`,
-          detail: `Embedded by ${embedders.map((e) => e.name).join(", ")}. The deployment will fail or the pages will break.`,
-          files: uniq([comp.file, ...embedders.map((e) => e.file)]),
+          detail: `Used by ${users.join(", ")}. The deployment will fail or the pages will break.`,
+          files: uniq([comp.file, ...embedders.map((e) => e.file), ...pages.map((p) => p.file)]),
         });
       }
       return;
+    }
+    const placedOn = flexipagesPlacing(model, comp.name);
+    if (placedOn.length) {
+      addFinding({
+        rule: "lightning-on-page",
+        severity: "info",
+        title: `${comp.name} is placed on ${placedOn.length} Lightning page(s)`,
+        detail: `${placedOn.map((p) => p.name).join(", ")}. Open them to check the component renders and behaves as intended.`,
+        files: uniq([lc.file, ...placedOn.map((p) => p.file)]),
+      });
     }
     // What the component saves through the Apex it calls.
     for (const cls of uniqBy(lc.apex, (a) => key(a.cls)).flatMap((a) => model.classes.get(key(a.cls)) ?? [])) {
@@ -155,6 +171,64 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         detail: `${uniq(missing).join(", ")}. The deployment fails unless they exist in the target org already.`,
         files: [lc.file],
       });
+    }
+  };
+
+  /** A changed page layout or Lightning page: what it no longer shows, and what it names that the project lacks. */
+  const analyzePage = (change: Change) => {
+    const comp = change.component;
+    if (change.changeType === "deleted") return;
+    const layout = comp.metadataType === "Layout";
+    const cur = layout ? model.layouts.get(key(comp.name)) : model.flexipages.get(key(comp.name));
+    if (!cur) return;
+    const baseXml = opts.readBase?.(comp.file);
+    const prev = baseXml
+      ? layout
+        ? parseLayout(baseXml, comp.name, comp.file)
+        : parseFlexiPage(baseXml, comp.name, comp.file)
+      : undefined;
+    const object = "object" in cur ? cur.object : undefined;
+    const fieldNames = (page: typeof cur): string[] =>
+      "object" in page && layout ? page.fields.map((f) => `${page.object}.${f}`) : page.fields;
+
+    const missing: string[] = [];
+    for (const f of fieldNames(cur)) {
+      const [obj, field] = f.split(".") as [string, string];
+      const def = model.objects.get(key(obj));
+      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+    }
+    if (!layout) {
+      for (const c of (cur as FlexiPageDef).components) {
+        const custom = customComponent(c);
+        if (custom && !model.lightning.has(`lwc:${key(custom)}`) && !model.lightning.has(`aura:${key(custom)}`))
+          missing.push(`component ${c}`);
+      }
+    }
+    if (missing.length) {
+      addFinding({
+        rule: "page-missing-reference",
+        severity: "medium",
+        title: `${comp.name} uses ${missing.length} thing(s) that are not in the project`,
+        detail: `${uniq(missing).join(", ")}. The deployment fails unless they exist in the target org already.`,
+        object,
+        files: [comp.file],
+      });
+    }
+
+    if (prev) {
+      const now = new Set([...fieldNames(cur), ...(layout ? [] : (cur as FlexiPageDef).components)].map(key));
+      const before = [...fieldNames(prev), ...(layout ? [] : (prev as FlexiPageDef).components)];
+      const removed = uniq(before.filter((x) => !now.has(key(x))));
+      if (removed.length) {
+        addFinding({
+          rule: "page-element-removed",
+          severity: "low",
+          title: `${comp.name} no longer shows ${removed.length} item(s)`,
+          detail: `${removed.slice(0, 8).join(", ")}${removed.length > 8 ? ` and ${removed.length - 8} more` : ""}. Users of ${layout ? "this layout" : "this page"} lose them; confirm that is intended.`,
+          object,
+          files: [comp.file],
+        });
+      }
     }
   };
 
@@ -195,6 +269,18 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             files: uniq([comp.file, ...lightningRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
           });
         }
+        const pageRefs = refs.filter((r) => r.from.kind === "Layout" || r.from.kind === "FlexiPage");
+        if (!deleted && pageRefs.length) {
+          addFinding({
+            rule: "field-on-page",
+            severity: "info",
+            title: `${comp.name} is on ${pageRefs.length} page layout(s) or Lightning page(s)`,
+            detail: `${pageRefs.map((r) => `${r.from.kind === "Layout" ? "layout" : "page"} ${r.from.name}`).join(", ")}. A changed label, type or access shows up there.`,
+            object,
+            files: uniq([comp.file, ...pageRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
+          });
+        }
+        if (!deleted) findings.push(...picklistFindings(model, comp, object, field, opts.readBase?.(comp.file)));
         const vrRefs = refs.filter((r) => r.from.kind === "ValidationRule");
         for (const r of vrRefs) {
           const vr = model.validationRules.find((v) => v.name === r.from.name && key(v.object) === key(object));
@@ -389,6 +475,9 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "CustomObject":
       case "ObjectChild":
         if (comp.object && !deleted) roots.push({ object: comp.object, event: "update", via: changeRef(change) });
+        if (comp.type === "ObjectChild" && comp.file.endsWith(".recordType-meta.xml")) {
+          findings.push(...recordTypeFindings(model, comp, deleted, opts.readBase?.(comp.file)));
+        }
         break;
 
       case "AgentMetadata": {
@@ -426,6 +515,10 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "Metadata": {
         if (isLightningBundle(comp)) {
           analyzeLightning(change);
+          break;
+        }
+        if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
+          analyzePage(change);
           break;
         }
         // Recognized by name only: say so, and point at the files that mention it.
@@ -792,6 +885,14 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
   for (const lc of model.lightning.values()) {
     if (lc.fields.some((f) => key(f) === tk))
       refs.push({ from: { kind: "LightningComponent", name: lc.name, file: lc.file }, to: target });
+  }
+  for (const l of model.layouts.values()) {
+    if (key(l.object) === key(object) && l.fields.some((f) => key(f) === fk))
+      refs.push({ from: { kind: "Layout", name: l.name, file: l.file }, to: target });
+  }
+  for (const p of model.flexipages.values()) {
+    if (p.fields.some((f) => key(f) === tk))
+      refs.push({ from: { kind: "FlexiPage", name: p.name, file: p.file }, to: target });
   }
   return refs;
 }

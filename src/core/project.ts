@@ -21,7 +21,9 @@ import { stripApex } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
 import { isBundleSource, parseLightningBundle } from "./parsers/lightning.js";
+import { parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
+import { parseRecordType } from "./parsers/recordTypes.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
 import { looksLikeSObject } from "./standardObjects.js";
 import type { ApexClassDef, ApexTriggerDef, ComponentRef, ObjectDef, OrgModel } from "./types.js";
@@ -192,6 +194,20 @@ function loadLightning(model: OrgModel, projectObjects: Set<string>, read: (rel:
   }
 }
 
+/** Read page layouts and Lightning pages. */
+function loadPages(model: OrgModel, read: (rel: string) => string): void {
+  for (const ref of model.components.values()) {
+    if (ref.type !== "Metadata" || (ref.metadataType !== "Layout" && ref.metadataType !== "FlexiPage")) continue;
+    try {
+      const xml = read(ref.file);
+      if (ref.metadataType === "Layout") model.layouts.set(key(ref.name), parseLayout(xml, ref.name, ref.file));
+      else model.flexipages.set(key(ref.name), parseFlexiPage(xml, ref.name, ref.file));
+    } catch {
+      // unreadable: the page just isn't part of the picture
+    }
+  }
+}
+
 /** Load and parse every supported metadata file in an SFDX project. */
 export function loadProject(projectDirInput: string, opts: { cache?: boolean } = {}): OrgModel {
   const projectDir = path.resolve(projectDirInput);
@@ -211,6 +227,9 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
     agents: new Map(),
     agentTests: [],
     lightning: new Map(),
+    layouts: new Map(),
+    flexipages: new Map(),
+    recordTypes: new Map(),
     components: new Map(),
     warnings: [],
   };
@@ -310,6 +329,14 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
           model.classes.set(key(cls.name), cls);
         });
         break;
+      case "ObjectChild":
+        if (!ref.file.endsWith(".recordType-meta.xml") || !ref.object) break;
+        safely(ref, () => {
+          const short = ref.name.split(".").pop() ?? ref.name;
+          const rt = parseRecordType(read(ref.file), ref.object!, short, ref.file);
+          model.recordTypes.set(key(`${rt.object}.${rt.name}`), rt);
+        });
+        break;
       case "PermissionSet":
       case "Profile":
         safely(ref, () => {
@@ -366,6 +393,7 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
 
   cache.save();
   loadLightning(model, projectObjects, read);
+  loadPages(model, read);
   model.agents = linkAgents(agentMeta, model.warnings);
   applyCallGraph(model);
   for (const def of [...model.classes.values(), ...model.triggers.values()]) {
