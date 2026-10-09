@@ -269,12 +269,13 @@ the VS Code Marketplace or Open VSX.
 
 ### In the browser (report viewer)
 
-The [report viewer](web/README.md) opens a JSON report (`--format json`) or an evidence pack in the
+The [report viewer](https://sf-preflight-web.vercel.app/) ([sample report](https://sf-preflight-web.vercel.app/?sample=report),
+[sample evidence pack](https://sf-preflight-web.vercel.app/?sample=evidence)) opens a JSON report (`--format json`) or an evidence pack in the
 browser, for reviewers, release managers and auditors who don't run the CLI: the risk, quality
 gate, findings, blast-radius graph, order of execution, affected Agentforce actions and tests to
 run, or an evidence pack with its digest checked. Drop in the evidence artifact zip from a GitHub
-Actions run as it is. Files are read in the browser and never uploaded. It's a static site with
-ready-made settings for Vercel and Netlify.
+Actions run as it is. Files are read in the browser and never uploaded. It's a static site
+([source](web/README.md)), so you can also host your own copy, with ready-made settings for Vercel and Netlify.
 
 ### With org context (beta)
 
