@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0] - 2026-10-10
+
+- Brings the analysis of sf-preflight 0.10.0 into the editor: a reference check for every metadata type
+  (deletions, renames and `destructiveChanges.xml`), access and sharing (permissions taken away, guest access,
+  organization-wide defaults, sharing rules, permission set groups), the save path (duplicate, assignment,
+  auto-response and escalation rules, platform events), integrations (named credentials, remote and CSP sites,
+  connected apps, outbound messages) and reports, list views, email templates and other metadata that name fields.
+- Fields from other managed packages (`ns__Field__c`) are no longer reported as missing.
+
 ## [0.2.0] - 2026-10-09
 
 - **New extension ID: `visparashar.sf-preflight-vscode`** (the name `sf-preflight` is taken on the
