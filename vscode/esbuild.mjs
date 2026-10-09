@@ -9,7 +9,12 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
 rmSync("dist", { recursive: true, force: true });
 const { metafile } = await build({
   metafile: true,
-  entryPoints: { extension: "src/extension.ts", worker: "src/worker.ts", "mcp-server": "src/mcp-server.ts" },
+  entryPoints: {
+    extension: "src/extension.ts",
+    worker: "src/worker.ts",
+    "mcp-server": "src/mcp-server.ts",
+    "parse-worker": "../src/core/parseWorker.ts",
+  },
   outdir: "dist",
   bundle: true,
   platform: "node",

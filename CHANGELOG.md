@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Parallel parsing: when 150 or more Apex files need parsing (a first run, or after the object
+  list changes), they are parsed on worker threads, one per CPU (at most 8). Set `PREFLIGHT_JOBS=1`
+  to parse on one thread. Output is identical. Gain depends on the machine: on a 2-core test
+  machine NPSP's first run went from 27 s to 23 s, because each thread warms up the parser's lookup
+  tables itself.
 - Parse cache: Apex parse results are cached on disk (`~/.cache/sf-preflight`, or
   `PREFLIGHT_CACHE_DIR`), keyed by each file's content, so only changed classes are parsed again.
   On NPSP (1,044 classes) an analysis drops from about 28 s to 1.4 s, and a 2,700-class project

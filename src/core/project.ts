@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { parseApexUnit } from "./apexUnit.js";
 import { applyCallGraph } from "./callGraph.js";
 import { ParseCache } from "./parseCache.js";
 import {
@@ -15,7 +16,7 @@ import {
   parseGenAiPlugin,
   parsePlanner,
 } from "./parsers/agents.js";
-import { parseApexClass, parseApexTrigger, stripApex } from "./parsers/apex.js";
+import { stripApex } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -146,6 +147,16 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
   const cache = new ParseCache(projectDir, projectObjects, opts.cache);
 
   const read = (rel: string) => readFileSync(path.join(projectDir, rel), "utf8");
+  cache.prefill(
+    refs.flatMap((ref): { file: string; kind: "class" | "trigger"; name: string; source: () => string }[] =>
+      ref.type === "ApexClass" && ref.file.endsWith(".cls")
+        ? [{ file: ref.file, kind: "class" as const, name: ref.name, source: () => read(ref.file) }]
+        : ref.type === "ApexTrigger" && ref.file.endsWith(".trigger")
+          ? [{ file: ref.file, kind: "trigger" as const, name: ref.name, source: () => read(ref.file) }]
+          : [],
+    ),
+    projectObjects,
+  );
   const safely = (ref: ComponentRef, fn: () => void) => {
     try {
       fn();
@@ -193,12 +204,9 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
         if (!ref.file.endsWith(".trigger")) break;
         safely(ref, () => {
           const source = read(ref.file);
-          const { def } = cache.get(ref.file, source, () => {
-            const t = parseApexTrigger(source, ref.name, ref.file, projectObjects);
-            if (!t) return {};
-            const { stripped: _s, file: _f, ...rest } = t;
-            return { def: rest };
-          });
+          const { def } = cache.get(ref.file, source, () =>
+            parseApexUnit("trigger", source, ref.name, ref.file, projectObjects),
+          ) as { def?: object };
           const trig: ApexTriggerDef | undefined = def && {
             ...(def as Omit<ApexTriggerDef, "stripped" | "file">),
             stripped: stripApex(source),
@@ -212,15 +220,9 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
         if (!ref.file.endsWith(".cls")) break;
         safely(ref, () => {
           const source = read(ref.file);
-          const rest = cache.get(ref.file, source, () => {
-            const {
-              stripped: _s,
-              name: _n,
-              file: _f,
-              ...r
-            } = parseApexClass(source, ref.name, ref.file, projectObjects);
-            return r;
-          });
+          const rest = cache.get(ref.file, source, () =>
+            parseApexUnit("class", source, ref.name, ref.file, projectObjects),
+          ) as Omit<ApexClassDef, "stripped" | "name" | "file">;
           const cls: ApexClassDef = { ...rest, stripped: stripApex(source), name: ref.name, file: ref.file };
           model.classes.set(key(cls.name), cls);
         });

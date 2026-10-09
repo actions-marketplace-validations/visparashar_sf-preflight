@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { parseApexUnit } from "./apexUnit.js";
+import { parseInParallel } from "./parallelParse.js";
 import { analyzeApex, parseApexClass, parseApexTrigger, stripApex } from "./parsers/apex.js";
 import { ANALYZER_FINGERPRINT } from "./parsers/apexAst.js";
 
@@ -23,7 +25,9 @@ const MAX_BYTES = 200 * 1024 * 1024;
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const FINGERPRINT = sha(
-  [ANALYZER_FINGERPRINT, analyzeApex, parseApexClass, parseApexTrigger, stripApex].map(String).join("\u0000"),
+  [ANALYZER_FINGERPRINT, parseApexUnit, analyzeApex, parseApexClass, parseApexTrigger, stripApex]
+    .map(String)
+    .join("\u0000"),
 );
 
 interface Entry {
@@ -51,6 +55,8 @@ export function cacheDir(): string {
 export class ParseCache {
   private entries = new Map<string, Entry>();
   private readonly used = new Set<string>();
+  /** Results parsed ahead of time on worker threads, waiting for their `get`. */
+  private readonly ahead = new Map<string, Entry>();
   private dirty = false;
   private readonly file: string;
   readonly objectsHash: string;
@@ -94,11 +100,40 @@ export class ParseCache {
       this.hits++;
       return structuredClone(hit.d) as T;
     }
+    const pre = this.ahead.get(file);
+    this.ahead.delete(file);
     this.misses++;
-    const value = compute();
+    const value = pre && pre.h === h ? (pre.d as T) : compute();
     this.entries.set(file, { h, d: structuredClone(value) });
     this.dirty = true;
     return value;
+  }
+
+  /**
+   * Parse the files that aren't cached yet on several threads, ahead of the `get` calls that
+   * will use them. Does nothing for small sets or when threads are unavailable.
+   */
+  prefill(
+    files: { file: string; kind: "class" | "trigger"; name: string; source: () => string }[],
+    projectObjects: Set<string>,
+  ): void {
+    const jobs = [];
+    for (const f of files) {
+      let source: string;
+      try {
+        source = f.source();
+      } catch {
+        continue; // unreadable: the normal path reports it
+      }
+      const hit = this.enabled ? this.entries.get(f.file) : undefined;
+      if (hit && hit.h === sha(source)) continue;
+      jobs.push({ file: f.file, kind: f.kind, name: f.name, source });
+    }
+    const done = parseInParallel(jobs, projectObjects);
+    for (const j of jobs) {
+      const d = done.get(j.file);
+      if (d) this.ahead.set(j.file, { h: sha(j.source), d });
+    }
   }
 
   /** Write the cache if anything changed. Files no longer in the project are dropped. */
