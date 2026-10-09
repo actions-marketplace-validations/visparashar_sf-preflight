@@ -31,8 +31,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
       - run: npm run build
+      - run: npm test
       - name: Smoke test CLI on sample org
         run: npm run analyze:sample
       - name: Smoke test gate, JUnit and evidence on sample org
