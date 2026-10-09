@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.0] - 2026-10-09
 
 - **Risk dashboard**: the change's risk, the quality gate's findings check, and its risk factors
   (recursion, rule collisions, access and sharing, broken references, Agentforce, integrations, code
