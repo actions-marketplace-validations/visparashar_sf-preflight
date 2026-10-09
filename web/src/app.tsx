@@ -301,6 +301,13 @@ export function App() {
         <div class="foot-note">
           <span>sf-preflight viewer {PREFLIGHT_VERSION}</span>
           <span>Files are read in your browser and never uploaded.</span>
+          <a
+            href="https://marketplace.visualstudio.com/items?itemName=visparashar.sf-preflight-vscode"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            VS Code extension
+          </a>
           <a href="THIRD_PARTY_LICENSES.txt">Third-party licences</a>
           <span>Apache License 2.0</span>
         </div>

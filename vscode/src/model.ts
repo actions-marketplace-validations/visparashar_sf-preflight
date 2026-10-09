@@ -209,7 +209,7 @@ export function statusOf(results: AnalysisResult[]): {
   const level = high ? "error" : medium ? "warning" : "ok";
   const icon = level === "error" ? "$(error)" : level === "warning" ? "$(warning)" : "$(pass)";
   const text = !changed ? "$(shield) Preflight: no changes" : `${icon} Preflight: ${high} high, ${medium} medium`;
-  const tooltip = `sf-preflight: ${changed} changed component(s). Click to open the blast radius.`;
+  const tooltip = `sf-preflight: ${changed} changed component(s). Click to open the risk dashboard.`;
   return { text, tooltip, level };
 }
 

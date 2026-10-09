@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import * as vscode from "vscode";
+import type { FailOn } from "../../src/core/config.js";
 import { installSkill } from "../../src/core/skill.js";
 import type { AnalysisResult, SaveEvent, SaveProcedure, Severity } from "../../src/core/types.js";
+import { addToHistory, type HistoryEntry, historyEntryOf, readHistory } from "./dashboard.js";
+import { DashboardPanel, type DashboardSource } from "./dashboard-panel.js";
 import { GraphPanel, type GraphSource } from "./graph-panel.js";
 import { isMetadataFile, problemsOf, RULES_URL, statusOf, type TreeNode, treeOf } from "./model.js";
 import type { WorkerRequest } from "./worker.js";
@@ -36,6 +39,10 @@ interface ProjectState {
   label: string;
   result?: AnalysisResult;
   markdown?: string;
+  /** The gate's threshold from .preflight.json. */
+  failOn?: FailOn;
+  /** The branch checked out at the last analysis, for the dashboard's history. */
+  branch?: string;
   error?: string;
   /** The analysis in progress; changes while it runs ask for one more run afterwards. */
   inflight?: Promise<void>;
@@ -54,6 +61,19 @@ const SEVERITIES: Severity[] = ["high", "medium", "low", "info"];
 /** Settings for a project: `baseRef` can differ per workspace folder. */
 const config = (dir?: string) =>
   vscode.workspace.getConfiguration("sfPreflight", dir ? vscode.Uri.file(dir) : undefined);
+
+/** The hosted report viewer; `sfPreflight.viewerUrl` points elsewhere (a self-hosted copy). */
+const VIEWER_URL = "https://sf-preflight-web.vercel.app/";
+
+function viewerUrl(): string {
+  const configured = String(config().get("viewerUrl") ?? "").trim();
+  try {
+    const url = new URL(configured || VIEWER_URL);
+    return url.protocol === "https:" ? url.href : VIEWER_URL;
+  } catch {
+    return VIEWER_URL;
+  }
+}
 
 /** Projects analyzed at the same time, so a monorepo doesn't load every project at once. */
 const MAX_PARALLEL = 2;
@@ -201,7 +221,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const diagnostics = vscode.languages.createDiagnosticCollection("sf-preflight");
   const tree = new BlastRadiusProvider(() => [...projects.values()]);
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-  status.command = "sfPreflight.blastRadius.focus";
+  status.command = "sfPreflight.showDashboard";
   const output = vscode.window.createOutputChannel("sf-preflight");
   const slot = limiter(MAX_PARALLEL);
   const extensionVersion = String((context.extension?.packageJSON as { version?: string } | undefined)?.version ?? "0");
@@ -252,13 +272,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     status.show();
     tree.refresh();
     GraphPanel.refresh();
+    DashboardPanel.refresh();
+  }
+
+  // The dashboard's trend: recent analyses per project and branch, kept in VS Code's storage for
+  // this workspace on this computer.
+  const historyKey = (p: ProjectState) => `sfPreflight.history:${p.dir}:${p.branch ?? "HEAD"}`;
+  const historyOf = (p: ProjectState): HistoryEntry[] => readHistory(context.workspaceState?.get(historyKey(p)));
+  function record(p: ProjectState): void {
+    if (!p.result || !context.workspaceState) return;
+    void context.workspaceState.update(historyKey(p), addToHistory(historyOf(p), historyEntryOf(p.result)));
   }
 
   async function analyzeOnce(p: ProjectState): Promise<void> {
     try {
       const { base, label } = await resolveBase(p.dir);
+      p.branch = (await git(p.dir, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "")) || undefined;
       const value = await slot(() =>
-        runWorker<{ result: AnalysisResult; markdown: string }>(context, {
+        runWorker<{ result: AnalysisResult; markdown: string; failOn: FailOn }>(context, {
           kind: "analyze",
           projectDir: p.dir,
           base,
@@ -268,7 +299,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       value.result.base = label;
       p.result = value.result;
       p.markdown = value.markdown;
+      p.failOn = value.failOn;
       p.error = undefined;
+      record(p);
       output.appendLine(
         `${new Date().toISOString()} ${p.dir}: risk ${p.result.summary.risk}, ${p.result.findings.length} finding(s) vs ${label}`,
       );
@@ -498,6 +531,59 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           },
         );
         if (!p.result && !p.inflight) await analyze(p);
+      }),
+    ),
+
+    vscode.commands.registerCommand(
+      "sfPreflight.showDashboard",
+      guarded(async () => {
+        const p = await pickProject();
+        if (!p) {
+          void vscode.window.showInformationMessage("sf-preflight: no sfdx-project.json in this workspace.");
+          return;
+        }
+        const dir = p.dir;
+        const source = (): DashboardSource | undefined => {
+          const q = projects.get(dir);
+          return (
+            q && {
+              dir,
+              label: q.label,
+              result: q.result,
+              failOn: q.failOn,
+              branch: q.branch,
+              history: historyOf(q),
+              error: q.error,
+              busy: Boolean(q.inflight),
+            }
+          );
+        };
+        DashboardPanel.show(context.extensionUri, source, () => projects.size > 1);
+        if (!p.result && !p.inflight) await analyze(p);
+      }),
+    ),
+
+    vscode.commands.registerCommand(
+      "sfPreflight.openInViewer",
+      guarded(async () => {
+        const p = await pickProject();
+        if (!p) return;
+        if (!p.result) await analyze(p);
+        if (!p.result) throw new Error(p.error ?? "There's no analysis to open yet.");
+        const target = await vscode.window.showSaveDialog({
+          defaultUri: vscode.Uri.file(path.join(p.dir, "preflight.json")),
+          filters: { JSON: ["json"] },
+          saveLabel: "Save report",
+          title: "Save the report for the web viewer",
+        });
+        if (!target) return;
+        writeFileSync(target.fsPath, `${JSON.stringify(p.result, null, 2)}\n`);
+        await vscode.env.openExternal(vscode.Uri.parse(viewerUrl()));
+        const reveal = await vscode.window.showInformationMessage(
+          `Saved ${path.basename(target.fsPath)}. Drop it into the report viewer that opened in your browser; it's read there and never uploaded.`,
+          "Reveal file",
+        );
+        if (reveal === "Reveal file") await vscode.commands.executeCommand("revealFileInOS", target);
       }),
     ),
 

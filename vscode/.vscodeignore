@@ -4,6 +4,8 @@
 !media/activity.svg
 !media/graph.js
 !media/graph.css
+!media/dashboard.js
+!media/dashboard.css
 !package.json
 !README.md
 !CHANGELOG.md
