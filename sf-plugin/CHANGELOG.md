@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [0.9.0]
 
-- `sf preflight monitor` (needs the CLI feature in the same release).
+- Adds `sf preflight monitor`.
 
 ## [0.8.0]
 

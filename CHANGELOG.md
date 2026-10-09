@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-09
+
 ### Added
 
 - `preflight monitor` watches a production org's Setup Audit Trail (read-only) and alerts on risky changes made
@@ -17,6 +19,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   report. The GitHub Action gets `notify-webhook`, `notify-on` and `notify-on-update` inputs. The message
   leaves out PR titles and branch names, cleans repository text, accepts only public `https` URLs, and a
   failed send never fails the check.
+- `sf preflight monitor` in the sf CLI plugin, and a [demos page](https://visparashar.github.io/sf-preflight/demos.html) with one short video per feature.
+
+### Fixed
+
+- `monitor` no longer reports any entry in the "Manage Users" section (such as Login-As) as a broad permission.
 
 ## [0.8.0] - 2026-10-09
 
@@ -330,7 +337,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/visparashar/sf-preflight/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/visparashar/sf-preflight/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/visparashar/sf-preflight/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/visparashar/sf-preflight/compare/v0.5.0...v0.6.0
