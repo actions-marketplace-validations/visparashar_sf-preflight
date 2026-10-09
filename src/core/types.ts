@@ -464,6 +464,8 @@ export interface Change {
   changeType: ChangeType;
   component: ComponentRef;
   previousFile?: string;
+  /** Set when a destructive manifest deletes the component: the manifest's path. */
+  manifest?: string;
 }
 
 export type AutomationKind =

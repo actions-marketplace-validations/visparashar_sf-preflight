@@ -12,6 +12,8 @@ don't disable a rule or edit `.preflight.json` to make a finding go away unless 
 | `permission-escalation` | High | Modify All or View All granted on an object. | Grant only the object/field access needed; confirm with the user if broad access is intended. |
 | `permission-system` | High | A sensitive system permission (e.g. Modify All Data) is granted. | Remove it unless the user confirms it's required. |
 | `agent-runtime-access` | High | With `--org`: an agent's runtime user lacks access its actions need, or is inactive. | Grant the missing object access or Apex class access through a permission set assigned to that user. |
+| `deleted-still-named` | Medium | A deleted component of any metadata type (static resource, named credential, custom permission, tab, value set, ...) is still named by other files. Found by name, not parsed. | Open each listed file: update or remove real references in the same change; ignore matches that are not references. |
+| `renamed-still-named` | Medium | A renamed component's old name is still used by other files. The old component stays in the org, so it can work there and fail in a new org. | Update the references to the new name in the same change. |
 | `automated-write-vs-validation-rule` | Medium | Automation or an agent action writes records that validation rules check. | Make sure the written values satisfy the rules; test the save path. |
 | `field-used-by-validation-rule` | Medium | A changed field is used by an active validation rule. | Check the rule still behaves with the field's new type, values or meaning. |
 | `after-save-self-update` | Medium | An after-save flow updates its own triggering record (re-runs the save). | Use a before-save flow for same-record updates. |

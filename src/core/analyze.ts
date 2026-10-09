@@ -23,6 +23,8 @@ import { saveProcedure } from "./orderOfExecution.js";
 import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { picklistFindings, recordTypeFindings } from "./picklists.js";
+import { classifyPath } from "./project.js";
+import { referenceFindings } from "./references.js";
 import type {
   AnalysisResult,
   ApexAnalysis,
@@ -239,6 +241,9 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   for (const change of changes) {
     const comp = change.component;
     const deleted = change.changeType === "deleted";
+    // Every type: a deleted or renamed component that other files still name.
+    const named = referenceFindings(model, change, change.previousFile ? classifyPath(change.previousFile) : undefined);
+    findings.push(...named);
     switch (comp.type) {
       case "CustomField": {
         const [object, field] = [comp.object!, comp.name.split(".")[1]!];
@@ -555,6 +560,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           break;
         }
         // Recognized by name only: say so, and point at the files that mention it.
+        if (named.length) break; // the reference check already lists them
         const type = comp.metadataType ?? "Metadata";
         const mentions = coverage?.mentions.find((m) => m.type === type && m.component === comp.name);
         const where = mentions
