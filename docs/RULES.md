@@ -15,6 +15,10 @@ that is only inside the blast radius).
 | [`automated-write-vs-duplicate-rule`](#automated-write-vs-duplicate-rule) | Medium | Automation saves records that an active duplicate rule can block, or a duplicate rule now blocks saves that automation makes. |
 | [`save-rule-changed`](#save-rule-changed) | Low | An assignment, auto-response, escalation, duplicate or matching rule, or an approval process, was switched on or off, added, removed or reads different fields. |
 | [`platform-event-contract`](#platform-event-contract) | Medium | A platform event or one of its fields changed; publishers and subscribers depend on it. |
+| [`integration-endpoint-changed`](#integration-endpoint-changed) | Medium | A named credential, external credential, outbound message, remote site or CSP trusted site now points somewhere else or authenticates differently. |
+| [`integration-insecure`](#integration-insecure) | High | An integration sends data over plain http, sends a session ID out, or keeps a secret in source control. |
+| [`integration-allowlist-removed`](#integration-allowlist-removed) | Medium | A remote site setting or CSP trusted site no longer allows a host that code still calls. |
+| [`connected-app-access`](#connected-app-access) | Medium | A connected app requests more OAuth scopes or accepts new callback URLs. |
 | [`after-save-self-update`](#after-save-self-update) | Medium | An after-save flow updates its own triggering record. |
 | [`automation-density`](#automation-density) | Medium | Three or more flows/triggers run on the same object and event. |
 | [`multiple-triggers`](#multiple-triggers) | Medium | More than one Apex trigger on the same object. |
@@ -117,6 +121,38 @@ These run as part of saving (or submitting) a record: ownership, emails, escalat
 A platform event or one of its fields changed; publishers and subscribers depend on it.
 
 Subscribers run later in their own transaction, so a mismatch shows up as failed event handling rather than a save error. Change publishers and subscribers together and test one event end to end.
+
+## integration-endpoint-changed
+
+**IntegrationEndpointChanged** · default severity: Medium · security
+
+A named credential, external credential, outbound message, remote site or CSP trusted site now points somewhere else or authenticates differently.
+
+Callouts and messages go to the new host with the same data and credentials, and secrets are set up per org rather than deployed. Confirm the host and test each caller the report lists.
+
+## integration-insecure
+
+**IntegrationInsecure** · default severity: High · security
+
+An integration sends data over plain http, sends a session ID out, or keeps a secret in source control.
+
+Use https everywhere, send session IDs only to services you control, and keep secrets out of metadata (rotate any that were committed).
+
+## integration-allowlist-removed
+
+**IntegrationAllowlistRemoved** · default severity: Medium
+
+A remote site setting or CSP trusted site no longer allows a host that code still calls.
+
+Apex callouts or Lightning requests to that host fail at runtime. Keep the setting, or move the callers to a named credential in the same change.
+
+## connected-app-access
+
+**ConnectedAppAccess** · default severity: Medium · security
+
+A connected app requests more OAuth scopes or accepts new callback URLs.
+
+Full and refresh-token scopes give broad, long-lived access; callback URLs receive authorization codes. Request only the scopes needed and confirm every callback URL is yours and uses https.
 
 ## after-save-self-update
 

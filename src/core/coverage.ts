@@ -37,6 +37,11 @@ const DEEP_METADATA: ReadonlySet<string> = new Set([
   "DuplicateRule",
   "MatchingRules",
   "ApprovalProcess",
+  "NamedCredential",
+  "ExternalCredential",
+  "RemoteSiteSetting",
+  "CspTrustedSite",
+  "ConnectedApp",
 ]);
 
 export const isAnalyzedInDepth = (c: ComponentRef): boolean =>

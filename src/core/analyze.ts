@@ -35,6 +35,14 @@ import {
   lightningEmbedding,
   writersOf,
 } from "./graph.js";
+import {
+  INTEGRATION_TYPES,
+  integrationFindings,
+  outboundMessageFindings,
+  outboundMessagesOf,
+  parseIntegration,
+  parseOutboundMessages,
+} from "./integrations.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -593,15 +601,25 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         break;
       }
 
-      case "WorkflowRule":
+      case "WorkflowRule": {
+        const base = opts.readBase?.(comp.file);
+        if (!deleted)
+          findings.push(
+            ...outboundMessageFindings(
+              outboundMessagesOf(model).filter((m) => m.file === comp.file),
+              base !== undefined ? parseOutboundMessages(base, comp.name, comp.file) : undefined,
+            ),
+          );
         addFinding({
           rule: "legacy-workflow",
           severity: "info",
           title: `Legacy workflow changed: ${comp.name}`,
-          detail: "Workflow rules are not analyzed yet; consider migrating them to flows.",
+          detail:
+            "Workflow rules are not analyzed yet, apart from their outbound messages; consider migrating them to flows.",
           files: [comp.file],
         });
         break;
+      }
 
       case "Metadata": {
         if (isLightningBundle(comp)) {
@@ -610,6 +628,19 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         }
         if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
           analyzePage(change);
+          break;
+        }
+        if (comp.metadataType && INTEGRATION_TYPES.has(comp.metadataType)) {
+          const base = opts.readBase?.(comp.file);
+          findings.push(
+            ...integrationFindings(
+              model,
+              comp,
+              deleted ? undefined : parseIntegration(comp, readCurrent(comp.file)),
+              // A destructive manifest deletes from the org while the source file can stay.
+              parseIntegration(comp, base ?? (deleted ? readCurrent(comp.file) : undefined)),
+            ),
+          );
           break;
         }
         if (comp.metadataType && SAVE_RULE_TYPES.has(comp.metadataType)) {
@@ -1067,6 +1098,10 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
     }
   }
   for (const r of rulesReadingField(model, object, field)) refs.push({ from: saveRuleRef(r), to: target });
+  for (const m of outboundMessagesOf(model)) {
+    if (key(m.object) === key(object) && m.fields.some((f) => key(f) === fk))
+      refs.push({ from: { kind: "OutboundMessage", name: m.name, file: m.file }, to: target });
+  }
   for (const pc of model.permissionContainers.values()) {
     if (pc.fields.some((g) => key(g.field) === tk))
       refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
