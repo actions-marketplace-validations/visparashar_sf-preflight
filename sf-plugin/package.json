@@ -1,0 +1,65 @@
+{
+  "name": "sf-plugin-preflight",
+  "version": "0.1.0",
+  "description": "Salesforce CLI plugin for sf-preflight: see what a Salesforce change sets off before it ships. Adds `sf preflight analyze`, `tests`, `agents`, `incidents`, `rollback` and more.",
+  "license": "Apache-2.0",
+  "author": "sf-preflight contributors",
+  "homepage": "https://visparashar.github.io/sf-preflight/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/visparashar/sf-preflight.git",
+    "directory": "sf-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/visparashar/sf-preflight/issues"
+  },
+  "type": "module",
+  "keywords": [
+    "salesforce",
+    "sfdx",
+    "sf",
+    "sf-plugin",
+    "oclif-plugin",
+    "devops",
+    "impact-analysis"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "files": [
+    "dist",
+    "oclif.manifest.json",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "oclif": {
+    "commands": "./dist/commands",
+    "bin": "sf",
+    "topicSeparator": " ",
+    "topics": {
+      "preflight": {
+        "description": "See what a Salesforce change sets off before it ships."
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "manifest": "oclif manifest",
+    "test": "npm run build && node --test test/plugin.test.mjs",
+    "prepack": "npm run build && oclif manifest"
+  },
+  "dependencies": {
+    "@oclif/core": "^4.0.0",
+    "sf-preflight": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "oclif": "^4.0.0",
+    "typescript": "^7.0.2"
+  }
+}
