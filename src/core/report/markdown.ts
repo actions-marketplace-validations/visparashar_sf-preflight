@@ -17,7 +17,7 @@ const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 function cascadeLines(node: CascadeNode, prefix: string, isLast: boolean, isRoot: boolean, out: string[]): void {
   const connector = isRoot ? "" : isLast ? "└─ " : "├─ ";
   const via = node.via && node.via.kind !== "Change" ? `${viaLabel(node.via.kind)} ${node.via.name} → ` : "";
-  const flags = `${node.cycle ? "  ⟲ cycle" : ""}${node.truncated ? "  … (depth limit)" : ""}`;
+  const flags = `${node.cycle ? "  ⟲ cycle" : ""}${node.async ? "  ⇢ platform event: subscribers run later" : ""}${node.truncated ? "  … (depth limit)" : ""}`;
   const rootNote = isRoot && node.via ? `   [changed: ${node.via.name}]` : "";
   out.push(`${prefix}${connector}${isRoot ? "" : via}${node.object} (${node.event})${flags}${rootNote}`);
   const childPrefix = isRoot ? "" : prefix + (isLast ? "   " : "│  ");

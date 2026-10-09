@@ -41,6 +41,16 @@ import { parsePermissionContainer } from "./parsers/permissions.js";
 import { picklistFindings, recordTypeFindings } from "./picklists.js";
 import { classifyPath } from "./project.js";
 import { referenceFindings } from "./references.js";
+import {
+  isPlatformEvent,
+  parseSaveRuleFile,
+  platformEventFindings,
+  rulesReadingField,
+  SAVE_RULE_TYPES,
+  saveRuleChangeFindings,
+  automationRef as saveRuleRef,
+  saveRulesOf,
+} from "./saveRules.js";
 import type {
   AnalysisResult,
   ApexAnalysis,
@@ -116,6 +126,16 @@ const describe = (a: AutomationRef) => {
       return `validation rule ${a.name}`;
     case "RollUpSummary":
       return `roll-up ${a.name}`;
+    case "DuplicateRule":
+      return `duplicate rule ${a.name}`;
+    case "AssignmentRule":
+      return `assignment rule ${a.name}`;
+    case "AutoResponseRule":
+      return `auto-response rule ${a.name}`;
+    case "EscalationRule":
+      return `escalation rule ${a.name}`;
+    case "ApprovalProcess":
+      return `approval process ${a.name}`;
     default:
       return a.name;
   }
@@ -270,6 +290,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     switch (comp.type) {
       case "CustomField": {
         const [object, field] = [comp.object!, comp.name.split(".")[1]!];
+        if (isPlatformEvent(object)) findings.push(...platformEventFindings(model, comp, object, deleted));
         roots.push(
           { object, event: "update", via: changeRef(change) },
           { object, event: "insert", via: changeRef(change) },
@@ -531,6 +552,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "CustomObject":
       case "ObjectChild":
         if (comp.object && !deleted) roots.push({ object: comp.object, event: "update", via: changeRef(change) });
+        if (comp.type === "CustomObject" && comp.object && isPlatformEvent(comp.object))
+          findings.push(...platformEventFindings(model, comp, comp.object, deleted));
         if (comp.type === "CustomObject" && comp.object && !deleted) {
           const base = opts.readBase?.(comp.file);
           if (base)
@@ -587,6 +610,19 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         }
         if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
           analyzePage(change);
+          break;
+        }
+        if (comp.metadataType && SAVE_RULE_TYPES.has(comp.metadataType)) {
+          const base = opts.readBase?.(comp.file);
+          const current = deleted ? [] : saveRulesOf(model).filter((r) => r.file === comp.file);
+          findings.push(
+            ...saveRuleChangeFindings(
+              model,
+              comp,
+              current,
+              base !== undefined ? parseSaveRuleFile(comp, base) : change.changeType === "added" ? [] : undefined,
+            ),
+          );
           break;
         }
         if (comp.metadataType === "SharingRules") {
@@ -708,6 +744,11 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           children: [],
         };
         node.children.push(child);
+        // Publishing a platform event ends the transaction's cascade: subscribers run later.
+        if (isPlatformEvent(w.object)) {
+          child.async = true;
+          continue;
+        }
         const loopStart = path.findIndex((p) => key(p.object) === key(w.object));
         if (loopStart >= 0) {
           child.cycle = true;
@@ -777,12 +818,36 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   }
 
   // Validation rules hit by automated writes.
-  const automatedWrites = new Map<string, { object: string; writers: Map<string, AutomationRef> }>();
+  const automatedWrites = new Map<
+    string,
+    { object: string; writers: Map<string, AutomationRef>; events: Set<SaveEvent> }
+  >();
   for (const e of edges) {
     if (!e.via || !AUTOMATION_KINDS.has(e.via.kind) || (e.event !== "insert" && e.event !== "update")) continue;
     const k = key(e.object);
-    if (!automatedWrites.has(k)) automatedWrites.set(k, { object: e.object, writers: new Map() });
+    if (!automatedWrites.has(k)) automatedWrites.set(k, { object: e.object, writers: new Map(), events: new Set() });
     automatedWrites.get(k)!.writers.set(`${e.via.kind}:${e.via.name}`, e.via);
+    automatedWrites.get(k)!.events.add(e.event);
+  }
+  // Duplicate rules that block automated writes.
+  for (const { object, writers, events } of automatedWrites.values()) {
+    const blocking = saveRulesOf(model).filter(
+      (d) =>
+        d.kind === "DuplicateRule" &&
+        d.active &&
+        key(d.object) === key(object) &&
+        ((events.has("insert") && d.blocks?.insert) || (events.has("update") && d.blocks?.update)),
+    );
+    if (!blocking.length) continue;
+    const ws = [...writers.values()];
+    addFinding({
+      rule: "automated-write-vs-duplicate-rule",
+      severity: "medium",
+      title: `Automated writes to ${object} can be blocked by ${blocking.length} duplicate rule(s)`,
+      detail: `${ws.map(describe).join(", ")} save ${object} records that ${blocking.map((d) => d.name).join(", ")} check${blocking.some((d) => d.fields.length) ? ` (matching on ${uniq(blocking.flatMap((d) => d.fields)).join(", ")})` : ""}. A save that matches an existing record fails. Apex can set Database.DMLOptions.DuplicateRuleHeader.allowSave; otherwise make sure the error reaches the user.`,
+      object,
+      files: uniq([...blocking.map((d) => d.file), ...ws.map((w) => w.file!).filter(Boolean)]),
+    });
   }
   for (const { object, writers } of automatedWrites.values()) {
     const vrs = model.validationRules.filter((v) => v.active && key(v.object) === key(object));
@@ -1001,6 +1066,7 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
       }
     }
   }
+  for (const r of rulesReadingField(model, object, field)) refs.push({ from: saveRuleRef(r), to: target });
   for (const pc of model.permissionContainers.values()) {
     if (pc.fields.some((g) => key(g.field) === tk))
       refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });

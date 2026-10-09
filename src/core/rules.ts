@@ -46,6 +46,29 @@ export const RULES: RuleInfo[] = [
     help: "Every flow, trigger and class that saves the object must now satisfy the rule. Check each writer sets the required fields.",
   },
   {
+    id: "automated-write-vs-duplicate-rule",
+    name: "AutomatedWriteVsDuplicateRule",
+    defaultSeverity: "medium",
+    summary:
+      "Automation saves records that an active duplicate rule can block, or a duplicate rule now blocks saves that automation makes.",
+    help: "A save that matches an existing record fails. Test the automation with matching data; Apex can set Database.DMLOptions.DuplicateRuleHeader.allowSave, and in any case the error must reach the user.",
+  },
+  {
+    id: "save-rule-changed",
+    name: "SaveRuleChanged",
+    defaultSeverity: "low",
+    summary:
+      "An assignment, auto-response, escalation, duplicate or matching rule, or an approval process, was switched on or off, added, removed or reads different fields.",
+    help: "These run as part of saving (or submitting) a record: ownership, emails, escalations, duplicate checks and approval locks change. Check which records they now apply to.",
+  },
+  {
+    id: "platform-event-contract",
+    name: "PlatformEventContract",
+    defaultSeverity: "medium",
+    summary: "A platform event or one of its fields changed; publishers and subscribers depend on it.",
+    help: "Subscribers run later in their own transaction, so a mismatch shows up as failed event handling rather than a save error. Change publishers and subscribers together and test one event end to end.",
+  },
+  {
     id: "after-save-self-update",
     name: "AfterSaveSelfUpdate",
     defaultSeverity: "medium",
