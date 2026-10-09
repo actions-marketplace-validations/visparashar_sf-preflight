@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+- **Risk dashboard**: the change's risk, the quality gate's findings check, and its risk factors
+  (recursion, rule collisions, access and sharing, broken references, Agentforce, integrations, code
+  and automation load), each with a count, its worst finding and what it means. Click a factor to
+  list its findings and open them. **Where the risk sits** ranks the impacted objects by their
+  findings, the recursion cycles they're on and the automation that runs on save. The **trend** shows
+  high, medium and low findings over the branch's recent analyses (a bar each time the result
+  changes), kept per project and branch in VS Code's storage on your computer. Opens from the status
+  bar, the dashboard button on the Blast radius view, or **sf-preflight: Show risk dashboard**.
+
+- **Open report in the web viewer**: saves the current analysis as `preflight.json` and opens the
+  [report viewer](https://sf-preflight-web.vercel.app/) in your browser, for reviewers who don't use
+  VS Code. The file is read in the browser and never uploaded. `sfPreflight.viewerUrl` points it at
+  a self-hosted copy.
+
+- The status bar now opens the risk dashboard.
+
 ## [0.3.0] - 2026-10-10
 
 - Brings the analysis of sf-preflight 0.10.0 into the editor: a reference check for every metadata type

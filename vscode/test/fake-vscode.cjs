@@ -66,6 +66,10 @@ const state = {
   status: undefined,
   mcpProviders: new Map(),
   context: {},
+  /** Commands the extension ran through executeCommand, other than setContext. */
+  executed: [],
+  /** URLs opened in the browser. */
+  external: [],
 };
 
 function walk(dir, out) {
@@ -175,6 +179,7 @@ const vscode = {
       return panel;
     },
     showQuickPick: async () => undefined,
+    showSaveDialog: async (opts) => state.saveTo?.(opts),
     activeTextEditor: undefined,
   },
   workspace: {
@@ -217,6 +222,13 @@ const vscode = {
     },
     executeCommand: async (id, ...args) => {
       if (id === "setContext") state.context[args[0]] = args[1];
+      else state.executed.push([id, ...args]);
+    },
+  },
+  env: {
+    openExternal: async (uri) => {
+      state.external.push(uri.raw ?? uri.fsPath);
+      return true;
     },
   },
   lm: {

@@ -37,7 +37,11 @@ Nothing to configure, and no org login needed.
   and **what runs** on every impacted object, in Salesforce's order of execution, with what each
   step writes. Automation cycles and affected Agentforce actions get their own sections. Click an
   item to open its file.
-- **Status bar**: high and medium findings at a glance.
+- **Risk dashboard**: the change's risk and quality-gate check, its risk factors (recursion, rule
+  collisions, access and sharing, broken references, Agentforce, integrations, code and automation
+  load) with what each means, where the risk sits, and a trend of findings over the branch's recent
+  analyses. Click a factor to list its findings. Open it from the status bar or the dashboard button.
+- **Status bar**: high and medium findings at a glance; click it for the risk dashboard.
 - **Analyze on change**: saving Salesforce metadata, switching branches, pulling or retrieving
   re-runs the analysis a moment later, in the background, one run per project at a time.
 
@@ -47,6 +51,8 @@ Commands (`sf-preflight:` in the Command Palette):
 |---|---|
 | Analyze changes | Run the analysis now |
 | Show blast-radius graph | The change and what it sets off, as a graph beside your code |
+| Show risk dashboard | Risk factors, where the risk sits and the trend over your recent analyses |
+| Open report in the web viewer | Save the analysis as `preflight.json` and open the [report viewer](https://sf-preflight-web.vercel.app/) to share it |
 | Compare with branch… | Choose what your changes are compared with |
 | Show report | The full Markdown report, as posted on pull requests |
 | Explain what runs when an object is saved… | Order of execution for any object and event |
@@ -96,6 +102,9 @@ The same analysis runs in other places your changes go through:
 - **Pull requests**: the [GitHub Action](https://github.com/visparashar/sf-preflight#on-pull-requests-github-action)
   posts the blast radius as a comment and can gate merges.
 - **Terminal and any CI**: `npm install -g sf-preflight`, then `preflight analyze`.
+- **In the browser**: the [report viewer](https://sf-preflight-web.vercel.app/) opens a report or
+  evidence pack for reviewers and auditors who don't use VS Code; **Open report in the web viewer**
+  sends it there.
 - **AI coding agents** outside VS Code (Claude Code, Codex, Cursor, Gemini CLI and others): the
   [agent skill and MCP server](https://github.com/visparashar/sf-preflight/blob/main/docs/AI_AGENTS.md).
 
