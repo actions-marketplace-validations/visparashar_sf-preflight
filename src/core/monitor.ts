@@ -56,7 +56,7 @@ interface Rule {
   id: string;
   severity: MonitorSeverity;
   label: string;
-  test: (text: string) => boolean;
+  test: (text: string, display: string) => boolean;
   /** False when the entry could name a person (assignments), so the wording is left out. */
   showDetail: boolean;
 }
@@ -83,9 +83,10 @@ export const RULES: Rule[] = [
     id: "broad-permission",
     severity: "high",
     label: "Broad permission granted",
-    test: has(
-      /modify all data|view all data|author apex|customize application|manage users|modify metadata|manage profiles/,
-    ),
+    test: (_t, d) =>
+      /modify all data|view all data|author apex|customize application|manage users|modify metadata|manage profiles/.test(
+        d,
+      ),
     showDetail: true,
   },
   {
@@ -166,7 +167,7 @@ export function classifyAudit(
       continue;
     }
     const text = `${e.section} ${e.action} ${e.display}`.toLowerCase();
-    const rule = RULES.find((r) => r.test(text));
+    const rule = RULES.find((r) => r.test(text, e.display.toLowerCase()));
     if (!rule) continue;
     const f: MonitorFinding = {
       severity: rule.severity,
