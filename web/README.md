@@ -1,5 +1,8 @@
 # sf-preflight report viewer
 
+**[sf-preflight-web.vercel.app](https://sf-preflight-web.vercel.app/)**: try the [sample report](https://sf-preflight-web.vercel.app/?sample=report) or the
+[sample evidence pack](https://sf-preflight-web.vercel.app/?sample=evidence).
+
 A static site that opens sf-preflight's output in the browser, for people who review changes but
 don't run the CLI: reviewers, release managers, auditors.
 

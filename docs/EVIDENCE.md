@@ -67,6 +67,9 @@ preflight evidence --base origin/main --head HEAD --tests-result tests.json \
   # evidence.json: digest matches (sha256:…). This shows the file is intact; …
   ```
 
+  The [report viewer](https://sf-preflight-web.vercel.app/) runs the same check in the browser and shows the whole pack; drop in
+  `evidence.json` or the artifact zip from the Actions run.
+
 - **A signature proves who produced it.** Let the GitHub Action sign the pack of the merged
   change (`attest: true` on pushes to the main branch) with a
   [GitHub artifact attestation](GITHUB_ACTION.md#signed-evidence), and verify it against the

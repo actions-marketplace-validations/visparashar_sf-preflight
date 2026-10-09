@@ -83,6 +83,18 @@ function Verdict({ doc }: { doc: EvidenceDoc }) {
               <code>{attest}</code>
               <CopyButton text={() => attest} label="Copy" className="btn quiet" />
             </div>
+            <p style={{ marginTop: "10px" }}>
+              To also require the workflow and branch that signed it, add <code>--signer-workflow</code> and{" "}
+              <code>--source-ref</code>:{" "}
+              <a
+                href="https://github.com/visparashar/sf-preflight/blob/main/docs/EVIDENCE.md#what-the-evidence-proves"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                what the evidence proves
+              </a>
+              .
+            </p>
           </div>
         )}
         {doc.newer && (
