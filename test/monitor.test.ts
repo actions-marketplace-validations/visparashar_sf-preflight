@@ -49,6 +49,11 @@ describe("classifyAudit", () => {
     expect(findings.map((f) => f.severity)).toEqual(["high", "high", "medium", "medium"]);
   });
 
+  it("does not treat the Manage Users section name as a granted permission", () => {
+    const { findings } = classifyAudit([e("Logged in using Login-As", "Manage Users")]);
+    expect(findings).toEqual([]);
+  });
+
   it("leaves the wording out of permission assignments, which name a person", () => {
     const { findings } = classifyAudit([e("Assigned permission set Sales_Ops to user jane.doe@example.com")]);
     expect(findings[0]?.rule).toBe("permission-assigned");
