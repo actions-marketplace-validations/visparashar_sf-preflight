@@ -2,10 +2,14 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // The worker script exists only in a build (npm run build), so these tests need dist/.
 const built = existsSync(path.resolve("dist/core/parseWorker.js"));
+
+// Loaded by a computed path, so type-checking does not need dist/ to exist.
+const load = (name: string) => import(pathToFileURL(path.resolve("dist/core", `${name}.js`)).href);
 
 let work: string;
 beforeEach(() => {
@@ -28,8 +32,8 @@ const snap = (m: { classes: Map<string, unknown> }) => JSON.stringify([...m.clas
 
 describe.skipIf(!built)("parallel parsing", () => {
   it("gives the same model as parsing on one thread", async () => {
-    const { parseInParallel } = await import("../dist/core/parallelParse.js");
-    const { loadProject } = await import("../dist/core/project.js");
+    const { parseInParallel } = (await load("parallelParse")) as typeof import("../src/core/parallelParse.js");
+    const { loadProject } = (await load("project")) as typeof import("../src/core/project.js");
     process.env.PREFLIGHT_JOBS = "1";
     const serial = loadProject(work, { cache: false });
     process.env.PREFLIGHT_JOBS = "2";
