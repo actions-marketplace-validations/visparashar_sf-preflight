@@ -23,6 +23,7 @@ import { parseFlow } from "./parsers/flows.js";
 import { isBundleSource, parseLightningBundle } from "./parsers/lightning.js";
 import { parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
+import { parseRecordType } from "./parsers/recordTypes.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
 import { looksLikeSObject } from "./standardObjects.js";
 import type { ApexClassDef, ApexTriggerDef, ComponentRef, ObjectDef, OrgModel } from "./types.js";
@@ -228,6 +229,7 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
     lightning: new Map(),
     layouts: new Map(),
     flexipages: new Map(),
+    recordTypes: new Map(),
     components: new Map(),
     warnings: [],
   };
@@ -325,6 +327,14 @@ export function loadProject(projectDirInput: string, opts: { cache?: boolean } =
           ) as Omit<ApexClassDef, "stripped" | "name" | "file">;
           const cls: ApexClassDef = { ...rest, stripped: stripApex(source), name: ref.name, file: ref.file };
           model.classes.set(key(cls.name), cls);
+        });
+        break;
+      case "ObjectChild":
+        if (!ref.file.endsWith(".recordType-meta.xml") || !ref.object) break;
+        safely(ref, () => {
+          const short = ref.name.split(".").pop() ?? ref.name;
+          const rt = parseRecordType(read(ref.file), ref.object!, short, ref.file);
+          model.recordTypes.set(key(`${rt.object}.${rt.name}`), rt);
         });
         break;
       case "PermissionSet":

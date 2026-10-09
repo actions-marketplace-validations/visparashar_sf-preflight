@@ -94,6 +94,8 @@ export interface FieldDef {
   /** `<required>true</required>` (master-detail fields are always required). */
   required?: boolean;
   defaultValue?: string;
+  /** Picklist fields: the values defined on the field itself, or the global value set it uses. */
+  picklist?: { values: { name: string; active: boolean }[]; valueSetName?: string };
   /** Roll-up summary: this field (on the parent) is recalculated when `childObject` records change. */
   summary?: {
     childObject: string;
@@ -313,6 +315,16 @@ export interface AgentTestDef {
   file: string;
 }
 
+/** A record type: whether it is active and which picklist values it offers per field. */
+export interface RecordTypeDef {
+  object: string;
+  name: string;
+  active: boolean;
+  /** Picklist field API name to the values this record type offers. */
+  picklists: Record<string, string[]>;
+  file: string;
+}
+
 /** A page layout: the fields it shows. */
 export interface LayoutDef {
   name: string;
@@ -371,6 +383,8 @@ export interface OrgModel {
   lightning: Map<string, LightningDef>;
   /** Page layouts and Lightning pages, keyed by lower-cased name. */
   layouts: Map<string, LayoutDef>;
+  /** Record types, keyed by lower-cased `Object.Name`. */
+  recordTypes: Map<string, RecordTypeDef>;
   flexipages: Map<string, FlexiPageDef>;
   /** Every metadata file found, keyed by relative path. */
   components: Map<string, ComponentRef>;

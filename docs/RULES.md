@@ -36,6 +36,10 @@ that is only inside the blast radius).
 | [`field-used-by-lightning`](#field-used-by-lightning) | Low | A changed field is used by Lightning Web Components or Aura components. |
 | [`apex-called-from-lightning`](#apex-called-from-lightning) | Low | A changed Apex class is called from Lightning components. |
 | [`lightning-missing-reference`](#lightning-missing-reference) | Medium | A changed Lightning component uses a field or Apex class that is not in the project. |
+| [`picklist-value-removed`](#picklist-value-removed) | Medium | Picklist values were removed or deactivated while record types, formulas, flows or Apex still use them. |
+| [`record-type-values-removed`](#record-type-values-removed) | Low | A record type no longer offers picklist values it offered before. |
+| [`record-type-deactivated`](#record-type-deactivated) | Low | A record type was deactivated. |
+| [`record-type-still-referenced`](#record-type-still-referenced) | Medium | A deleted record type is still named in Apex, flows or formulas. |
 | [`field-on-page`](#field-on-page) | Info | A changed field is on page layouts or Lightning pages. |
 | [`lightning-on-page`](#lightning-on-page) | Info | A changed Lightning component is placed on Lightning pages. |
 | [`page-missing-reference`](#page-missing-reference) | Medium | A changed layout or Lightning page uses a field or component that is not in the project. |
@@ -265,6 +269,38 @@ Lightning components call Apex from the browser, so a changed signature, result 
 A changed Lightning component uses a field or Apex class that is not in the project.
 
 Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.
+
+## picklist-value-removed
+
+**PicklistValueRemoved** · default severity: Medium
+
+Picklist values were removed or deactivated while record types, formulas, flows or Apex still use them.
+
+Records keep the old value, but saves that set it fail or take the wrong branch. Remove it from the record types and replace it in the formulas, flows and code, or keep it active.
+
+## record-type-values-removed
+
+**RecordTypeValuesRemoved** · default severity: Low
+
+A record type no longer offers picklist values it offered before.
+
+Users of that record type can no longer pick them. Existing records keep their values.
+
+## record-type-deactivated
+
+**RecordTypeDeactivated** · default severity: Low
+
+A record type was deactivated.
+
+New records can no longer use it. Flows or Apex that create records of this type may fail.
+
+## record-type-still-referenced
+
+**RecordTypeStillReferenced** · default severity: Medium
+
+A deleted record type is still named in Apex, flows or formulas.
+
+Comparing against a record type by name does not fail the deployment; it quietly stops matching. Update the code, flows and formulas that name it.
 
 ## field-on-page
 
