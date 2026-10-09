@@ -17,6 +17,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   strings, so common words don't match.
 - Renames: when a component of any type is renamed, files that still use the old name are flagged
   (`renamed-still-named`). The old component stays in the org, so this works in one org and fails in a new one.
+- Access changes are analyzed in depth:
+  - Access taken away by a permission set or profile (objects, fields, Apex classes, Visualforce pages, custom
+    permissions, system permissions), naming the Lightning components and pages that use it
+    (`permission-access-removed`).
+  - Guest user profiles (by their Guest User License) and guest sharing rules that expose objects, classes or
+    records to unauthenticated visitors (`guest-access`).
+  - Organization-wide defaults that open up (`sharing-model-opened`) or tighten (`sharing-model-restricted`).
+  - Sharing rules added, widened, re-scoped, reduced or removed, rated by audience and access level
+    (`sharing-rule-changed`).
+  - Permission set groups that gain permission sets with Modify All, View All or system permissions, drop sets or
+    add mutes, and muting permission sets that mute more (`permission-group-changed`). Escalations in a
+    permission set also name the groups that carry it to users.
 - Destructive manifests: components listed in a changed `destructiveChanges.xml` (or `...Pre`/`...Post`) are
   checked like deleted files, including fields, classes and flows, even when the manifest sits outside the
   package directories.

@@ -250,6 +250,12 @@ export interface PermissionContainerDef {
   fields: FieldGrant[];
   /** Enabled system permissions, e.g. ModifyAllData. */
   userPermissions: string[];
+  /** Apex classes, Visualforce pages and custom permissions it enables. */
+  classes?: string[];
+  pages?: string[];
+  customPermissions?: string[];
+  /** Profiles only: the user license, e.g. "Guest User License". */
+  userLicense?: string;
   file: string;
 }
 

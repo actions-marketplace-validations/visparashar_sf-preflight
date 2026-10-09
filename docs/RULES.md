@@ -20,6 +20,12 @@ that is only inside the blast radius).
 | [`permission-system`](#permission-system) | High | A permission set or profile grants a sensitive system permission (e.g. ModifyAllData). |
 | [`permission-delete`](#permission-delete) | Medium | A permission set or profile grants delete on an object. |
 | [`permission-field-edit`](#permission-field-edit) | Low | A permission set or profile newly grants edit access to fields. |
+| [`permission-access-removed`](#permission-access-removed) | Medium | A permission set, profile, permission set group or muting permission set takes access away. |
+| [`permission-group-changed`](#permission-group-changed) | Low | A permission set group now includes more permission sets. |
+| [`guest-access`](#guest-access) | High | Guest (unauthenticated) site users gain access to objects, Apex classes or records. |
+| [`sharing-model-opened`](#sharing-model-opened) | High | An object's organization-wide default became more open (e.g. Private to Public Read/Write). |
+| [`sharing-model-restricted`](#sharing-model-restricted) | Medium | An object's organization-wide default became more restrictive or changed control. |
+| [`sharing-rule-changed`](#sharing-rule-changed) | Medium | A sharing rule was added, widened, narrowed or removed. |
 | [`deleted-still-referenced`](#deleted-still-referenced) | High | A deleted field, flow or class is still referenced elsewhere. |
 | [`deleted-still-named`](#deleted-still-named) | Medium | A deleted component of any metadata type is still named by other files in the project. |
 | [`renamed-still-named`](#renamed-still-named) | Medium | A renamed component's old name is still used by other files in the project. |
@@ -148,6 +154,54 @@ Delete access is rarely needed by integration or agent users, and deletes cascad
 A permission set or profile newly grants edit access to fields.
 
 Review that each newly editable field is needed by the users holding the permission.
+
+## permission-access-removed
+
+**PermissionAccessRemoved** · default severity: Medium
+
+A permission set, profile, permission set group or muting permission set takes access away.
+
+Users who got the access only from there lose it: objects, fields, Apex classes, Visualforce pages, custom permissions or system permissions. The report names Lightning components and pages that need what was removed. Check who holds the access before deploying.
+
+## permission-group-changed
+
+**PermissionGroupChanged** · default severity: Low · security
+
+A permission set group now includes more permission sets.
+
+Everyone assigned the group gets the added access. Check the group's members need it.
+
+## guest-access
+
+**GuestAccess** · default severity: High · security
+
+Guest (unauthenticated) site users gain access to objects, Apex classes or records.
+
+Anyone who reaches the site gets this access without logging in. Grant guests only what public pages need, and share only records meant to be public.
+
+## sharing-model-opened
+
+**SharingModelOpened** · default severity: High · security
+
+An object's organization-wide default became more open (e.g. Private to Public Read/Write).
+
+Every user can now see or edit records they don't own. Check no record holds data some users must not see or change. Large orgs recalculate sharing on deploy.
+
+## sharing-model-restricted
+
+**SharingModelRestricted** · default severity: Medium
+
+An object's organization-wide default became more restrictive or changed control.
+
+Users can lose access to records they don't own, and automation running with the user's sharing may stop finding records. Add sharing rules for who still needs access.
+
+## sharing-rule-changed
+
+**SharingRuleChanged** · default severity: Medium · security
+
+A sharing rule was added, widened, narrowed or removed.
+
+New or wider rules open records to their audience (high when shared with all internal, partner or portal users for edit); removed or reduced rules take access away. Confirm the audience and access level.
 
 ## deleted-still-referenced
 
