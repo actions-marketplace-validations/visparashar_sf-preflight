@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { parseApexUnit } from "./apexUnit.js";
 import { applyCallGraph } from "./callGraph.js";
+import { ParseCache } from "./parseCache.js";
 import {
   agentFileKind,
   emptyAgentMetadata,
@@ -14,12 +16,12 @@ import {
   parseGenAiPlugin,
   parsePlanner,
 } from "./parsers/agents.js";
-import { parseApexClass, parseApexTrigger } from "./parsers/apex.js";
+import { stripApex } from "./parsers/apex.js";
 import { parseField } from "./parsers/fields.js";
 import { parseFlow } from "./parsers/flows.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
 import { parseValidationRule } from "./parsers/validationRules.js";
-import type { ComponentRef, ObjectDef, OrgModel } from "./types.js";
+import type { ApexClassDef, ApexTriggerDef, ComponentRef, ObjectDef, OrgModel } from "./types.js";
 import { key, redactEmails, toPosix } from "./util.js";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".sfdx", ".sf", ".vscode", ".idea", "dist"]);
@@ -109,7 +111,7 @@ function ensureObject(model: OrgModel, name: string): ObjectDef {
 }
 
 /** Load and parse every supported metadata file in an SFDX project. */
-export function loadProject(projectDirInput: string): OrgModel {
+export function loadProject(projectDirInput: string, opts: { cache?: boolean } = {}): OrgModel {
   const projectDir = path.resolve(projectDirInput);
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
     throw new Error(`Project directory not found: ${projectDir}`);
@@ -142,8 +144,19 @@ export function loadProject(projectDirInput: string): OrgModel {
     if (ref.type === "CustomObject") ensureObject(model, ref.name).file = ref.file;
   }
   const projectObjects = new Set(model.objects.keys());
+  const cache = new ParseCache(projectDir, projectObjects, opts.cache);
 
   const read = (rel: string) => readFileSync(path.join(projectDir, rel), "utf8");
+  cache.prefill(
+    refs.flatMap((ref): { file: string; kind: "class" | "trigger"; name: string; source: () => string }[] =>
+      ref.type === "ApexClass" && ref.file.endsWith(".cls")
+        ? [{ file: ref.file, kind: "class" as const, name: ref.name, source: () => read(ref.file) }]
+        : ref.type === "ApexTrigger" && ref.file.endsWith(".trigger")
+          ? [{ file: ref.file, kind: "trigger" as const, name: ref.name, source: () => read(ref.file) }]
+          : [],
+    ),
+    projectObjects,
+  );
   const safely = (ref: ComponentRef, fn: () => void) => {
     try {
       fn();
@@ -190,7 +203,15 @@ export function loadProject(projectDirInput: string): OrgModel {
       case "ApexTrigger":
         if (!ref.file.endsWith(".trigger")) break;
         safely(ref, () => {
-          const trig = parseApexTrigger(read(ref.file), ref.name, ref.file, projectObjects);
+          const source = read(ref.file);
+          const { def } = cache.get(ref.file, source, () =>
+            parseApexUnit("trigger", source, ref.name, ref.file, projectObjects),
+          ) as { def?: object };
+          const trig: ApexTriggerDef | undefined = def && {
+            ...(def as Omit<ApexTriggerDef, "stripped" | "file">),
+            stripped: stripApex(source),
+            file: ref.file,
+          };
           if (trig) model.triggers.set(key(trig.name), trig);
           else model.warnings.push(`No trigger header found in ${ref.file}`);
         });
@@ -198,7 +219,11 @@ export function loadProject(projectDirInput: string): OrgModel {
       case "ApexClass":
         if (!ref.file.endsWith(".cls")) break;
         safely(ref, () => {
-          const cls = parseApexClass(read(ref.file), ref.name, ref.file, projectObjects);
+          const source = read(ref.file);
+          const rest = cache.get(ref.file, source, () =>
+            parseApexUnit("class", source, ref.name, ref.file, projectObjects),
+          ) as Omit<ApexClassDef, "stripped" | "name" | "file">;
+          const cls: ApexClassDef = { ...rest, stripped: stripApex(source), name: ref.name, file: ref.file };
           model.classes.set(key(cls.name), cls);
         });
         break;
@@ -256,6 +281,7 @@ export function loadProject(projectDirInput: string): OrgModel {
     }
   }
 
+  cache.save();
   model.agents = linkAgents(agentMeta, model.warnings);
   applyCallGraph(model);
   for (const def of [...model.classes.values(), ...model.triggers.values()]) {

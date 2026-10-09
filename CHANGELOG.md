@@ -9,6 +9,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Parallel parsing: when 150 or more Apex files need parsing (a first run, or after the object
+  list changes), they are parsed on worker threads, one per CPU (at most 8). Set `PREFLIGHT_JOBS=1`
+  to parse on one thread. Output is identical. Gain depends on the machine: on a 2-core test
+  machine NPSP's first run went from 27 s to 23 s, because each thread warms up the parser's lookup
+  tables itself.
+- Parse cache: Apex parse results are cached on disk (`~/.cache/sf-preflight`, or
+  `PREFLIGHT_CACHE_DIR`), keyed by each file's content, so only changed classes are parsed again.
+  On NPSP (1,044 classes) an analysis drops from about 28 s to 1.4 s, and a 2,700-class project
+  from 54 s to 4 s, with identical output. The first run is as slow as before. The cache holds
+  analysis facts (method names, field references), not source, is readable only by you, and is
+  dropped when the analyzer changes or the project's objects change. Turn it off with
+  `PREFLIGHT_NO_CACHE=1`.
 - The VS Code extension (`vscode/`, released separately as `extension-vX.Y.Z`): findings in the
   Problems panel, the blast-radius view, analysis on change, test generation, save order, the
   agent skill and the MCP tools for agent mode. See [vscode/README.md](vscode/README.md).
