@@ -169,9 +169,9 @@ export class GraphPanel {
 </svg>
 <div id="empty" class="empty" hidden></div>
 <div id="tip" class="tip" hidden></div>
-<div class="hint">Drag to pan · scroll to zoom · click a node to open it</div>
-<div class="legend" aria-label="Legend">
-  <span class="changed">changed</span><span>impacted</span><span class="medium">collision</span><span class="high">high risk</span><span class="recursion">recursion</span>
+<div class="hint">Drag to pan · scroll to zoom · click a node to open it · click a legend item to highlight it</div>
+<div class="legend" role="group" aria-label="Legend: click a kind to highlight it">
+  <button type="button" class="changed" data-filter="changed">changed</button><button type="button" data-filter="impacted">impacted</button><button type="button" class="medium" data-filter="medium">collision</button><button type="button" class="high" data-filter="high">high risk</button><button type="button" class="recursion" data-filter="recursion">recursion</button>
 </div>
 <script nonce="${nonce}" src="${media("graph.js")}"></script>
 </body>

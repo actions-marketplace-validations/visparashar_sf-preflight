@@ -33,6 +33,17 @@
   const MAX_LABEL = 34;
   const PILL_H = 30;
 
+  // Legend filters: the kinds of node the person has clicked to highlight. Everything else fades.
+  const FILTERS = {
+    changed: (n) => n.changed,
+    impacted: (n) => !n.changed && n.severity !== "medium" && n.severity !== "high",
+    medium: (n) => n.severity === "medium",
+    high: (n) => n.severity === "high",
+  };
+  const active = new Set();
+  let applyFilter = () => {};
+  const legendButtons = [...document.querySelectorAll(".legend button[data-filter]")];
+
   let graph;
   let view = { x: 0, y: 0, k: 1 };
   let moved = false;
@@ -174,6 +185,8 @@
         : meta.error
           ? `Couldn't analyze: ${meta.error}`
           : "No Salesforce metadata changed yet. Edit a class, flow, field or rule and save it.";
+      applyFilter = () => {};
+      syncLegend({});
       return;
     }
     const { byId, radius, rings, hub } = layout(g);
@@ -305,9 +318,64 @@
       }
       showTip(n, ev);
     }
+    // Fade everything that is not one of the highlighted kinds (and the edges between them).
+    // A kind with nothing in this graph is ignored, so a stale choice never blanks the picture.
+    const recursive = new Set();
+    for (const it of edgeEls) if (it.e.recursion) recursive.add(it.e.from).add(it.e.to);
+    const matches = (key, n) => (key === "recursion" ? recursive.has(n.id) : FILTERS[key](n));
+    const counts = {};
+    for (const key of [...Object.keys(FILTERS), "recursion"])
+      counts[key] = g.nodes.filter((n) => matches(key, n)).length;
+    applyFilter = () => {
+      const on = [...active].filter((k) => counts[k] > 0);
+      const keep = (n) => n.id === g.center || on.some((k) => matches(k, n));
+      const shown = new Set(g.nodes.filter(keep).map((n) => n.id));
+      const onlyRecursion = on.length === 1 && on[0] === "recursion";
+      for (const n of g.nodes) nodeEls.get(n.id)?.classList.toggle("faded", on.length > 0 && !shown.has(n.id));
+      for (const it of edgeEls) {
+        const lit = shown.has(it.e.from) && shown.has(it.e.to) && (!onlyRecursion || it.e.recursion);
+        it.p.classList.toggle("faded", on.length > 0 && !lit);
+        it.t?.classList.toggle("faded", on.length > 0 && !lit);
+      }
+      syncLegend(counts);
+    };
+    applyFilter();
     if (!moved) fit();
     else apply();
   }
+
+  /** Legend buttons: pressed state, and how many nodes of each kind this graph has. */
+  function syncLegend(counts) {
+    for (const b of legendButtons) {
+      const key = b.dataset.filter;
+      const n = counts[key] ?? 0;
+      b.setAttribute("aria-pressed", String(active.has(key) && n > 0));
+      b.disabled = n === 0;
+      b.title = n === 0 ? "None in this graph" : `${n} · click to highlight, click again to clear`;
+      let count = b.querySelector(".count");
+      if (!count) {
+        count = document.createElement("span");
+        count.className = "count";
+        b.appendChild(count);
+      }
+      count.textContent = n ? String(n) : "";
+    }
+  }
+
+  for (const b of legendButtons) {
+    b.addEventListener("click", () => {
+      const key = b.dataset.filter;
+      if (active.has(key)) active.delete(key);
+      else active.add(key);
+      applyFilter();
+    });
+  }
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && active.size) {
+      active.clear();
+      applyFilter();
+    }
+  });
 
   function drawCenter(gEl, n) {
     gEl.classList.add("center");

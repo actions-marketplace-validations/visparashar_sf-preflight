@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **Click the legend to highlight**: in the blast radius graph, click *changed*, *impacted*, *collision*, *high risk* or *recursion* to keep those nodes (and the edges between them) in focus and fade the rest. Pick several kinds at once; click again or press Esc to clear. Each kind shows how many nodes it has, and kinds with none are greyed out. The choice stays when the graph updates.
+
 ## [0.2.0]
 
 - **New extension ID: `visparashar.sf-preflight-vscode`** (the name `sf-preflight` is taken on the
