@@ -155,7 +155,8 @@ jobs:
           # The CLI was published moments ago; wait for the registry to serve it.
           ok=0
           for i in 1 2 3 4 5 6; do
-            if npm install; then ok=1; break; fi
+            # --prefer-online: a failed lookup must not be served again from npm's cache.
+            if npm install --prefer-online; then ok=1; break; fi
             sleep 20
           done
           [ "$ok" = 1 ]
