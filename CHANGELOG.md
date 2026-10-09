@@ -9,6 +9,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Reports, report types, list views, email templates (merge fields), quick actions, compact layouts and field sets
+  count as field references, so deleting or renaming a field they name is caught. A changed one that names a
+  custom field the project's object lacks is flagged (`missing-field-reference`).
+- Integrations are analyzed in depth, each change compared with the base version:
+  - Named credentials that move to another host, authenticate differently or use plain http, with the Apex and
+    flows that call them; external credentials whose authentication changes, with the named credentials using
+    them (`integration-endpoint-changed`, `integration-insecure`).
+  - Remote site settings and CSP trusted sites that are deleted, deactivated or moved while code still calls the
+    host (`integration-allowlist-removed`), that newly allow a host, or that turn off protocol security.
+  - Connected apps that request more OAuth scopes (high for Full) or accept new callback URLs, and consumer
+    secrets committed to source control (`connected-app-access`).
+  - Outbound messages in workflow files that send a session ID, post over http or move host; the fields they send
+    count as references.
 - The save path covers more of Salesforce's order of execution:
   - Duplicate rules (after validation rules) and assignment, auto-response and escalation rules (after the
     after-save triggers) appear in `preflight explain` and the report's order-of-execution tables.
@@ -22,6 +35,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     subscribers (triggers, platform-event flows, Lightning components on the Emp API)
     (`platform-event-contract`). The cascade stops at a published event, since subscribers run later in their
     own transaction, instead of treating them as part of the same save.
+- A report viewer (`web/`): a static site that opens a JSON report or an evidence pack in the browser, with the
+  risk, quality gate, findings, the blast-radius graph from the VS Code extension, order of execution, cascade,
+  affected Agentforce actions, tests to run, org context and authorship. Evidence packs get their digest checked
+  in the browser (the same check as `preflight evidence --verify`). Opens GitHub Actions artifact zips, pasted JSON
+  and links (`?url=`), copies the CLI's Markdown, and prints cleanly. Files are never uploaded. Ships with
+  settings for Vercel and Netlify.
 - A reference check for every metadata type. When a component is deleted, the files that still name it are
   flagged (`deleted-still-named`), for the types without a precise check of their own: static resources,
   named credentials, custom permissions, tabs, apps, value sets, quick actions, email templates, layouts,
@@ -45,6 +64,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Destructive manifests: components listed in a changed `destructiveChanges.xml` (or `...Pre`/`...Post`) are
   checked like deleted files, including fields, classes and flows, even when the manifest sits outside the
   package directories.
+
+### Fixed
+
+- Layouts, Lightning pages and Lightning components no longer report fields from other managed packages
+  (`ns__Field__c`) as missing from the project.
 
 ## [0.9.1] - 2026-10-09
 

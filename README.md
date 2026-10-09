@@ -46,7 +46,8 @@ It is open source, runs offline on your source code, and needs no org credential
 | **Labels, custom metadata and Visualforce** | Removed labels still in use, who reads a changed custom metadata record, Visualforce pages tied to a changed Apex class or naming a missing one |
 | **Picklists and record types** | Removed or deactivated picklist values still offered by record types or written in code; record types that drop values or are deleted while code names them |
 | **Save rules and platform events** | Duplicate, assignment, auto-response and escalation rules in the order of execution; automation that a blocking duplicate rule can stop; rules and approval processes switched on, off or re-scoped; platform event publishers and subscribers when an event changes |
-| **Layouts and Lightning pages** | Where a changed field or component is shown, fields or components a page names that the project lacks, and what a changed page no longer shows |
+| **Integrations** | Named and external credentials that move host, change authentication or use http; remote sites and CSP trusted sites removed while code still calls the host; connected app scopes, callback URLs and committed secrets; outbound messages that send session IDs |
+| **Layouts, pages, reports and templates** | Where a changed field or component is shown (layouts, Lightning pages, reports, report types, list views, email templates, quick actions, compact layouts, field sets), fields or components a page names that the project lacks, and what a changed page no longer shows |
 | **Everything else that changed** | Every other metadata type (tabs, quick actions, reports, email templates and the rest) is recognized and listed with the files that mention it, and the report says how much of the change was analyzed in depth. When any component is deleted or renamed, including through `destructiveChanges.xml`, the files that still name it are flagged |
 | **Affected agent actions** | Agentforce actions the change reaches, their Testing Center coverage and what their runtime user needs |
 
@@ -265,6 +266,16 @@ everything the change sets off, and the risk in the status bar. It re-analyzes w
 and offers the MCP tools to GitHub Copilot and other agents in the editor. It works in VS Code and
 editors built on it (Cursor, Salesforce Code Builder). Install `visparashar.sf-preflight-vscode` from
 the VS Code Marketplace or Open VSX.
+
+### In the browser (report viewer)
+
+The [report viewer](https://sf-preflight-web.vercel.app/) ([sample report](https://sf-preflight-web.vercel.app/?sample=report),
+[sample evidence pack](https://sf-preflight-web.vercel.app/?sample=evidence)) opens a JSON report (`--format json`) or an evidence pack in the
+browser, for reviewers, release managers and auditors who don't run the CLI: the risk, quality
+gate, findings, blast-radius graph, order of execution, affected Agentforce actions and tests to
+run, or an evidence pack with its digest checked. Drop in the evidence artifact zip from a GitHub
+Actions run as it is. Files are read in the browser and never uploaded. It's a static site
+([source](web/README.md)), so you can also host your own copy, with ready-made settings for Vercel and Netlify.
 
 ### With org context (beta)
 

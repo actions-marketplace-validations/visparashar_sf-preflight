@@ -1,0 +1,39 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* The viewer's colours and type for the VS Code graph renderer, through the variables it reads. */
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+
+body {
+  --vscode-editor-background: #0e1216;
+  --vscode-editor-foreground: #e6e9ed;
+  --vscode-descriptionForeground: #9aa4b0;
+  --vscode-focusBorder: #52e0a1;
+  --vscode-font-family: "IBM Plex Sans", system-ui, sans-serif;
+  --vscode-editor-font-family: "JetBrains Mono", ui-monospace, monospace;
+  --vscode-button-secondaryForeground: #e6e9ed;
+  --vscode-button-secondaryBackground: #12161b;
+  --vscode-button-secondaryHoverBackground: #232a33;
+  --vscode-editorHoverWidget-background: #12161b;
+  --vscode-editorHoverWidget-foreground: #e6e9ed;
+  --vscode-editorHoverWidget-border: #2f3945;
+}
+
+body.vscode-light {
+  --vscode-editor-background: #ffffff;
+  --vscode-editor-foreground: #14181d;
+  --vscode-descriptionForeground: #5b6672;
+  --vscode-focusBorder: #0e8a5c;
+  --vscode-button-secondaryForeground: #14181d;
+  --vscode-button-secondaryBackground: #ffffff;
+  --vscode-button-secondaryHoverBackground: #eef1f4;
+  --vscode-editorHoverWidget-background: #ffffff;
+  --vscode-editorHoverWidget-foreground: #14181d;
+  --vscode-editorHoverWidget-border: #d9dee5;
+}
+
+/* The viewer heads the section itself and explains the controls above the frame. */
+header h1,
+.hint {
+  display: none;
+}

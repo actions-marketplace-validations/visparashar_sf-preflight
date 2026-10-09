@@ -15,6 +15,17 @@ updates:
     commit-message:
       prefix: "chore(deps)"
 
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      web:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

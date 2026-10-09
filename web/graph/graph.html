@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="{{graph.css}}">
+<link rel="stylesheet" href="{{theme.css}}">
+<title>Blast radius graph</title>
+</head>
+<body>
+<!-- The VS Code extension's graph panel (vscode/src/graph-panel.ts), as a page of the viewer. -->
+<header>
+  <h1 id="title">Blast radius</h1>
+  <span id="risk" class="risk" hidden></span>
+  <span id="summary" class="summary"></span>
+  <span id="omitted" class="summary" hidden></span>
+  <span class="spacer"></span>
+  <button id="fit" type="button" title="Fit the graph to the frame (or double-click the background)">Fit</button>
+  <button id="report" type="button" hidden>Report</button>
+</header>
+<!-- biome-ignore lint/a11y/useSemanticElements: the graph is a group of interactive nodes, as in the VS Code panel -->
+<svg id="graph" role="group" aria-label="Blast radius graph">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z"></path>
+    </marker>
+  </defs>
+  <g id="viewport"></g>
+</svg>
+<div id="empty" class="empty" hidden></div>
+<div id="tip" class="tip" hidden></div>
+<div class="hint">Drag to pan, scroll to zoom. Click a node with findings to list them. Click a legend item to highlight it.</div>
+<!-- biome-ignore lint/a11y/useSemanticElements: legend toggles, as in the VS Code panel -->
+<div class="legend" role="group" aria-label="Legend: click a kind to highlight it">
+  <button type="button" class="changed" data-filter="changed">changed</button><button type="button" data-filter="impacted">impacted</button><button type="button" class="medium" data-filter="medium">collision</button><button type="button" class="high" data-filter="high">high risk</button><button type="button" class="recursion" data-filter="recursion">recursion</button>
+</div>
+<script src="{{host.js}}"></script>
+<script src="{{graph.js}}"></script>
+</body>
+</html>

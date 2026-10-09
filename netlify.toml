@@ -1,0 +1,23 @@
+# Netlify: the report viewer in web/ (see web/README.md). The viewer bundles parts of the library
+# from ../src and makes its samples with the CLI, so the root project is installed and built first.
+[build]
+  base = "web"
+  command = "npm ci --prefix .. && npm run build --prefix .. && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    Content-Security-Policy = "frame-ancestors 'self'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

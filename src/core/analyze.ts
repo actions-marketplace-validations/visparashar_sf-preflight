@@ -24,6 +24,7 @@ import {
   targetRef,
 } from "./agentImpact.js";
 import { buildCoverage } from "./coverage.js";
+import { fieldUsers, isNamespaced, missingFieldFindings, parseFieldUser } from "./fieldUsers.js";
 import {
   callersOfClass,
   callersOfFlow,
@@ -35,6 +36,14 @@ import {
   lightningEmbedding,
   writersOf,
 } from "./graph.js";
+import {
+  INTEGRATION_TYPES,
+  integrationFindings,
+  outboundMessageFindings,
+  outboundMessagesOf,
+  parseIntegration,
+  parseOutboundMessages,
+} from "./integrations.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -206,7 +215,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     for (const f of lc.fields) {
       const [object, field] = f.split(".") as [string, string];
       const def = model.objects.get(key(object));
-      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+      if (def && key(field).endsWith("__c") && !isNamespaced(field) && !def.fields.has(key(field)))
+        missing.push(`field ${f}`);
     }
     for (const a of lc.apex) if (!model.classes.has(key(a.cls))) missing.push(`Apex class ${a.cls}`);
     if (missing.length) {
@@ -241,7 +251,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     for (const f of fieldNames(cur)) {
       const [obj, field] = f.split(".") as [string, string];
       const def = model.objects.get(key(obj));
-      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+      if (def && key(field).endsWith("__c") && !isNamespaced(field) && !def.fields.has(key(field)))
+        missing.push(`field ${f}`);
     }
     if (!layout) {
       for (const c of (cur as FlexiPageDef).components) {
@@ -566,6 +577,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
               ),
             );
         }
+        if (comp.type === "ObjectChild" && !deleted) findings.push(...missingFieldFindings(model, comp));
         if (comp.type === "ObjectChild" && comp.file.endsWith(".recordType-meta.xml")) {
           findings.push(...recordTypeFindings(model, comp, deleted, opts.readBase?.(comp.file)));
         }
@@ -593,15 +605,25 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         break;
       }
 
-      case "WorkflowRule":
+      case "WorkflowRule": {
+        const base = opts.readBase?.(comp.file);
+        if (!deleted)
+          findings.push(
+            ...outboundMessageFindings(
+              outboundMessagesOf(model).filter((m) => m.file === comp.file),
+              base !== undefined ? parseOutboundMessages(base, comp.name, comp.file) : undefined,
+            ),
+          );
         addFinding({
           rule: "legacy-workflow",
           severity: "info",
           title: `Legacy workflow changed: ${comp.name}`,
-          detail: "Workflow rules are not analyzed yet; consider migrating them to flows.",
+          detail:
+            "Workflow rules are not analyzed yet, apart from their outbound messages; consider migrating them to flows.",
           files: [comp.file],
         });
         break;
+      }
 
       case "Metadata": {
         if (isLightningBundle(comp)) {
@@ -610,6 +632,21 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         }
         if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
           analyzePage(change);
+          break;
+        }
+        // Reports, report types, quick actions, email templates: fields they name that don't exist.
+        if (!deleted && parseFieldUser(comp, readCurrent)) findings.push(...missingFieldFindings(model, comp));
+        if (comp.metadataType && INTEGRATION_TYPES.has(comp.metadataType)) {
+          const base = opts.readBase?.(comp.file);
+          findings.push(
+            ...integrationFindings(
+              model,
+              comp,
+              deleted ? undefined : parseIntegration(comp, readCurrent(comp.file)),
+              // A destructive manifest deletes from the org while the source file can stay.
+              parseIntegration(comp, base ?? (deleted ? readCurrent(comp.file) : undefined)),
+            ),
+          );
           break;
         }
         if (comp.metadataType && SAVE_RULE_TYPES.has(comp.metadataType)) {
@@ -1067,6 +1104,12 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
     }
   }
   for (const r of rulesReadingField(model, object, field)) refs.push({ from: saveRuleRef(r), to: target });
+  for (const u of fieldUsers(model, object, field))
+    refs.push({ from: { kind: u.kind, name: u.name, file: u.file }, to: target });
+  for (const m of outboundMessagesOf(model)) {
+    if (key(m.object) === key(object) && m.fields.some((f) => key(f) === fk))
+      refs.push({ from: { kind: "OutboundMessage", name: m.name, file: m.file }, to: target });
+  }
   for (const pc of model.permissionContainers.values()) {
     if (pc.fields.some((g) => key(g.field) === tk))
       refs.push({ from: { kind: pc.kind, name: pc.name, file: pc.file }, to: target });
