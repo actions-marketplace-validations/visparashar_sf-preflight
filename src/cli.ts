@@ -8,14 +8,17 @@ import {
   agentExplanationToMarkdown,
   agentListToMarkdown,
   agentTestsToMarkdown,
+  alertFromResult,
   allAgentActions,
   analyzeChange,
   applyRollback,
   assertSafeOrg,
   assertSafeRef,
+  assertSafeWebhook,
   buildEvidence,
   changeAt,
   changeFingerprint,
+  detectTarget,
   evaluateGate,
   evidenceToMarkdown,
   explainAgent,
@@ -25,16 +28,22 @@ import {
   incidentsToMarkdown,
   investigateIncidents,
   loadProject,
+  type NotifyLevel,
+  type NotifyTarget,
   noAgentTests,
   parseAgentTestsResult,
   parseApprovals,
   parseSince,
+  payloadFor,
   planRollback,
+  readResult,
   rollbackToMarkdown,
   runAgentTests,
   runTests,
   saveProcedure,
   selectAgentTests,
+  sendWebhook,
+  shouldNotify,
   sourceRoots,
   testsToMarkdown,
   toJunit,
@@ -650,6 +659,70 @@ program
       console.log(`  ${s.order}. ${s.phaseLabel.padEnd(18)} ${s.automation.name}${writes}${notes}`);
     }
   });
+
+program
+  .command("notify")
+  .description("Send an alert about a risky change to Slack, Microsoft Teams or another webhook")
+  .requiredOption("--result <file>", "JSON report from `preflight analyze --json-out`")
+  .addOption(
+    new Option("--on <level>", "send when risk is at least this level, when the gate fails, or always")
+      .choices(["low", "medium", "high", "gate-fail", "always"])
+      .default("high"),
+  )
+  .addOption(
+    new Option("--target <target>", "message format (default: from the webhook's host name)")
+      .choices(["auto", "slack", "teams", "generic"])
+      .default("auto"),
+  )
+  .option("--link <url>", "https link to show in the alert, e.g. the pull request")
+  .option("--link-label <text>", "text of the link button", "Open")
+  .option("--source <text>", 'where the change is from, e.g. "owner/repo PR #12"')
+  .option("--title <text>", "alert title (default: from the risk level)")
+  .option("--dry-run", "print the message instead of sending it")
+  .option("--strict", "exit with code 1 when the alert cannot be sent (default: warn and exit 0)")
+  .action(
+    async (opts: {
+      result: string;
+      on: NotifyLevel;
+      target: NotifyTarget | "auto";
+      link?: string;
+      linkLabel: string;
+      source?: string;
+      title?: string;
+      dryRun?: boolean;
+      strict?: boolean;
+    }) => {
+      const result = readResult(readJson(opts.result, "report"));
+      if (!shouldNotify(result, opts.on)) {
+        console.error(`No alert: risk is ${result.summary.risk}, below "${opts.on}".`);
+        return;
+      }
+      // The URL is a secret: only from the environment, so it never appears in a command line or a policy file.
+      const raw = process.env.PREFLIGHT_WEBHOOK_URL;
+      if (!raw && !opts.dryRun) {
+        throw new Error("Set PREFLIGHT_WEBHOOK_URL to the webhook URL (from a secret), or use --dry-run.");
+      }
+      const url = raw ? assertSafeWebhook(raw) : undefined;
+      const target: NotifyTarget = opts.target === "auto" ? (url ? detectTarget(url) : "generic") : opts.target;
+      const alert = alertFromResult(result, {
+        link: opts.link ? { label: opts.linkLabel, url: opts.link } : undefined,
+        source: opts.source,
+        title: opts.title,
+      });
+      const payload = payloadFor(target, alert);
+      if (opts.dryRun || !url) {
+        console.log(JSON.stringify({ target, host: url?.hostname, payload }, null, 2));
+        return;
+      }
+      const sent = await sendWebhook(url, payload);
+      if (sent.ok) {
+        console.error(`Alert sent to ${url.hostname} (${target}).`);
+      } else {
+        console.error(`Could not send the alert: ${sent.error}.`);
+        if (opts.strict) process.exitCode = 1;
+      }
+    },
+  );
 
 program
   .command("skill")

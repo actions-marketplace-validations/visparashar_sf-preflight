@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `preflight notify` sends a short risk alert to Slack, Microsoft Teams or any JSON webhook from a saved
+  report. The GitHub Action gets `notify-webhook`, `notify-on` and `notify-on-update` inputs. The message
+  leaves out PR titles and branch names, cleans repository text, accepts only public `https` URLs, and a
+  failed send never fails the check.
+
 ## [0.8.0] - 2026-10-09
 
 ### Added

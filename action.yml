@@ -51,6 +51,18 @@ inputs:
   node-version:
     description: "Node.js version to set up (22.13 or newer). Set to an empty string to use the runner's Node."
     default: "22"
+  notify-webhook:
+    description: "Slack, Microsoft Teams or generic webhook URL (pass a secret). Sends a short alert when risk reaches notify-on."
+    required: false
+    default: ""
+  notify-on:
+    description: "Alert threshold: low, medium, high, gate-fail or always"
+    required: false
+    default: "high"
+  notify-on-update:
+    description: "Also alert on every push to an open pull request. When false, alerts fire when a pull request is opened, reopened or made ready for review, and on pushes."
+    required: false
+    default: "false"
   github-token:
     description: "Token used to post the PR comment."
     default: ${{ github.token }}
@@ -349,6 +361,36 @@ runs:
           } else {
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
           }
+
+    - name: Send risk alert
+      if: >-
+        inputs.notify-webhook != '' && (
+        !github.event.pull_request ||
+        inputs.notify-on-update == 'true' ||
+        github.event.action == 'opened' ||
+        github.event.action == 'reopened' ||
+        github.event.action == 'ready_for_review')
+      # An alert must never fail the check.
+      continue-on-error: true
+      shell: bash
+      env:
+        PREFLIGHT_WEBHOOK_URL: ${{ inputs.notify-webhook }}
+        RUN: ${{ steps.cmd.outputs.run }}
+        REPORT: ${{ steps.analyze.outputs.json }}
+        ON: ${{ inputs.notify-on }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        SERVER: ${{ github.server_url }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        # Only ids and numbers go in the message; never the PR title or branch name.
+        if [ -n "$PR_NUMBER" ]; then
+          LINK="$SERVER/$REPO/pull/$PR_NUMBER"; SOURCE="$REPO PR #$PR_NUMBER"
+        else
+          LINK="$SERVER/$REPO/actions/runs/$RUN_ID"; SOURCE="$REPO"
+        fi
+        $RUN notify --result "$REPORT" --on "$ON" --link "$LINK" --source "$SOURCE"
 
     - name: Upload SARIF to code scanning
       if: inputs.sarif == 'true'
