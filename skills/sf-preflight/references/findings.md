@@ -28,6 +28,11 @@ don't disable a rule or edit `.preflight.json` to make a finding go away unless 
 | `validation-rule-removed`, `validation-rule-inactive`, `flow-inactive`, `agent-metadata-changed`, `legacy-workflow` | Info | Context worth mentioning in your summary. | Usually nothing to fix. |
 | `field-used-by-lightning`, `apex-called-from-lightning` | Low | Lightning Web Components or Aura components use the changed field, or call the changed Apex class from the browser. | Re-test those components and the pages they sit on. |
 | `lightning-missing-reference` | Medium | A changed Lightning component imports a field or Apex class that is not in the project. | Add it to the project, or make sure the target org already has it. |
+| `label-removed-still-used` | High | A custom label was removed but Apex, Visualforce, Lightning or flows still use it. | Restore the label or update what uses it. |
+| `cmdt-record-still-referenced` | Medium | A deleted custom metadata record is still named in code that reads its type. | Update the code or keep the record. |
+| `cmdt-record-changed` | Info | A custom metadata record changed; files that read its type are listed. | Check the readers behave with the new values. |
+| `visualforce-missing-reference` | Medium | A Visualforce page or component names an Apex controller or extension the project lacks. | Deploy the classes together or fix the name. |
+| `apex-used-by-page` | Info (High if deleted) | An Apex class is the controller or extension of Visualforce pages. | Check the pages; a deleted class breaks them. |
 | `picklist-value-removed` | Medium | Picklist values were removed or deactivated while record types, formulas, flows or Apex still use them (Low if nothing does). | Remove them from the record types and replace them in the code, or keep them active. |
 | `record-type-values-removed`, `record-type-deactivated` | Low | A record type no longer offers picklist values, or was deactivated. | Check who creates or edits records of that type. |
 | `record-type-still-referenced` | Medium | A deleted record type is still named in Apex, flows or formulas. | Update what names it; the comparison will quietly stop matching. |

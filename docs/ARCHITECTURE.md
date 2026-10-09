@@ -158,3 +158,13 @@ Apex, flows, validation rules, formulas and workflow, but only in files that als
 so a common word like `Open` does not match everything. Record types get the same base
 comparison, and a deleted one is searched for by developer name in files that mention
 `RecordType`. The text scan is a heuristic and says "written as text", never "used".
+
+### Labels, custom metadata and Visualforce
+
+`usage.ts` reads project files on demand (once each, 1 MB cap) and answers by text search; it adds
+no model maps. A removed label (base file via `opts.readBase`) is searched as `Label.X`,
+`$Label.X`, `$Label.c.X` and `@salesforce/label/c.X`. A custom metadata record `Type.Record` is
+tied to files that mention `Type__mdt`; a deleted record is only a finding if one of them also
+quotes its name. Visualforce pages and components are parsed for `controller=` and `extensions=`
+(`standardController` and namespaced classes are ignored), which feeds `apex-used-by-page` for
+changed or deleted classes and `visualforce-missing-reference` for changed pages.

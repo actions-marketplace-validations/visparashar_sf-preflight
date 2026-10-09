@@ -43,6 +43,7 @@ import type {
   Severity,
   SuggestedTest,
 } from "./types.js";
+import { customMetadataFindings, labelFindings, pagesUsingClass, visualforceFindings } from "./usage.js";
 import { key, uniq, uniqBy } from "./util.js";
 
 export interface AnalyzeOptions {
@@ -410,6 +411,16 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         const cls = model.classes.get(key(comp.name));
         if (deleted || !cls) {
           const callers = callersOfClass(model, comp.name);
+          const vfUsers = pagesUsingClass(model, comp.name);
+          if (vfUsers.length) {
+            addFinding({
+              rule: "apex-used-by-page",
+              severity: "high",
+              title: `Deleted class ${comp.name} is still the controller of ${vfUsers.length} Visualforce page(s)`,
+              detail: `${vfUsers.map((p) => p.name).join(", ")} name it as controller or extension and will not save.`,
+              files: uniq([comp.file, ...vfUsers.map((p) => p.file)]),
+            });
+          }
           if (callers.length) {
             addFinding({
               rule: "deleted-still-referenced",
@@ -422,6 +433,16 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           break;
         }
         if (cls.isTest) break;
+        const vfPages = pagesUsingClass(model, cls.name);
+        if (vfPages.length) {
+          addFinding({
+            rule: "apex-used-by-page",
+            severity: "info",
+            title: `${cls.name} is the controller or extension of ${vfPages.length} Visualforce page(s)`,
+            detail: `${vfPages.map((p) => p.name).join(", ")} render through it, so changed properties or actions reach users directly.`,
+            files: uniq([comp.file, ...vfPages.map((p) => p.file)]),
+          });
+        }
         const lightningCallers = lightningCallingClass(model, cls.name);
         if (lightningCallers.length) {
           addFinding({
@@ -519,6 +540,18 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
         }
         if (comp.metadataType === "Layout" || comp.metadataType === "FlexiPage") {
           analyzePage(change);
+          break;
+        }
+        if (comp.metadataType === "CustomLabels") {
+          findings.push(...labelFindings(model, comp, deleted, opts.readBase?.(comp.file)));
+          break;
+        }
+        if (comp.metadataType === "CustomMetadata") {
+          findings.push(...customMetadataFindings(model, comp, deleted));
+          break;
+        }
+        if (comp.metadataType === "ApexPage" || comp.metadataType === "ApexComponent") {
+          if (!deleted) findings.push(...visualforceFindings(model, comp));
           break;
         }
         // Recognized by name only: say so, and point at the files that mention it.
