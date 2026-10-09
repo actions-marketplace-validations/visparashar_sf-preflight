@@ -23,7 +23,7 @@ It is open source, runs offline on your source code, and needs no org credential
 > action verification, the quality gate and evidence packs work today; org context is in beta.
 > See the [roadmap](docs/ROADMAP.md). Feedback and contributions are very welcome.
 
-**Website:** <https://visparashar.github.io/sf-preflight/>
+**Website:** <https://visparashar.github.io/sf-preflight/> · **Demo videos:** <https://visparashar.github.io/sf-preflight/demos.html>
 
 <p align="center">
   <img alt="Demo: preflight analyze on the sample org finds two automation cycles, an affected agent action and validation-rule collisions" src="https://raw.githubusercontent.com/visparashar/sf-preflight/main/docs/assets/preflight-demo.gif">
