@@ -28,14 +28,23 @@ if (!project) {
 }
 const core = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist", "core", "index.js");
 
+// Only Apex in the project's package directories counts as source.
+let roots = ["."];
+try {
+  const pj = JSON.parse(readFileSync(path.join(project, "sfdx-project.json"), "utf8"));
+  roots = (pj.packageDirectories ?? []).map((d) => d.path);
+} catch {
+  // no sfdx-project.json: use the whole folder
+}
 const classes = [];
-(function walk(dir) {
+const walk = (dir) => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) {
       if (!["node_modules", ".git", ".sfdx", "dist"].includes(e.name)) walk(path.join(dir, e.name));
     } else if (e.name.endsWith(".cls")) classes.push(path.join(dir, e.name));
   }
-})(project);
+};
+for (const r of roots) walk(path.join(project, r));
 if (!classes.length) {
   console.error(`No Apex classes found under ${project}.`);
   process.exit(1);
@@ -67,12 +76,30 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "preflight-bench-"));
 const original = readFileSync(target, "utf8");
 const rows = [];
 
+// Put the edited file back however the script ends (Ctrl+C, a timeout's SIGTERM, an error).
+const cleanup = () => {
+  try {
+    writeFileSync(target, original);
+    rmSync(tmp, { recursive: true, force: true });
+  } catch {
+    // best effort
+  }
+};
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(sig, () => {
+    cleanup();
+    process.exit(130);
+  });
+}
+
 function scenario(label, env, prepare) {
   const samples = [];
   for (let i = 0; i < runs; i++) {
     const dir = path.join(tmp, `${label}-${i}`.replace(/\W+/g, "-"));
     prepare?.(dir);
+    const t0 = Date.now();
     samples.push(measure(dir, env));
+    console.error(`  ${label} (${i + 1}/${runs}): ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   }
   rows.push({
     label,
@@ -96,8 +123,7 @@ try {
   writeFileSync(target, `${original}\n// preflight-bench edit\n`);
   scenario("Repeat run after editing one class", {}, copyWarm);
 } finally {
-  writeFileSync(target, original);
-  rmSync(tmp, { recursive: true, force: true });
+  cleanup();
 }
 
 const info = {

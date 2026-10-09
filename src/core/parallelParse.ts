@@ -5,10 +5,19 @@ import { fileURLToPath } from "node:url";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import type { ParseJob, ParseOutcome, ParseWorkerData } from "./parseWorker.js";
 
+// Slots of the shared signal array (same values as in parseWorker.ts, which cannot be imported
+// here at run time because importing it would start parsing).
+const DONE = 0;
+const STARTED = 1;
+const PROGRESS = 2;
+
 /** Below this many uncached files, starting workers costs more than it saves. */
 export const PARALLEL_MIN_FILES = 150;
 const MAX_JOBS = 8;
-const DEADLINE_MS = 3 * 60_000;
+/** Workers that have not started after this long are given up on. */
+const START_MS = 20_000;
+/** Give up when no file has finished parsing for this long. */
+const STALL_MS = 60_000;
 
 /** Number of parse threads: PREFLIGHT_JOBS, else the CPU count (at most 8). 1 means no threads. */
 export function parseJobs(): number {
@@ -54,7 +63,7 @@ export function parseInParallel(
     load[i] = (load[i] ?? 0) + j.source.length + 1;
   }
 
-  const signal = new Int32Array(new SharedArrayBuffer(4));
+  const signal = new Int32Array(new SharedArrayBuffer(12));
   const objects = [...projectObjects];
   const workers: Worker[] = [];
   const channels: MessageChannel[] = [];
@@ -63,13 +72,29 @@ export function parseInParallel(
       const ch = new MessageChannel();
       channels.push(ch);
       const data: ParseWorkerData = { port: ch.port2, signal, jobs: share, objects };
-      const w = new Worker(script, { workerData: data, transferList: [ch.port2] });
+      // execArgv: the parent's flags (-e, --input-type, -r, ...) may be refused in a worker.
+      const w = new Worker(script, { workerData: data, transferList: [ch.port2], execArgv: [] });
       w.on("error", () => {}); // a crashed worker just leaves its files for the caller
       workers.push(w);
     }
-    const deadline = Date.now() + DEADLINE_MS;
-    for (let done = Atomics.load(signal, 0); done < n && Date.now() < deadline; done = Atomics.load(signal, 0)) {
-      Atomics.wait(signal, 0, done, 250);
+    // A worker that fails to start (or crashes) reports through events, which this thread cannot
+    // handle while it sleeps, so watch the shared counters instead of waiting for a message.
+    const startBy = Date.now() + START_MS;
+    for (let started = Atomics.load(signal, STARTED); started < n; started = Atomics.load(signal, STARTED)) {
+      if (Date.now() > startBy) return out; // the finally block stops the workers
+      Atomics.wait(signal, STARTED, started, 200);
+    }
+    let lastProgress = Atomics.load(signal, PROGRESS);
+    let lastChange = Date.now();
+    for (let done = Atomics.load(signal, DONE); done < n; done = Atomics.load(signal, DONE)) {
+      Atomics.wait(signal, DONE, done, 250);
+      const progress = Atomics.load(signal, PROGRESS);
+      if (progress !== lastProgress) {
+        lastProgress = progress;
+        lastChange = Date.now();
+      } else if (Date.now() - lastChange > STALL_MS) {
+        return out; // stalled: the caller parses the rest itself
+      }
     }
     for (const ch of channels) {
       for (let msg = receiveMessageOnPort(ch.port1); msg; msg = receiveMessageOnPort(ch.port1)) {
