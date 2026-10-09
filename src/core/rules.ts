@@ -113,6 +113,20 @@ export const RULES: RuleInfo[] = [
     help: "The deployment will fail or the references will break at runtime. Remove or update the references in the same change.",
   },
   {
+    id: "deleted-still-named",
+    name: "DeletedStillNamed",
+    defaultSeverity: "medium",
+    summary: "A deleted component of any metadata type is still named by other files in the project.",
+    help: "Found by name, not by parsing, so check each listed file. Where it is a real reference, a deployment that includes the file fails, or the reference breaks once the component is gone from the org. Update or remove the references in the same change.",
+  },
+  {
+    id: "renamed-still-named",
+    name: "RenamedStillNamed",
+    defaultSeverity: "medium",
+    summary: "A renamed component's old name is still used by other files in the project.",
+    help: "Renaming a metadata file creates a new component and leaves the old one in the org until it is deleted, so the change can work in an existing org and fail in a new one. Update the references in the same change.",
+  },
+  {
     id: "validation-rule-removed",
     name: "ValidationRuleRemoved",
     defaultSeverity: "info",

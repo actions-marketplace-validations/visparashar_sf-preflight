@@ -4,13 +4,14 @@ import path from "node:path";
 import { analyze } from "./analyze.js";
 import { filesFromArgs, gitChangedFiles, gitRoot, gitShow, toChanges } from "./changes.js";
 import { applyConfig, loadPolicy, type PreflightConfig } from "./config.js";
+import { destructiveChanges } from "./destructive.js";
 import { enrichWithOrg } from "./org/enrich.js";
 import type { SfRunner } from "./org/sf.js";
 import { loadProject, sourceRoots } from "./project.js";
 import { gitProvenance } from "./provenance.js";
 import { generateTests, type TestGenOptions, type TestGenResult } from "./testgen/generate.js";
 import type { AnalysisResult, ChangeType, OrgModel } from "./types.js";
-import { toPosix } from "./util.js";
+import { toPosix, uniq } from "./util.js";
 
 export {
   type AgentExplanation,
@@ -161,17 +162,29 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
   // Only package directories are Salesforce source: changes elsewhere in the project (generated
   // tests in preflight-tests/, scripts, docs) aren't deployed, so a git diff leaves them out.
   const outside: string[] = [];
+  const outsideFiles: typeof changedFiles = [];
   if (!opts.files?.length) {
     const roots = sourceRoots(projectDir).map((r) => path.posix.normalize(r).replace(/\/$/, ""));
     if (!roots.includes(".")) {
       changedFiles = changedFiles.filter((f) => {
         const inside = roots.some((r) => f.file === r || f.file.startsWith(`${r}/`));
-        if (!inside) outside.push(f.file);
+        if (!inside) {
+          outside.push(f.file);
+          outsideFiles.push(f);
+        }
         return inside;
       });
     }
   }
-  const { changes, ignored: notMetadata } = toChanges(changedFiles);
+  // Components deleted through a destructive manifest, which can sit outside the package directories.
+  const destructive = destructiveChanges(projectDir, [...changedFiles, ...outsideFiles]);
+  const parsed = toChanges(changedFiles);
+  const notMetadata = parsed.ignored;
+  const seen = new Set(parsed.changes.map((c) => `${c.component.type}|${c.component.name.toLowerCase()}`));
+  const changes = [
+    ...parsed.changes,
+    ...destructive.changes.filter((c) => !seen.has(`${c.component.type}|${c.component.name.toLowerCase()}`)),
+  ];
   const ignored = [...notMetadata, ...outside];
   const root = gitRoot(projectDir);
   const result = analyze({
@@ -184,6 +197,13 @@ export function analyzeChange(opts: RunOptions): { model: OrgModel; result: Anal
     readBase: opts.base ? (file) => gitShow(projectDir, opts.base!, file) : undefined,
     provenance: opts.base && !opts.files?.length ? gitProvenance(projectDir, opts.base, opts.head) : undefined,
   });
+  if (destructive.changes.length) {
+    // Point at the manifest that deletes each component, not the source path it would have.
+    const real = (f: string) => destructive.manifestOf.get(f) ?? f;
+    for (const f of result.findings) if (f.files) f.files = uniq(f.files.map(real));
+    for (const c of result.changes) c.component = { ...c.component, file: real(c.component.file) };
+  }
+  if (destructive.warnings.length) result.warnings = [...result.warnings, ...destructive.warnings];
   if (root) result.projectPathInRepo = toPosix(path.relative(root, projectDir));
   if (opts.org) enrichWithOrg(model, result, { org: opts.org, runner: opts.sfRunner });
   if (opts.config !== false) {

@@ -21,6 +21,8 @@ that is only inside the blast radius).
 | [`permission-delete`](#permission-delete) | Medium | A permission set or profile grants delete on an object. |
 | [`permission-field-edit`](#permission-field-edit) | Low | A permission set or profile newly grants edit access to fields. |
 | [`deleted-still-referenced`](#deleted-still-referenced) | High | A deleted field, flow or class is still referenced elsewhere. |
+| [`deleted-still-named`](#deleted-still-named) | Medium | A deleted component of any metadata type is still named by other files in the project. |
+| [`renamed-still-named`](#renamed-still-named) | Medium | A renamed component's old name is still used by other files in the project. |
 | [`validation-rule-removed`](#validation-rule-removed) | Info | A validation rule was removed. |
 | [`validation-rule-inactive`](#validation-rule-inactive) | Info | A changed validation rule is inactive. |
 | [`flow-inactive`](#flow-inactive) | Info | A changed flow is not active. |
@@ -154,6 +156,22 @@ Review that each newly editable field is needed by the users holding the permiss
 A deleted field, flow or class is still referenced elsewhere.
 
 The deployment will fail or the references will break at runtime. Remove or update the references in the same change.
+
+## deleted-still-named
+
+**DeletedStillNamed** · default severity: Medium
+
+A deleted component of any metadata type is still named by other files in the project.
+
+Found by name, not by parsing, so check each listed file. Where it is a real reference, a deployment that includes the file fails, or the reference breaks once the component is gone from the org. Update or remove the references in the same change.
+
+## renamed-still-named
+
+**RenamedStillNamed** · default severity: Medium
+
+A renamed component's old name is still used by other files in the project.
+
+Renaming a metadata file creates a new component and leaves the old one in the org until it is deleted, so the change can work in an existing org and fail in a new one. Update the references in the same change.
 
 ## validation-rule-removed
 

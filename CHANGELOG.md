@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A reference check for every metadata type. When a component is deleted, the files that still name it are
+  flagged (`deleted-still-named`), for the types without a precise check of their own: static resources,
+  named credentials, custom permissions, tabs, apps, value sets, quick actions, email templates, layouts,
+  custom objects and the rest. Matching uses each type's own reference syntax (`$Resource.X`,
+  `callout:X`, `$Permission.X`, `<valueSetName>`, ...) and, for distinctive names, XML values and quoted
+  strings, so common words don't match.
+- Renames: when a component of any type is renamed, files that still use the old name are flagged
+  (`renamed-still-named`). The old component stays in the org, so this works in one org and fails in a new one.
+- Destructive manifests: components listed in a changed `destructiveChanges.xml` (or `...Pre`/`...Post`) are
+  checked like deleted files, including fields, classes and flows, even when the manifest sits outside the
+  package directories.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed
