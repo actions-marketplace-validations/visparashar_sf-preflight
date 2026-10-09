@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.1]
+
+- Same as 0.9.0, which was never published.
+
 ## [0.9.0]
 
 - Adds `sf preflight monitor`.
