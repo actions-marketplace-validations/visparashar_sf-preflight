@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ApexClassDef, ApexTriggerDef, AutomationRef, FlowDef, LightningDef, OrgModel, Write } from "./types.js";
+
+import { customComponent } from "./parsers/pages.js";
+import type {
+  ApexClassDef,
+  ApexTriggerDef,
+  AutomationRef,
+  FlexiPageDef,
+  FlowDef,
+  LightningDef,
+  OrgModel,
+  Write,
+} from "./types.js";
 import { key, uniqBy } from "./util.js";
 
 const MAX_DEPTH = 4;
@@ -109,6 +120,17 @@ export function lightningCallingClass(model: OrgModel, className: string): Light
 export function lightningEmbedding(model: OrgModel, name: string): LightningDef[] {
   const k = key(name);
   return [...model.lightning.values()].filter((lc) => lc.children.some((c) => key(c) === k));
+}
+
+/** Lightning pages that place the custom component `name` (c:name, or a bare name for the page's own namespace). */
+export function flexipagesPlacing(model: OrgModel, name: string): FlexiPageDef[] {
+  const k = key(name);
+  return [...model.flexipages.values()].filter((p) =>
+    p.components.some((c) => {
+      const custom = customComponent(c);
+      return custom !== undefined && key(custom) === k;
+    }),
+  );
 }
 
 /** Flows that call `flowName` as a subflow. */

@@ -36,6 +36,10 @@ that is only inside the blast radius).
 | [`field-used-by-lightning`](#field-used-by-lightning) | Low | A changed field is used by Lightning Web Components or Aura components. |
 | [`apex-called-from-lightning`](#apex-called-from-lightning) | Low | A changed Apex class is called from Lightning components. |
 | [`lightning-missing-reference`](#lightning-missing-reference) | Medium | A changed Lightning component uses a field or Apex class that is not in the project. |
+| [`field-on-page`](#field-on-page) | Info | A changed field is on page layouts or Lightning pages. |
+| [`lightning-on-page`](#lightning-on-page) | Info | A changed Lightning component is placed on Lightning pages. |
+| [`page-missing-reference`](#page-missing-reference) | Medium | A changed layout or Lightning page uses a field or component that is not in the project. |
+| [`page-element-removed`](#page-element-removed) | Low | A changed layout or Lightning page no longer shows fields or components it showed before. |
 | [`metadata-not-analyzed`](#metadata-not-analyzed) | Info | A changed component is of a metadata type that is not analyzed in depth. |
 
 ## recursion-cycle
@@ -261,6 +265,38 @@ Lightning components call Apex from the browser, so a changed signature, result 
 A changed Lightning component uses a field or Apex class that is not in the project.
 
 Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.
+
+## field-on-page
+
+**FieldOnPage** · default severity: Info
+
+A changed field is on page layouts or Lightning pages.
+
+A changed label, type or access shows up on those pages. Open one to check it still reads well.
+
+## lightning-on-page
+
+**LightningOnPage** · default severity: Info
+
+A changed Lightning component is placed on Lightning pages.
+
+Open the pages to check the component renders and behaves as intended where it is placed.
+
+## page-missing-reference
+
+**PageMissingReference** · default severity: Medium
+
+A changed layout or Lightning page uses a field or component that is not in the project.
+
+A page that names a missing field or component fails the deployment. Add it to the project, or make sure the target org already has it.
+
+## page-element-removed
+
+**PageElementRemoved** · default severity: Low
+
+A changed layout or Lightning page no longer shows fields or components it showed before.
+
+Users of the page lose them. Confirm that is intended, and that nothing in their process depends on seeing them.
 
 ## metadata-not-analyzed
 

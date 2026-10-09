@@ -126,6 +126,15 @@ A changed component adds the writes of the Apex it calls to the cascade. Not fol
 placed on pages (flexipages are Tier 1B), wire adapters that name fields only in variables, dynamic
 imports, and Aura `{!v.record.Field}` expressions.
 
+### Layouts and Lightning pages
+
+`parsers/pages.ts` reads page layouts (`<field>` tags; the object is the part of the name before the
+first dash) and Lightning pages (`<componentName>`, `{!Record.Field}` in visibility filters, the
+record page's `sobjectType`). A bare component name on a page is a component of the page's own
+namespace; `c:name` is a custom component; any other prefix is standard or managed and is not
+checked. Not followed: fields on related lists and compact layouts, quick actions and buttons on
+layouts, dynamic forms field sections, and Experience Cloud pages.
+
 ## Known limitations
 
 - Apex type resolution covers locals, parameters, for-each variables, class fields and

@@ -57,16 +57,10 @@ describe("coverage", () => {
     dir = mkdtempSync(path.join(tmpdir(), "preflight-cov-"));
     writeFileSync(path.join(dir, "sfdx-project.json"), JSON.stringify({ packageDirectories: [{ path: "force-app" }] }));
     write("classes/Util.cls", "public class Util { public static void run() {} }");
-    write("flexipages/DealHome.flexipage-meta.xml", "<FlexiPage/>");
-    write(
-      "applications/Sales.app-meta.xml",
-      "<CustomApplication><actionOverrides><content>DealHome</content></actionOverrides></CustomApplication>",
-    );
-    write("layouts/Opportunity-Deal Layout.layout-meta.xml", "<Layout/>");
-    write(
-      "profiles/Admin.profile-meta.xml",
-      "<Profile><layoutAssignments><layout>Opportunity-Deal Layout</layout></layoutAssignments></Profile>",
-    );
+    write("tabs/DealHome.tab-meta.xml", "<CustomTab/>");
+    write("quickActions/Opportunity.NewDeal.quickAction-meta.xml", "<QuickAction/>");
+    write("applications/Sales.app-meta.xml", "<CustomApplication><tabs>DealHome</tabs></CustomApplication>");
+    write("profiles/Admin.profile-meta.xml", "<Profile><quickAction>Opportunity.NewDeal</quickAction></Profile>");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -77,19 +71,19 @@ describe("coverage", () => {
       projectDir: dir,
       files: files(
         "classes/Util.cls",
-        "flexipages/DealHome.flexipage-meta.xml",
-        "layouts/Opportunity-Deal Layout.layout-meta.xml",
+        "tabs/DealHome.tab-meta.xml",
+        "quickActions/Opportunity.NewDeal.quickAction-meta.xml",
       ),
     });
     expect(result.coverage?.deep).toBe(1);
     expect(result.coverage?.basic).toBe(2);
     expect(result.coverage?.basicByType).toEqual([
-      { type: "FlexiPage", count: 1 },
-      { type: "Layout", count: 1 },
+      { type: "CustomTab", count: 1 },
+      { type: "QuickAction", count: 1 },
     ]);
     const bySlot = Object.fromEntries(result.coverage?.mentions.map((m) => [m.component, m.files]) ?? []);
     expect(bySlot.DealHome).toEqual(["force-app/main/default/applications/Sales.app-meta.xml"]);
-    expect(bySlot["Opportunity-Deal Layout"]).toEqual(["force-app/main/default/profiles/Admin.profile-meta.xml"]);
+    expect(bySlot["Opportunity.NewDeal"]).toEqual(["force-app/main/default/profiles/Admin.profile-meta.xml"]);
     expect(result.findings.filter((f) => f.rule === "metadata-not-analyzed")).toHaveLength(2);
     expect(result.findings.find((f) => f.title.includes("DealHome"))?.severity).toBe("info");
   });
@@ -98,11 +92,11 @@ describe("coverage", () => {
     const md = toMarkdown(
       analyzeChange({
         projectDir: dir,
-        files: files("classes/Util.cls", "layouts/Opportunity-Deal Layout.layout-meta.xml"),
+        files: files("classes/Util.cls", "tabs/DealHome.tab-meta.xml"),
       }).result,
     );
     expect(md).toContain("Analyzed in depth: **1** of **2**");
-    expect(md).toContain("Layout ×1");
+    expect(md).toContain("CustomTab ×1");
     expect(md).toContain("### Not analyzed in depth");
     const only = analyzeChange({ projectDir: dir, files: files("classes/Util.cls") }).result;
     expect(only.coverage).toBeUndefined();
@@ -113,7 +107,7 @@ describe("coverage", () => {
     writeFileSync(path.join(dir, ".preflight.json"), JSON.stringify({ rules: { "metadata-not-analyzed": "off" } }));
     const { result } = analyzeChange({
       projectDir: dir,
-      files: files("layouts/Opportunity-Deal Layout.layout-meta.xml"),
+      files: files("tabs/DealHome.tab-meta.xml"),
     });
     expect(result.findings.filter((f) => f.rule === "metadata-not-analyzed")).toHaveLength(0);
     expect(result.coverage?.basic).toBe(1); // the summary still says it

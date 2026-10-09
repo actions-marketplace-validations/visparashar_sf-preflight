@@ -28,6 +28,9 @@ don't disable a rule or edit `.preflight.json` to make a finding go away unless 
 | `validation-rule-removed`, `validation-rule-inactive`, `flow-inactive`, `agent-metadata-changed`, `legacy-workflow` | Info | Context worth mentioning in your summary. | Usually nothing to fix. |
 | `field-used-by-lightning`, `apex-called-from-lightning` | Low | Lightning Web Components or Aura components use the changed field, or call the changed Apex class from the browser. | Re-test those components and the pages they sit on. |
 | `lightning-missing-reference` | Medium | A changed Lightning component imports a field or Apex class that is not in the project. | Add it to the project, or make sure the target org already has it. |
+| `field-on-page`, `lightning-on-page` | Info | A changed field is on layouts or Lightning pages, or a changed component is placed on Lightning pages. | Open one of the pages to check it still reads and behaves well. |
+| `page-missing-reference` | Medium | A changed layout or Lightning page names a field or component that is not in the project. | Add it to the project, or make sure the target org already has it. |
+| `page-element-removed` | Low | A changed layout or Lightning page no longer shows fields or components it did before. | Confirm that is intended. |
 | `metadata-not-analyzed` | Info | A changed component is of a metadata type sf-preflight only lists (layout, Lightning component, flexipage, label, ...). The report shows which project files mention it. | Check those files yourself: the analysis did not cover what this change affects. |
 
 Full explanations: https://github.com/visparashar/sf-preflight/blob/main/docs/RULES.md

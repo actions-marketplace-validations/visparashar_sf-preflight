@@ -313,6 +313,26 @@ export interface AgentTestDef {
   file: string;
 }
 
+/** A page layout: the fields it shows. */
+export interface LayoutDef {
+  name: string;
+  object: string;
+  fields: string[];
+  file: string;
+}
+
+/** A Lightning page: the components placed on it and, for record pages, the fields it names. */
+export interface FlexiPageDef {
+  name: string;
+  /** The object of a record page. */
+  object?: string;
+  /** `componentName` values: `c:myCmp`, `force:detailPanel`, a bare name for the page's own namespace. */
+  components: string[];
+  /** `Object.Field` used in filters or field items. */
+  fields: string[];
+  file: string;
+}
+
 /** A Lightning Web Component or Aura bundle: what it calls, imports and embeds. */
 export interface LightningDef {
   kind: "lwc" | "aura";
@@ -349,6 +369,9 @@ export interface OrgModel {
   agentTests: AgentTestDef[];
   /** Lightning Web Component and Aura bundles, keyed by `lwc:name` / `aura:name`, lower-cased. */
   lightning: Map<string, LightningDef>;
+  /** Page layouts and Lightning pages, keyed by lower-cased name. */
+  layouts: Map<string, LayoutDef>;
+  flexipages: Map<string, FlexiPageDef>;
   /** Every metadata file found, keyed by relative path. */
   components: Map<string, ComponentRef>;
   warnings: string[];
@@ -544,7 +567,9 @@ export interface AgentImpact {
 }
 
 export interface Reference {
-  from: AutomationRef | { kind: "FormulaField" | "PermissionSet" | "Profile"; name: string; file?: string };
+  from:
+    | AutomationRef
+    | { kind: "FormulaField" | "PermissionSet" | "Profile" | "Layout" | "FlexiPage"; name: string; file?: string };
   to: string;
 }
 
