@@ -172,7 +172,15 @@ export function Landing({
           <h2>Analysis report</h2>
           <p>
             Everything one change sets off: findings, the blast radius, order of execution, affected Agentforce actions
-            and the tests to run. Write it as JSON from the root of an SFDX project:
+            and the tests to run. In VS Code, run <b>sf-preflight: Open report in the web viewer</b> from the{" "}
+            <a
+              href="https://marketplace.visualstudio.com/items?itemName=visparashar.sf-preflight-vscode"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              extension
+            </a>
+            . Or write it as JSON from the root of an SFDX project:
           </p>
           <div class="cmd">
             <code>{REPORT_CMD}</code>

@@ -41,8 +41,9 @@ function assertInside(project: string, target: string): void {
 function handle(req: WorkerRequest): unknown {
   switch (req.kind) {
     case "analyze": {
-      const { result } = analyzeChange({ projectDir: req.projectDir, base: req.base, maxDepth: req.depth });
-      return { result, markdown: toMarkdown(result) };
+      const { result, policy } = analyzeChange({ projectDir: req.projectDir, base: req.base, maxDepth: req.depth });
+      // The gate's threshold from .preflight.json, for the dashboard's gate check.
+      return { result, markdown: toMarkdown(result), failOn: policy.gate?.failOn ?? "high" };
     }
     case "tests": {
       const { model, result } = analyzeChange({ projectDir: req.projectDir, base: req.base, maxDepth: req.depth });

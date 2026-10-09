@@ -51,8 +51,14 @@ before(async () => {
   writeFileSync(handler, `${readFileSync(handler, "utf8")}\n// edited\n`);
   vscode.__state.root = repo;
   extension = require(path.join(ext, "dist", "extension.js"));
+  const stored = new Map();
   await extension.activate({
     subscriptions: [],
+    workspaceState: {
+      get: (k) => stored.get(k),
+      update: async (k, v) => void stored.set(k, v),
+      keys: () => [...stored.keys()],
+    },
     extensionPath: ext,
     extensionUri: vscode.Uri.file(ext),
     extension: { packageJSON: { version: "9.9.9" } },
@@ -152,6 +158,79 @@ test("shows the blast-radius graph, and opens only the project's files from it",
   // Showing it again reuses the panel.
   await vscode.__state.commands.get("sfPreflight.showGraph")();
   assert.equal(vscode.__state.panels.at(-1), panel);
+});
+
+test("shows the risk dashboard, and opens only the project's files from it", async () => {
+  // The status bar opens it.
+  assert.equal(vscode.__state.status.command, "sfPreflight.showDashboard");
+  await vscode.__state.commands.get("sfPreflight.showDashboard")();
+  const panel = vscode.__state.panels.at(-1);
+  assert.equal(panel.viewType, "sfPreflight.dashboard");
+  const html = panel.webview.html;
+  const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+  assert.match(csp, /default-src 'none'/);
+  assert.match(csp, /script-src 'nonce-[A-Za-z0-9+/=]+'/);
+  assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/);
+  assert.match(html, /<script nonce="[^"]+" src="vscode-webview:\/\/[^"]+media\/dashboard\.js">/);
+
+  // Nothing is sent until the page is ready; then the model, with project-relative paths only.
+  assert.equal(panel.posted.length, 0);
+  await panel.receive({ type: "ready" });
+  const msg = panel.posted.at(-1);
+  assert.equal(msg.type, "dashboard");
+  assert.equal(msg.model.risk, "high");
+  assert.ok(
+    msg.model.factors.some((f) => f.id === "load" && f.count > 0),
+    "the loop in the trigger handler",
+  );
+  assert.equal(msg.meta.branch, "main");
+  assert.ok(msg.history.length >= 1, "the analysis is in the branch's history");
+  assert.ok(!JSON.stringify(msg).includes(repo), "no local paths reach the webview");
+
+  // A finding opens by key; unknown keys and malformed messages do nothing.
+  const finding = msg.model.factors.flatMap((f) => f.findings).find((f) => f.file);
+  vscode.__state.opened = [];
+  await panel.receive({ type: "open", key: finding.key });
+  assert.equal(vscode.__state.opened.length, 1);
+  assert.ok(vscode.__state.opened[0].startsWith(repo));
+  for (const bad of [{ type: "open", key: 9999 }, { type: "open", key: "0" }, { type: "open", key: -1 }, null, "x"])
+    await panel.receive(bad);
+  assert.equal(vscode.__state.opened.length, 1);
+
+  // Buttons run only the dashboard's own commands.
+  vscode.__state.executed = [];
+  await panel.receive({ type: "run", action: "graph" });
+  await panel.receive({ type: "run", action: "workbench.action.terminal.new" });
+  await panel.receive({ type: "run", action: "__proto__" });
+  assert.deepEqual(vscode.__state.executed, [["sfPreflight.showGraph"]]);
+
+  // Showing it again reuses the panel.
+  await vscode.__state.commands.get("sfPreflight.showDashboard")();
+  assert.equal(vscode.__state.panels.at(-1), panel);
+});
+
+test("packages every file the webviews load", () => {
+  const ignore = readFileSync(path.join(ext, ".vscodeignore"), "utf8").split("\n");
+  const html = vscode.__state.panels.map((p) => p.webview.html).join("\n");
+  const loaded = [...html.matchAll(/media\/([\w.-]+\.(?:js|css))/g)].map((m) => m[1]);
+  assert.ok(loaded.includes("graph.js") && loaded.includes("dashboard.js"));
+  for (const f of new Set(loaded)) assert.ok(ignore.includes(`!media/${f}`), `media/${f} is left out of the package`);
+});
+
+test("saves the report and opens the web viewer", async () => {
+  const target = path.join(repo, "preflight.json");
+  vscode.__state.saveTo = () => vscode.Uri.file(target);
+  vscode.__state.external = [];
+  await vscode.__state.commands.get("sfPreflight.openInViewer")();
+  const report = JSON.parse(readFileSync(target, "utf8"));
+  assert.equal(report.schemaVersion, 1);
+  assert.equal(report.summary.risk, "high");
+  assert.deepEqual(vscode.__state.external, ["https://sf-preflight-web.vercel.app/"]);
+  // Cancelling the save dialog opens nothing.
+  vscode.__state.saveTo = () => undefined;
+  await vscode.__state.commands.get("sfPreflight.openInViewer")();
+  assert.equal(vscode.__state.external.length, 1);
+  rmSync(target);
 });
 
 test("offers the bundled MCP server to agent mode", () => {

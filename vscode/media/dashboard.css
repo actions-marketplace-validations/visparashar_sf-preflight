@@ -1,0 +1,446 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* The risk dashboard. Text uses the editor's theme colours; severity colours mark identity only. */
+body {
+  --bg: var(--vscode-editor-background, #0d1117);
+  --fg: var(--vscode-editor-foreground, #e6e9ed);
+  --muted: var(--vscode-descriptionForeground, #8b949e);
+  --line: color-mix(in srgb, var(--fg) 16%, transparent);
+  --tile: color-mix(in srgb, var(--bg) 90%, var(--fg) 4%);
+  --focus: var(--vscode-focusBorder, #3dd6b5);
+  /* Text colours for the risk headline and gate (as in the graph). */
+  --t-high: #ff6b5b;
+  --t-medium: #f5b041;
+  --t-low: #3dd6b5;
+  --t-pass: #3dd6b5;
+  /* Fills for marks, validated for colour-vision deficiency on a dark surface. */
+  --c-high: #b8352c;
+  --c-medium: #b88c16;
+  --c-low: #4a8fe0;
+  --c-info: color-mix(in srgb, var(--fg) 35%, transparent);
+  --mono: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+  --sans: var(--vscode-font-family, system-ui, sans-serif);
+}
+body.vscode-light {
+  --t-high: #c4302a;
+  --t-medium: #9a6200;
+  --t-low: #0b8f74;
+  --t-pass: #0b8f74;
+  /* Validated on a light surface. */
+  --c-high: #c8352a;
+  --c-medium: #e0a100;
+  --c-low: #2f68a8;
+}
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --line: var(--fg);
+}
+
+[hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: the hidden attribute must always win */
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+h2 {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+h3 {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+p {
+  margin: 0;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12px;
+}
+button {
+  font: inherit;
+  color: var(--vscode-button-secondaryForeground, var(--fg));
+  background: var(--vscode-button-secondaryBackground, transparent);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground, var(--tile));
+}
+button:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+button.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--vscode-textLink-foreground, var(--t-low));
+  text-decoration: underline;
+}
+
+/* Severity square: identity beside a text label, never instead of one. */
+.sq {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  vertical-align: 0;
+  background: var(--c-info);
+}
+.sq.high {
+  background: var(--c-high);
+}
+.sq.medium {
+  background: var(--c-medium);
+}
+.sq.low {
+  background: var(--c-low);
+}
+.sq.none {
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+/* Toolbar. */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.bar .where {
+  color: var(--muted);
+}
+.bar .busy {
+  margin-left: 10px;
+  color: var(--fg);
+}
+.bar .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Verdict: the one loud thing. */
+.verdict {
+  padding: 22px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+.risk {
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.risk.high {
+  color: var(--t-high);
+}
+.risk.medium {
+  color: var(--t-medium);
+}
+.risk.low {
+  color: var(--t-low);
+}
+.sentence {
+  margin-top: 8px;
+  font-size: 15px;
+  max-width: 60em;
+}
+.counts {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-variant-numeric: tabular-nums;
+}
+.counts .zero {
+  color: var(--muted);
+}
+.gate {
+  margin-top: 12px;
+}
+.gate-mark {
+  display: inline-block;
+  width: 1.2em;
+  font-weight: 700;
+}
+.gate.pass .gate-mark {
+  color: var(--t-pass);
+}
+.gate.fail .gate-mark {
+  color: var(--t-high);
+}
+
+/* Risk factors. */
+.factors {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--tile);
+  min-height: 118px;
+}
+.tile .count {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.tile .label {
+  font-weight: 600;
+}
+.tile .worst {
+  font-size: 12px;
+  color: var(--muted);
+}
+.tile .meaning {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tile.on {
+  border-color: var(--focus);
+  box-shadow: inset 0 0 0 1px var(--focus);
+}
+.tile.none {
+  opacity: 0.55;
+  cursor: default;
+}
+.tile.none .count {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 4px 0 3px;
+}
+.list {
+  margin-top: 16px;
+}
+.list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.list li {
+  border-bottom: 1px solid var(--line);
+}
+.finding {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 2px 8px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 8px 4px;
+}
+.finding .sq {
+  margin-top: 4px;
+}
+.finding .title {
+  grid-column: 2;
+}
+.finding .meta {
+  grid-column: 2;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.finding:disabled {
+  cursor: default;
+  color: inherit;
+}
+
+/* Where the risk sits, and the trend. */
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 28px;
+  padding-top: 20px;
+}
+.spots ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.spots li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(40px, 1fr);
+  gap: 2px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.spots .obj {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.spots .what {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+.meter {
+  align-self: center;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  overflow: hidden;
+}
+.meter .fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--c-info);
+}
+.meter .fill.high {
+  background: var(--c-high);
+}
+.meter .fill.medium {
+  background: var(--c-medium);
+}
+.meter .fill.low {
+  background: var(--c-low);
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+}
+.chart .axis {
+  stroke: color-mix(in srgb, var(--fg) 35%, transparent);
+  stroke-width: 1;
+}
+.chart .grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.chart .tick {
+  fill: var(--muted);
+  font-size: 10px;
+  font-family: var(--sans);
+}
+.chart .bar.high {
+  fill: var(--c-high);
+}
+.chart .bar.medium {
+  fill: var(--c-medium);
+}
+.chart .bar.low {
+  fill: var(--c-low);
+}
+.chart .hit {
+  fill: transparent;
+}
+.chart .hit:hover {
+  fill: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+details.table {
+  margin-top: 8px;
+}
+details.table summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+table {
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+th,
+td {
+  text-align: left;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+}
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+.error {
+  margin-top: 16px;
+  color: var(--t-high);
+}
+.tip {
+  position: fixed;
+  z-index: 5;
+  max-width: 320px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--vscode-editorHoverWidget-background, var(--tile));
+  color: var(--vscode-editorHoverWidget-foreground, var(--fg));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--line));
+  font-size: 12px;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .risk {
+    font-size: 28px;
+  }
+}
