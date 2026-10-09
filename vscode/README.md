@@ -14,6 +14,8 @@ editor calls its tools, the results go to that agent's model provider, like any 
 
 ## Get started
 
+0. Install it: search for **sf-preflight** in the Extensions view, or run
+   `code --install-extension visparashar.sf-preflight-vscode`.
 1. Open a Salesforce DX project (a folder with `sfdx-project.json`) that's in a git repository,
    and trust the workspace when asked.
 2. Change some metadata: an Apex class, a flow, a validation rule, a field. Save it.
