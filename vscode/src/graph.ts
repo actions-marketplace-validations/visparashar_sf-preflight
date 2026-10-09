@@ -78,6 +78,11 @@ const AUTOMATION_KIND: Record<AutomationRef["kind"], GraphNodeKind> = {
   ValidationRule: "ValidationRule",
   RollUpSummary: "RollUpSummary",
   LightningComponent: "LightningComponent",
+  DuplicateRule: "Other",
+  AssignmentRule: "Other",
+  AutoResponseRule: "Other",
+  EscalationRule: "Other",
+  ApprovalProcess: "Other",
   Change: "Other",
 };
 

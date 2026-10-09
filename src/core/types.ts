@@ -150,6 +150,8 @@ export interface FlowDef {
   /** "DefaultMode", "SystemModeWithSharing" or "SystemModeWithoutSharing". */
   runInMode?: string;
   trigger?: FlowTrigger;
+  /** Set for flows started by a platform event: the event's API name. */
+  platformEvent?: string;
   writes: Write[];
   reads: string[];
   apexActions: string[];
@@ -481,6 +483,11 @@ export type AutomationKind =
   | "ValidationRule"
   | "RollUpSummary"
   | "LightningComponent"
+  | "DuplicateRule"
+  | "AssignmentRule"
+  | "AutoResponseRule"
+  | "EscalationRule"
+  | "ApprovalProcess"
   | "Change";
 
 export interface AutomationRef {
@@ -490,7 +497,17 @@ export interface AutomationRef {
   phase?: Phase;
 }
 
-export type Phase = "before-flow" | "before-trigger" | "validation" | "after-trigger" | "after-flow" | "rollup";
+export type Phase =
+  | "before-flow"
+  | "before-trigger"
+  | "validation"
+  | "duplicate"
+  | "after-trigger"
+  | "assignment"
+  | "auto-response"
+  | "escalation"
+  | "after-flow"
+  | "rollup";
 
 export interface SaveStep {
   order: number;
@@ -515,6 +532,8 @@ export interface CascadeNode {
   children: CascadeNode[];
   /** The object already appears earlier on this path: re-entry / recursion risk. */
   cycle?: boolean;
+  /** A platform event: its subscribers run later, in their own transaction, so the cascade stops here. */
+  async?: boolean;
   truncated?: boolean;
 }
 

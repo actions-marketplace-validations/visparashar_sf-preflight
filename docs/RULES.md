@@ -12,6 +12,9 @@ that is only inside the blast radius).
 | [`automated-write-vs-validation-rule`](#automated-write-vs-validation-rule) | Medium | Automation (or an agent action) writes records that are checked by validation rules. |
 | [`field-used-by-validation-rule`](#field-used-by-validation-rule) | Medium | A changed field is referenced by an active validation rule. |
 | [`validation-rule-vs-existing-automation`](#validation-rule-vs-existing-automation) | High | A new or changed validation rule applies to existing automation that writes the object. |
+| [`automated-write-vs-duplicate-rule`](#automated-write-vs-duplicate-rule) | Medium | Automation saves records that an active duplicate rule can block, or a duplicate rule now blocks saves that automation makes. |
+| [`save-rule-changed`](#save-rule-changed) | Low | An assignment, auto-response, escalation, duplicate or matching rule, or an approval process, was switched on or off, added, removed or reads different fields. |
+| [`platform-event-contract`](#platform-event-contract) | Medium | A platform event or one of its fields changed; publishers and subscribers depend on it. |
 | [`after-save-self-update`](#after-save-self-update) | Medium | An after-save flow updates its own triggering record. |
 | [`automation-density`](#automation-density) | Medium | Three or more flows/triggers run on the same object and event. |
 | [`multiple-triggers`](#multiple-triggers) | Medium | More than one Apex trigger on the same object. |
@@ -90,6 +93,30 @@ Changing the field's type, values or how it is populated changes which saves the
 A new or changed validation rule applies to existing automation that writes the object.
 
 Every flow, trigger and class that saves the object must now satisfy the rule. Check each writer sets the required fields.
+
+## automated-write-vs-duplicate-rule
+
+**AutomatedWriteVsDuplicateRule** · default severity: Medium
+
+Automation saves records that an active duplicate rule can block, or a duplicate rule now blocks saves that automation makes.
+
+A save that matches an existing record fails. Test the automation with matching data; Apex can set Database.DMLOptions.DuplicateRuleHeader.allowSave, and in any case the error must reach the user.
+
+## save-rule-changed
+
+**SaveRuleChanged** · default severity: Low
+
+An assignment, auto-response, escalation, duplicate or matching rule, or an approval process, was switched on or off, added, removed or reads different fields.
+
+These run as part of saving (or submitting) a record: ownership, emails, escalations, duplicate checks and approval locks change. Check which records they now apply to.
+
+## platform-event-contract
+
+**PlatformEventContract** · default severity: Medium
+
+A platform event or one of its fields changed; publishers and subscribers depend on it.
+
+Subscribers run later in their own transaction, so a mismatch shows up as failed event handling rather than a save error. Change publishers and subscribers together and test one event end to end.
 
 ## after-save-self-update
 

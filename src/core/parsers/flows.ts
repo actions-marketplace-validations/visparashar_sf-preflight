@@ -135,6 +135,10 @@ export function parseFlow(xml: string, fallbackName: string, file: string): Flow
     processType,
     runInMode: text(body.runInMode),
     trigger,
+    platformEvent:
+      text((body.start as XmlNode | undefined)?.triggerType) === "PlatformEvent"
+        ? text((body.start as XmlNode | undefined)?.object)
+        : undefined,
     writes: uniqBy(writes, (w) => `${w.object}|${w.op}|${w.via}`),
     reads: uniq(reads),
     apexActions,
