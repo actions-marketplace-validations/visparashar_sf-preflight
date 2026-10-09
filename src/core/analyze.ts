@@ -22,6 +22,7 @@ import {
 import { saveProcedure } from "./orderOfExecution.js";
 import { customComponent, parseFlexiPage, parseLayout } from "./parsers/pages.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
+import { picklistFindings, recordTypeFindings } from "./picklists.js";
 import type {
   AnalysisResult,
   ApexAnalysis,
@@ -279,6 +280,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
             files: uniq([comp.file, ...pageRefs.map((r) => r.from.file).filter((f): f is string => !!f)]),
           });
         }
+        if (!deleted) findings.push(...picklistFindings(model, comp, object, field, opts.readBase?.(comp.file)));
         const vrRefs = refs.filter((r) => r.from.kind === "ValidationRule");
         for (const r of vrRefs) {
           const vr = model.validationRules.find((v) => v.name === r.from.name && key(v.object) === key(object));
@@ -473,6 +475,9 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
       case "CustomObject":
       case "ObjectChild":
         if (comp.object && !deleted) roots.push({ object: comp.object, event: "update", via: changeRef(change) });
+        if (comp.type === "ObjectChild" && comp.file.endsWith(".recordType-meta.xml")) {
+          findings.push(...recordTypeFindings(model, comp, deleted, opts.readBase?.(comp.file)));
+        }
         break;
 
       case "AgentMetadata": {

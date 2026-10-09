@@ -148,3 +148,13 @@ layouts, dynamic forms field sections, and Experience Cloud pages.
 - Process Builder, legacy workflow rules, duplicate rules, assignment rules, escalation rules
   and sharing recalculation are not modelled yet.
 - Order *within* a phase is alphabetical; Salesforce's flow trigger order is not yet read.
+
+### Picklists and record types
+
+`picklists.ts` compares a changed picklist field with its base version (`opts.readBase`) and lists
+active values that are gone or inactive. Each removed value is looked up in record types
+(`model.recordTypes`) and as a quoted literal (`'v'`, `"v"`, `&quot;v&quot;`, `<stringValue>`) in
+Apex, flows, validation rules, formulas and workflow, but only in files that also name the field,
+so a common word like `Open` does not match everything. Record types get the same base
+comparison, and a deleted one is searched for by developer name in files that mention
+`RecordType`. The text scan is a heuristic and says "written as text", never "used".

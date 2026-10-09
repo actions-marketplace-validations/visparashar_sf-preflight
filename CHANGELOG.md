@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Picklist values and record types. Removing or deactivating a picklist value lists the record
+  types that still offer it and the Apex, flows, validation rules and formulas that write it as
+  text (only in files that also name the field). A changed record type reports values it no
+  longer offers and deactivation; a deleted one is searched for in code.
 - Page layouts and Lightning pages (flexipages) are analyzed in depth. A changed field lists the
   layouts and record pages that show it (`field-on-page`); deleting a field a layout still shows,
   or a component a page still places, is `deleted-still-referenced`; a changed component lists

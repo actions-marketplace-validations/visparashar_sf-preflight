@@ -42,6 +42,7 @@ It is open source, runs offline on your source code, and needs no org credential
 | **Permission escalations** | New Modify All / View All, delete access, sensitive system permissions — diffed against the base |
 | **Broken references** | Deleted fields, flows or classes that are still used |
 | **Lightning components** | Components that use a changed field or call a changed Apex class, what a changed component saves through Apex, and fields or classes it uses that the project lacks |
+| **Picklists and record types** | Removed or deactivated picklist values still offered by record types or written in code; record types that drop values or are deleted while code names them |
 | **Layouts and Lightning pages** | Where a changed field or component is shown, fields or components a page names that the project lacks, and what a changed page no longer shows |
 | **Everything else that changed** | Layouts, Lightning components, flexipages, labels and every other metadata type are listed with the files that mention them, and the report says how much of the change was analyzed in depth |
 | **Affected agent actions** | Agentforce actions the change reaches, their Testing Center coverage and what their runtime user needs |

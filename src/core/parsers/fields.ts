@@ -3,6 +3,15 @@ import type { FieldDef } from "../types.js";
 import { asArray, bool, nodes, parseMetadataXml, text, uniq } from "../util.js";
 import { formulaFieldRefs } from "./formula.js";
 
+/** Picklist values in some files are URL-encoded (`Closed%20Won`). */
+export function decode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** Parse `objects/<Object>/fields/<Field>.field-meta.xml`. */
 export function parseField(xml: string, object: string, fallbackName: string, file: string): FieldDef {
   const { body } = parseMetadataXml(xml);
@@ -23,6 +32,18 @@ export function parseField(xml: string, object: string, fallbackName: string, fi
     defaultValue: text(body.defaultValue),
     file,
   };
+
+  const valueSet = body.valueSet as Record<string, unknown> | undefined;
+  if (valueSet && typeof valueSet === "object") {
+    const definition = valueSet.valueSetDefinition as Record<string, unknown> | undefined;
+    const values = nodes(definition?.value).flatMap((v) => {
+      const n = text(v.fullName);
+      // Old API versions leave out <isActive>; a value is active unless it says otherwise.
+      return n === undefined ? [] : [{ name: decode(n), active: v.isActive === undefined ? true : bool(v.isActive) }];
+    });
+    const valueSetName = text(valueSet.valueSetName);
+    if (values.length || valueSetName) field.picklist = { values, ...(valueSetName ? { valueSetName } : {}) };
+  }
 
   if (type === "Summary") {
     const foreignKey = text(body.summaryForeignKey) ?? "";
