@@ -53,6 +53,19 @@ export {
   parseApprovals,
 } from "./gate.js";
 export * from "./incidents/index.js";
+export {
+  type Alert,
+  alertFromResult,
+  assertSafeWebhook,
+  detectTarget,
+  type NotifyLevel,
+  type NotifyTarget,
+  payloadFor,
+  readResult,
+  type SendResult,
+  sendWebhook,
+  shouldNotify,
+} from "./notify.js";
 export { saveProcedure } from "./orderOfExecution.js";
 export {
   type AgentTestCase,

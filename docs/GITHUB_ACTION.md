@@ -89,7 +89,27 @@ steps:
 | `org` | — | Beta: alias of an org already authorized earlier in the job; adds org context |
 | `version` | matches the action ref | sf-preflight npm version to run; `local` builds from the action's source |
 | `node-version` | `22` | Node.js version to set up; empty string uses the runner's Node |
+| `notify-webhook` | — | Slack, Teams or generic webhook URL (use a secret). Sends a short alert when risk reaches `notify-on` ([details](#risk-alerts)) |
+| `notify-on` | `high` | Alert threshold: `low`, `medium`, `high`, `gate-fail` or `always` |
+| `notify-on-update` | `false` | Also alert on every push to an open pull request (otherwise: opened, reopened, ready for review, and pushes to other branches) |
 | `github-token` | `github.token` | Token for the PR comment and for reading reviews |
+
+## Risk alerts
+
+Set `notify-webhook` to get a short message in Slack or Teams when a change is risky:
+
+```yaml
+- uses: visparashar/sf-preflight@v0
+  with:
+    notify-webhook: ${{ secrets.PREFLIGHT_WEBHOOK }}
+    notify-on: high
+```
+
+- **Slack**: create an [incoming webhook](https://api.slack.com/messaging/webhooks) and store its URL as a secret.
+- **Teams**: in a channel, add a Workflows template, "Post to a channel when a webhook request is received", and use its URL.
+- Anything else receives a generic JSON body.
+
+The message holds the risk level, counts, the top findings, affected components and a link to the pull request. It never includes the PR title or branch name, and text from the repository is cleaned before it is sent. Webhook URLs must be `https` and are refused for local or private addresses. A failed send never fails the check. Pull requests from forks get no secrets, so they send no alert. The same thing is available in any pipeline with `PREFLIGHT_WEBHOOK_URL=... preflight notify --result report.json --on high`.
 
 ## Outputs
 
