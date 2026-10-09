@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0]
+## [0.2.0] - 2026-10-09
 
 - **New extension ID: `visparashar.sf-preflight-vscode`** (the name `sf-preflight` is taken on the
   VS Code Marketplace). On Open VSX, install it in place of `visparashar.sf-preflight` 0.1.0, which
@@ -14,6 +14,10 @@
   Blast radius view, the risk line in it, or **sf-preflight: Show blast-radius graph**, and
   follows every re-analysis. Several changes gather round a hub. Large graphs keep the 80
   nearest and riskiest nodes.
+
+- **Click the legend to highlight**: in the blast radius graph, click *changed*, *impacted*, *collision*, *high risk* or *recursion* to keep those nodes (and the edges between them) in focus and fade the rest. Pick several kinds at once; click again or press Esc to clear. Each kind shows how many nodes it has, and kinds with none are greyed out. The choice stays when the graph updates.
+
+- **Wider analysis (bundled library 0.8.0)**: Lightning Web Components and Aura appear in the graph as their own *LIGHTNING* nodes; the Blast radius view shows each change's metadata type and how many changes were analyzed in depth; layouts, Lightning pages, picklists and record types, custom labels, custom metadata and Visualforce are now followed. Large projects analyze faster (parse cache and parallel parsing).
 
 ## [0.1.0]
 

@@ -220,8 +220,13 @@ svg.panning {
   font-size: 10px;
 }
 
-.dim {
-  opacity: 0.18;
+.dim,
+.faded {
+  opacity: 0.16;
+}
+.node.faded:hover,
+.node.faded:focus {
+  opacity: 0.85;
 }
 .node,
 .edge,
@@ -240,7 +245,40 @@ svg.panning {
   font-size: 12px;
   z-index: 2;
 }
-.legend span::before {
+.legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.legend button:hover:not(:disabled) {
+  color: var(--fg);
+}
+.legend button:focus-visible {
+  outline: 1px solid var(--focus);
+}
+.legend button[aria-pressed="true"] {
+  color: var(--fg);
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.legend button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.legend .count {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.8;
+}
+.legend button::before {
   content: "";
   display: inline-block;
   width: 8px;
