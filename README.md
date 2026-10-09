@@ -9,6 +9,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)
 [![Website](https://img.shields.io/badge/website-visparashar.github.io%2Fsf--preflight-52E0A1)](https://visparashar.github.io/sf-preflight/)
+[![M8ven Score](https://m8ven.ai/badge/mcp/visparashar-sf-preflight-13zbfy?v=17a47b225ccd7f1293f0a618ea86a19d)](https://m8ven.ai/mcp/visparashar-sf-preflight-13zbfy?s=readme)
 
 **Preflight checks for Salesforce changes: know what a change will set off — before it ships.**
 
