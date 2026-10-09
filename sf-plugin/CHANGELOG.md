@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.0]
+
+- Same version as the CLI; the new checks come through `sf preflight analyze` and the other commands.
+
 ## [0.9.1]
 
 - Same as 0.9.0, which was never published.

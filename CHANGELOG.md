@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-10
+
 ### Added
 
 - Reports, report types, list views, email templates (merge fields), quick actions, compact layouts and field sets
@@ -407,7 +409,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/visparashar/sf-preflight/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/visparashar/sf-preflight/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/visparashar/sf-preflight/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/visparashar/sf-preflight/compare/v0.7.0...v0.8.0
