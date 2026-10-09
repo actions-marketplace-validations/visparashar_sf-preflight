@@ -274,6 +274,33 @@ console.log(result.summary.risk, result.findings.length);
 console.log(toMarkdown(result));
 ```
 
+## Performance
+
+Measured on [NPSP](https://github.com/SalesforceFoundation/NPSP) (1,035 Apex classes, 765 fields,
+26 triggers), changing one class, on a 2-core Xeon 2.1 GHz with Node 22 (median of 3):
+
+| Scenario | Time | Peak memory |
+|---|---:|---:|
+| First run, 1 thread | 26.8 s | 1,309 MB |
+| First run, 2 threads | 22.5 s | 1,763 MB |
+| Repeat run (cached) | 1.0 s | 189 MB |
+| Repeat run after editing one class | 1.3 s | 219 MB |
+
+Parsing Apex is nearly all of the cost, so results are cached per file in `~/.cache/sf-preflight`
+(content-hashed; set `PREFLIGHT_CACHE_DIR` to move it or `PREFLIGHT_NO_CACHE=1` to turn it off), and
+a first run parses on worker threads (`PREFLIGHT_JOBS=1` to turn that off). Small projects take
+about a second either way (apex-recipes, 139 classes: 2 s). The editor extension gets the same
+speed-up, so saving a file re-analyzes in about a second. Gains from threads depend on the
+machine; on this 2-core box they were modest. Run it on your own project:
+
+```bash
+npm run build
+node scripts/bench.mjs path/to/your/sfdx-project --runs 3
+```
+
+It uses a temporary cache (yours is never touched) and, for the "after editing" row, appends a
+comment to one Apex file and puts it back.
+
 ## How it works
 
 ```

@@ -18,10 +18,17 @@ export interface ParseWorkerData {
   jobs: ParseJob[];
   objects: string[];
 }
+/** Slots in the shared `signal` array: workers finished, workers started, files parsed so far. */
+export const DONE = 0;
+export const STARTED = 1;
+export const PROGRESS = 2;
+
 export type ParseOutcome = { file: string; value: object } | { file: string; error: string };
 
 if (parentPort) {
   const { port, signal, jobs, objects } = workerData as ParseWorkerData;
+  Atomics.add(signal, STARTED, 1);
+  Atomics.notify(signal, STARTED);
   const projectObjects = new Set(objects);
   const results: ParseOutcome[] = [];
   try {
@@ -31,10 +38,11 @@ if (parentPort) {
       } catch (err) {
         results.push({ file: j.file, error: (err as Error).message });
       }
+      Atomics.add(signal, PROGRESS, 1);
     }
     port.postMessage(results);
   } finally {
-    Atomics.add(signal, 0, 1);
-    Atomics.notify(signal, 0);
+    Atomics.add(signal, DONE, 1);
+    Atomics.notify(signal, DONE);
   }
 }
