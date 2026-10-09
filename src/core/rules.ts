@@ -201,6 +201,27 @@ export const RULES: RuleInfo[] = [
     help: "Workflow rules are not analyzed yet; consider migrating them to flows.",
   },
   {
+    id: "field-used-by-lightning",
+    name: "FieldUsedByLightning",
+    defaultSeverity: "low",
+    summary: "A changed field is used by Lightning Web Components or Aura components.",
+    help: "Components read and show the field directly. After changing its type, values or access, check the component and the pages it sits on.",
+  },
+  {
+    id: "apex-called-from-lightning",
+    name: "ApexCalledFromLightning",
+    defaultSeverity: "low",
+    summary: "A changed Apex class is called from Lightning components.",
+    help: "Lightning components call Apex from the browser, so a changed signature, result shape or error behaviour reaches users without a flow or trigger in between. Re-test the component.",
+  },
+  {
+    id: "lightning-missing-reference",
+    name: "LightningMissingReference",
+    defaultSeverity: "medium",
+    summary: "A changed Lightning component uses a field or Apex class that is not in the project.",
+    help: "Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.",
+  },
+  {
     id: "metadata-not-analyzed",
     name: "MetadataNotAnalyzed",
     defaultSeverity: "info",

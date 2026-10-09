@@ -313,6 +313,27 @@ export interface AgentTestDef {
   file: string;
 }
 
+/** A Lightning Web Component or Aura bundle: what it calls, imports and embeds. */
+export interface LightningDef {
+  kind: "lwc" | "aura";
+  /** Bundle (folder) name. */
+  name: string;
+  /** The bundle's main file, for opening it. */
+  file: string;
+  /** Source files read (not tests). */
+  files: string[];
+  /** Apex classes it calls; `method` is set when a specific method is imported or invoked. */
+  apex: { cls: string; method?: string }[];
+  /** `Object.Field` it imports (`@salesforce/schema/...`) or names in a string. */
+  fields: string[];
+  /** Objects imported on their own (`@salesforce/schema/Account`). */
+  objects: string[];
+  /** Custom labels it uses. */
+  labels: string[];
+  /** Components it embeds. */
+  children: string[];
+}
+
 export interface OrgModel {
   projectDir: string;
   sourceRoots: string[];
@@ -326,6 +347,8 @@ export interface OrgModel {
   agents: Map<string, AgentDef>;
   /** Testing Center test definitions. */
   agentTests: AgentTestDef[];
+  /** Lightning Web Component and Aura bundles, keyed by `lwc:name` / `aura:name`, lower-cased. */
+  lightning: Map<string, LightningDef>;
   /** Every metadata file found, keyed by relative path. */
   components: Map<string, ComponentRef>;
   warnings: string[];
@@ -406,7 +429,14 @@ export interface Change {
   previousFile?: string;
 }
 
-export type AutomationKind = "Flow" | "ApexTrigger" | "ApexClass" | "ValidationRule" | "RollUpSummary" | "Change";
+export type AutomationKind =
+  | "Flow"
+  | "ApexTrigger"
+  | "ApexClass"
+  | "ValidationRule"
+  | "RollUpSummary"
+  | "LightningComponent"
+  | "Change";
 
 export interface AutomationRef {
   kind: AutomationKind;

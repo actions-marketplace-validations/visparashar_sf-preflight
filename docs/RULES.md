@@ -33,6 +33,9 @@ that is only inside the blast radius).
 | [`agent-runtime-overprivileged`](#agent-runtime-overprivileged) | Medium | With --org: an affected agent's runtime user holds broad access such as Modify All Data. |
 | [`agent-action-no-confirmation`](#agent-action-no-confirmation) | Medium | An agent action deletes records without asking the user for confirmation. |
 | [`legacy-workflow`](#legacy-workflow) | Info | A legacy workflow rule changed. |
+| [`field-used-by-lightning`](#field-used-by-lightning) | Low | A changed field is used by Lightning Web Components or Aura components. |
+| [`apex-called-from-lightning`](#apex-called-from-lightning) | Low | A changed Apex class is called from Lightning components. |
+| [`lightning-missing-reference`](#lightning-missing-reference) | Medium | A changed Lightning component uses a field or Apex class that is not in the project. |
 | [`metadata-not-analyzed`](#metadata-not-analyzed) | Info | A changed component is of a metadata type that is not analyzed in depth. |
 
 ## recursion-cycle
@@ -234,6 +237,30 @@ Require confirmation for destructive actions so a misunderstood request can't de
 A legacy workflow rule changed.
 
 Workflow rules are not analyzed yet; consider migrating them to flows.
+
+## field-used-by-lightning
+
+**FieldUsedByLightning** · default severity: Low
+
+A changed field is used by Lightning Web Components or Aura components.
+
+Components read and show the field directly. After changing its type, values or access, check the component and the pages it sits on.
+
+## apex-called-from-lightning
+
+**ApexCalledFromLightning** · default severity: Low
+
+A changed Apex class is called from Lightning components.
+
+Lightning components call Apex from the browser, so a changed signature, result shape or error behaviour reaches users without a flow or trigger in between. Re-test the component.
+
+## lightning-missing-reference
+
+**LightningMissingReference** · default severity: Medium
+
+A changed Lightning component uses a field or Apex class that is not in the project.
+
+Importing a missing field or class fails the deployment. Add it to the project, or make sure it exists in the target org before this change deploys.
 
 ## metadata-not-analyzed
 

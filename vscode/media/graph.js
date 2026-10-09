@@ -22,6 +22,7 @@
     PermissionSet: "PERMISSION SET",
     Profile: "PROFILE",
     FormulaField: "FORMULA FIELD",
+    LightningComponent: "LIGHTNING",
     Agent: "AGENT",
     AgentTopic: "AGENT TOPIC",
     AgentAction: "AGENT ACTION",

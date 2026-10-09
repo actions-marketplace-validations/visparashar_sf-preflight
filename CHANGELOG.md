@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Lightning Web Components and Aura components are analyzed in depth. Each bundle is read for the
+  Apex methods it calls, the fields it imports (`@salesforce/schema/...`), its labels and the
+  components it embeds. A changed field lists the components that use it
+  (`field-used-by-lightning`); a changed Apex class lists the components that call it
+  (`apex-called-from-lightning`); a changed component follows the records it saves through the
+  Apex it calls into the usual save-order cascade and is checked for fields and classes the
+  project does not have (`lightning-missing-reference`); deleting a class or component that
+  others use is `deleted-still-referenced`. The VS Code graph shows Lightning components as their
+  own node kind.
 - Coverage: every Salesforce metadata type (512 file suffixes, from Salesforce's metadata
   registry) is now recognized instead of silently ignored. Changed layouts, Lightning components,
   flexipages, labels, custom metadata and the rest appear in the changed components with their

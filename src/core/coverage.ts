@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { looksLikeSObject } from "./standardObjects.js";
-import type { Change, ComponentType, Coverage, OrgModel } from "./types.js";
+import type { Change, ComponentRef, ComponentType, Coverage, OrgModel } from "./types.js";
 
 /** Component types with their own analysis. Everything else is recognized but analyzed only by name. */
 const DEEP: ReadonlySet<ComponentType> = new Set([
@@ -18,7 +18,9 @@ const DEEP: ReadonlySet<ComponentType> = new Set([
   "AgentMetadata",
 ]);
 
-export const isAnalyzedInDepth = (type: ComponentType): boolean => DEEP.has(type);
+/** Does a changed component have its own analysis? Lightning bundles do; other metadata types don't. */
+export const isAnalyzedInDepth = (c: ComponentRef): boolean =>
+  DEEP.has(c.type) || c.metadataType === "LightningComponentBundle" || c.metadataType === "AuraDefinitionBundle";
 
 const MAX_COMPONENTS = 50;
 const MAX_FILES_PER_COMPONENT = 15;
@@ -26,22 +28,10 @@ const MAX_FILE_BYTES = 1024 * 1024;
 /** Text formats that can name another component. Binary and archive files are never read. */
 const TEXT_FILE = /\.(xml|cls|trigger|js|ts|html|css|cmp|app|evt|design|page|component|json|agent|yaml|yml|csv)$/i;
 
-const kebab = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** The strings other files use to refer to a component. */
-function tokensFor(type: string, name: string): string[] {
-  const leaf = name.split("/").pop() ?? name;
-  switch (type) {
-    case "LightningComponentBundle":
-      // <c-my-cmp>, import ... from "c/myCmp", and "c:myCmp" in pages and flows.
-      return [`c-${kebab(leaf)}`, `c/${leaf}`, `c:${leaf}`];
-    case "AuraDefinitionBundle":
-      return [`c:${leaf}`, `<aura:${leaf}`];
-    default:
-      return [name];
-  }
-}
+/** The strings other files use to refer to a component: its API name. */
+const tokensFor = (name: string): string[] => [name];
 
 /**
  * What the change touches that has no dedicated analysis: counts by type, and which other files in
@@ -49,7 +39,7 @@ function tokensFor(type: string, name: string): string[] {
  * changed component is analyzed in depth.
  */
 export function buildCoverage(model: OrgModel, changes: Change[]): Coverage | undefined {
-  const basic = changes.filter((c) => !DEEP.has(c.component.type));
+  const basic = changes.filter((c) => !isAnalyzedInDepth(c.component));
   if (!basic.length) return undefined;
 
   const byType = new Map<string, number>();
@@ -66,7 +56,7 @@ export function buildCoverage(model: OrgModel, changes: Change[]): Coverage | un
     tokens:
       c.component.type === "WorkflowRule" || looksLikeSObject(c.component.name, objectNames)
         ? []
-        : tokensFor(label(c), c.component.name).filter((t) => t.length >= 3),
+        : tokensFor(c.component.name).filter((t) => t.length >= 3),
     found: new Set<string>(),
   }));
   const boundary = (token: string) => new RegExp(`(?<![A-Za-z0-9_])${escapeRe(token)}(?![A-Za-z0-9_])`);
