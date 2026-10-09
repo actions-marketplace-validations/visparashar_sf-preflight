@@ -91,7 +91,17 @@ test("runs the real CLI end to end", () => {
 
 test("lists every command under the preflight topic", () => {
   const r = sf(echo, "preflight", "--help");
-  for (const c of ["analyze", "tests", "agents", "agent-tests", "incidents", "rollback", "explain", "evidence"]) {
+  for (const c of [
+    "analyze",
+    "tests",
+    "agents",
+    "agent-tests",
+    "incidents",
+    "monitor",
+    "rollback",
+    "explain",
+    "evidence",
+  ]) {
     assert.match(r.stdout, new RegExp(`preflight ${c}`));
   }
 });

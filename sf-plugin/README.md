@@ -25,6 +25,7 @@ sf preflight analyze --base origin/main --json     # same as --format json
 sf preflight tests --base origin/main --validate --target-org my-sandbox
 sf preflight agents Sales_Agent
 sf preflight incidents --target-org prod --since 7d
+sf preflight monitor --target-org prod --since 1h --notify-on high   # risky changes made in the org
 sf preflight rollback a1b2c3d
 sf preflight explain Opportunity
 sf preflight evidence --base origin/main --out preflight-evidence.json
@@ -41,7 +42,7 @@ listed or not (for example `--md-out`, `--sarif-out`, `--config`); see the
 | `-o <org>`, `--target-org <org>` | `--org <org>` |
 | `--json` | `--format json` (commands without formats ignore it) |
 
-On commands that read an org (`analyze`, `tests`, `agent-tests`, `incidents`, `rollback`), `-o` is
+On commands that read an org (`analyze`, `tests`, `agent-tests`, `incidents`, `monitor`, `rollback`), `-o` is
 the org, as everywhere in `sf`. The CLI's own output file flag is spelled `--out` there. On
 `evidence` and `explain`, which never read an org, `-o` stays the CLI's `--out`.
 
