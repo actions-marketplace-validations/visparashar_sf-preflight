@@ -131,11 +131,16 @@ export function treeOf(result: AnalysisResult, label?: string): TreeNode[] {
 
   nodes.push({
     label: "Changed components",
-    description: String(result.changes.length),
+    description: result.coverage
+      ? `${result.changes.length} · ${result.coverage.deep} analyzed in depth`
+      : String(result.changes.length),
+    tooltip: result.coverage
+      ? `${result.coverage.basic} of ${result.changes.length} are of types sf-preflight recognizes but does not analyze in depth yet (${result.coverage.basicByType.map((t) => `${t.type} ×${t.count}`).join(", ")}).`
+      : undefined,
     icon: "git-commit",
     children: result.changes.map((c) => ({
       label: c.component.name,
-      description: `${c.component.type} · ${c.changeType}`,
+      description: `${c.component.metadataType ?? c.component.type} · ${c.changeType}`,
       icon: CHANGE_ICON[c.changeType] ?? "file",
       ...(c.changeType === "deleted" ? {} : { file: abs(c.component.file), line: 0 }),
     })),

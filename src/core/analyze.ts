@@ -7,6 +7,7 @@ import {
   stillReferenced,
   targetRef,
 } from "./agentImpact.js";
+import { buildCoverage } from "./coverage.js";
 import { callersOfClass, callersOfFlow, classWrites, flowWrites, knownClassRefs, writersOf } from "./graph.js";
 import { saveProcedure } from "./orderOfExecution.js";
 import { parsePermissionContainer } from "./parsers/permissions.js";
@@ -96,6 +97,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
   const tests: SuggestedTest[] = [];
   const changedFiles = new Set(changes.map((c) => c.component.file));
   const changedAutomation = new Set<string>(); // "Kind:name" lower
+  const coverage = buildCoverage(model, changes);
 
   const addFinding = (f: Finding) => findings.push(f);
   const changeRef = (c: Change): AutomationRef => ({ kind: "Change", name: c.component.name, file: c.component.file });
@@ -343,6 +345,23 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           files: [comp.file],
         });
         break;
+
+      case "Metadata": {
+        // Recognized by name only: say so, and point at the files that mention it.
+        const type = comp.metadataType ?? "Metadata";
+        const mentions = coverage?.mentions.find((m) => m.type === type && m.component === comp.name);
+        const where = mentions
+          ? ` Mentioned in ${mentions.files.slice(0, 5).join(", ")}${mentions.files.length + mentions.more > 5 ? ` and ${mentions.files.length + mentions.more - 5} more` : ""}.`
+          : "";
+        addFinding({
+          rule: "metadata-not-analyzed",
+          severity: "info",
+          title: `${type} ${deleted ? "deleted" : "changed"}: ${comp.name}`,
+          detail: `sf-preflight recognizes this metadata type but does not analyze it in depth yet, so what it affects is not in this report.${where}`,
+          files: [comp.file],
+        });
+        break;
+      }
 
       default:
         break;
@@ -609,6 +628,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     findings: finalFindings,
     suggestedTests: uniqBy(tests, (t) => `${t.kind}|${t.description}`),
     agents: agentAnalysis.impacts,
+    coverage,
     summary: {
       risk,
       changedComponents: changes.length,

@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Coverage: every Salesforce metadata type (512 file suffixes, from Salesforce's metadata
+  registry) is now recognized instead of silently ignored. Changed layouts, Lightning components,
+  flexipages, labels, custom metadata and the rest appear in the changed components with their
+  metadata type, raise an info finding (`metadata-not-analyzed`, can be turned off), and the
+  report says "Analyzed in depth: N of M changed components" and lists the project files that
+  mention each one. The JSON result has a new `coverage` field. Types without their own analysis
+  are still reported by name only.
 - Parallel parsing: when 150 or more Apex files need parsing (a first run, or after the object
   list changes), they are parsed on worker threads, one per CPU (at most 8). Set `PREFLIGHT_JOBS=1`
   to parse on one thread. Output is identical. Gain depends on the machine: on a 2-core test

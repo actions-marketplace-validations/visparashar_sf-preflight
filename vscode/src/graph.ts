@@ -148,7 +148,7 @@ export function graphOf(result: AnalysisResult): Graph {
     const n = node(id, {
       label: c.component.name,
       kind,
-      detail: c.changeType,
+      detail: c.component.metadataType ? `${c.component.metadataType} · ${c.changeType}` : c.changeType,
       ...(c.changeType === "deleted" ? {} : { file: abs(c.component.file), line: 0 }),
     });
     n.changed = true;

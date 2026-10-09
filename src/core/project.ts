@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseApexUnit } from "./apexUnit.js";
 import { applyCallGraph } from "./callGraph.js";
+import { METADATA_BY_DIR, METADATA_BY_SUFFIX, METADATA_DIR_BY_SUFFIX, METADATA_FOLDERED } from "./metadataTypes.js";
 import { ParseCache } from "./parseCache.js";
 import {
   agentFileKind,
@@ -70,6 +71,50 @@ export function classifyPath(relPath: string): ComponentRef {
     return { type: "WorkflowRule", name: strip(base, ".workflow-meta.xml"), file };
   const agent = agentFileKind(parts);
   if (agent) return { type: "AgentMetadata", agentKind: agent.kind, name: agent.name, file };
+  return classifyOther(parts, file);
+}
+
+const SUFFIX_LOWER = new Map(Object.entries(METADATA_BY_SUFFIX).map(([s, t]) => [s.toLowerCase(), t]));
+const SUFFIX_DIR = new Map(Object.entries(METADATA_DIR_BY_SUFFIX).map(([s, d]) => [s.toLowerCase(), d.toLowerCase()]));
+const DIR_LOWER = new Map(Object.entries(METADATA_BY_DIR).map(([d, t]) => [d.toLowerCase(), t]));
+
+/**
+ * Recognize any other Salesforce metadata type from its file suffix (\`Foo.layout-meta.xml\`) or, for
+ * bundles and content (\`lwc/foo/foo.js\`), from its folder. Anything not recognized stays "Other".
+ */
+function classifyOther(parts: string[], file: string): ComponentRef {
+  const base = parts[parts.length - 1] ?? file;
+  const metadata = (metadataType: string, name: string): ComponentRef => ({
+    type: "Metadata",
+    metadataType,
+    name,
+    file,
+  });
+
+  // Bundles and content (lwc/foo/foo.js, aura/foo/foo.cmp, staticresources/foo/app.js): the folder
+  // names the type and the folder below it the component. A file directly in the folder falls
+  // through to the suffix rule. Foldered types (documents/) are named by the suffix rule instead.
+  for (let i = 0; i < parts.length - 2; i++) {
+    const dir = parts[i] ?? "";
+    const type = DIR_LOWER.get(dir.toLowerCase());
+    if (type && type !== "CustomObject" && !METADATA_FOLDERED.has(dir)) return metadata(type, parts[i + 1] ?? base);
+  }
+
+  // By suffix: Foo.layout-meta.xml, or Foo.page for classic content sitting in its folder (pages/).
+  const withMeta = /^(.+)\.([A-Za-z0-9_]+)-meta\.xml$/.exec(base);
+  const plain = withMeta ? null : /^(.+)\.([A-Za-z0-9_]+)$/.exec(base);
+  const m = withMeta ?? plain;
+  if (m) {
+    const suffix = (m[2] ?? "").toLowerCase();
+    const type = SUFFIX_LOWER.get(suffix);
+    const parentDir = (parts[parts.length - 2] ?? "").toLowerCase();
+    if (type && (withMeta || SUFFIX_DIR.get(suffix) === parentDir)) {
+      // Reports, dashboards, documents and email templates can sit in folders: keep the folder path.
+      const folderAt = parts.findIndex((p) => METADATA_FOLDERED.has(p));
+      const folders = folderAt >= 0 && folderAt < parts.length - 1 ? parts.slice(folderAt + 1, -1) : [];
+      return metadata(type, [...folders, m[1]].join("/"));
+    }
+  }
   return { type: "Other", name: base, file };
 }
 
