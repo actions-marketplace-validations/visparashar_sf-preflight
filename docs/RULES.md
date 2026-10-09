@@ -19,6 +19,7 @@ that is only inside the blast radius).
 | [`integration-insecure`](#integration-insecure) | High | An integration sends data over plain http, sends a session ID out, or keeps a secret in source control. |
 | [`integration-allowlist-removed`](#integration-allowlist-removed) | Medium | A remote site setting or CSP trusted site no longer allows a host that code still calls. |
 | [`connected-app-access`](#connected-app-access) | Medium | A connected app requests more OAuth scopes or accepts new callback URLs. |
+| [`missing-field-reference`](#missing-field-reference) | Medium | A changed report, report type, list view, email template, quick action, compact layout or field set names a custom field the project's object lacks. |
 | [`after-save-self-update`](#after-save-self-update) | Medium | An after-save flow updates its own triggering record. |
 | [`automation-density`](#automation-density) | Medium | Three or more flows/triggers run on the same object and event. |
 | [`multiple-triggers`](#multiple-triggers) | Medium | More than one Apex trigger on the same object. |
@@ -153,6 +154,14 @@ Apex callouts or Lightning requests to that host fail at runtime. Keep the setti
 A connected app requests more OAuth scopes or accepts new callback URLs.
 
 Full and refresh-token scopes give broad, long-lived access; callback URLs receive authorization codes. Request only the scopes needed and confirm every callback URL is yours and uses https.
+
+## missing-field-reference
+
+**MissingFieldReference** · default severity: Medium
+
+A changed report, report type, list view, email template, quick action, compact layout or field set names a custom field the project's object lacks.
+
+The deployment fails, or the column, filter or merge field breaks, unless the field already exists in the target org. Add the field to the change or fix the name.
 
 ## after-save-self-update
 

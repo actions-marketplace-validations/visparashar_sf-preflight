@@ -24,6 +24,7 @@ import {
   targetRef,
 } from "./agentImpact.js";
 import { buildCoverage } from "./coverage.js";
+import { fieldUsers, isNamespaced, missingFieldFindings, parseFieldUser } from "./fieldUsers.js";
 import {
   callersOfClass,
   callersOfFlow,
@@ -214,7 +215,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     for (const f of lc.fields) {
       const [object, field] = f.split(".") as [string, string];
       const def = model.objects.get(key(object));
-      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+      if (def && key(field).endsWith("__c") && !isNamespaced(field) && !def.fields.has(key(field)))
+        missing.push(`field ${f}`);
     }
     for (const a of lc.apex) if (!model.classes.has(key(a.cls))) missing.push(`Apex class ${a.cls}`);
     if (missing.length) {
@@ -249,7 +251,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
     for (const f of fieldNames(cur)) {
       const [obj, field] = f.split(".") as [string, string];
       const def = model.objects.get(key(obj));
-      if (def && key(field).endsWith("__c") && !def.fields.has(key(field))) missing.push(`field ${f}`);
+      if (def && key(field).endsWith("__c") && !isNamespaced(field) && !def.fields.has(key(field)))
+        missing.push(`field ${f}`);
     }
     if (!layout) {
       for (const c of (cur as FlexiPageDef).components) {
@@ -574,6 +577,7 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
               ),
             );
         }
+        if (comp.type === "ObjectChild" && !deleted) findings.push(...missingFieldFindings(model, comp));
         if (comp.type === "ObjectChild" && comp.file.endsWith(".recordType-meta.xml")) {
           findings.push(...recordTypeFindings(model, comp, deleted, opts.readBase?.(comp.file)));
         }
@@ -630,6 +634,8 @@ export function analyze(opts: AnalyzeOptions): AnalysisResult {
           analyzePage(change);
           break;
         }
+        // Reports, report types, quick actions, email templates: fields they name that don't exist.
+        if (!deleted && parseFieldUser(comp, readCurrent)) findings.push(...missingFieldFindings(model, comp));
         if (comp.metadataType && INTEGRATION_TYPES.has(comp.metadataType)) {
           const base = opts.readBase?.(comp.file);
           findings.push(
@@ -1098,6 +1104,8 @@ export function fieldReferences(model: OrgModel, object: string, field: string):
     }
   }
   for (const r of rulesReadingField(model, object, field)) refs.push({ from: saveRuleRef(r), to: target });
+  for (const u of fieldUsers(model, object, field))
+    refs.push({ from: { kind: u.kind, name: u.name, file: u.file }, to: target });
   for (const m of outboundMessagesOf(model)) {
     if (key(m.object) === key(object) && m.fields.some((f) => key(f) === fk))
       refs.push({ from: { kind: "OutboundMessage", name: m.name, file: m.file }, to: target });

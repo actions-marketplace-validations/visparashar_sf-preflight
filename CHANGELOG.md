@@ -9,6 +9,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Reports, report types, list views, email templates (merge fields), quick actions, compact layouts and field sets
+  count as field references, so deleting or renaming a field they name is caught. A changed one that names a
+  custom field the project's object lacks is flagged (`missing-field-reference`).
 - Integrations are analyzed in depth, each change compared with the base version:
   - Named credentials that move to another host, authenticate differently or use plain http, with the Apex and
     flows that call them; external credentials whose authentication changes, with the named credentials using
@@ -55,6 +58,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Destructive manifests: components listed in a changed `destructiveChanges.xml` (or `...Pre`/`...Post`) are
   checked like deleted files, including fields, classes and flows, even when the manifest sits outside the
   package directories.
+
+### Fixed
+
+- Layouts, Lightning pages and Lightning components no longer report fields from other managed packages
+  (`ns__Field__c`) as missing from the project.
 
 ## [0.9.1] - 2026-10-09
 

@@ -101,6 +101,14 @@ export const RULES: RuleInfo[] = [
     security: true,
   },
   {
+    id: "missing-field-reference",
+    name: "MissingFieldReference",
+    defaultSeverity: "medium",
+    summary:
+      "A changed report, report type, list view, email template, quick action, compact layout or field set names a custom field the project's object lacks.",
+    help: "The deployment fails, or the column, filter or merge field breaks, unless the field already exists in the target org. Add the field to the change or fix the name.",
+  },
+  {
     id: "after-save-self-update",
     name: "AfterSaveSelfUpdate",
     defaultSeverity: "medium",
