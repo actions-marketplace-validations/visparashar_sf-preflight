@@ -12,6 +12,9 @@ that is only inside the blast radius).
 | [`automated-write-vs-validation-rule`](#automated-write-vs-validation-rule) | Medium | Automation (or an agent action) writes records that are checked by validation rules. |
 | [`field-used-by-validation-rule`](#field-used-by-validation-rule) | Medium | A changed field is referenced by an active validation rule. |
 | [`validation-rule-vs-existing-automation`](#validation-rule-vs-existing-automation) | High | A new or changed validation rule applies to existing automation that writes the object. |
+| [`automated-write-vs-duplicate-rule`](#automated-write-vs-duplicate-rule) | Medium | Automation saves records that an active duplicate rule can block, or a duplicate rule now blocks saves that automation makes. |
+| [`save-rule-changed`](#save-rule-changed) | Low | An assignment, auto-response, escalation, duplicate or matching rule, or an approval process, was switched on or off, added, removed or reads different fields. |
+| [`platform-event-contract`](#platform-event-contract) | Medium | A platform event or one of its fields changed; publishers and subscribers depend on it. |
 | [`after-save-self-update`](#after-save-self-update) | Medium | An after-save flow updates its own triggering record. |
 | [`automation-density`](#automation-density) | Medium | Three or more flows/triggers run on the same object and event. |
 | [`multiple-triggers`](#multiple-triggers) | Medium | More than one Apex trigger on the same object. |
@@ -20,7 +23,15 @@ that is only inside the blast radius).
 | [`permission-system`](#permission-system) | High | A permission set or profile grants a sensitive system permission (e.g. ModifyAllData). |
 | [`permission-delete`](#permission-delete) | Medium | A permission set or profile grants delete on an object. |
 | [`permission-field-edit`](#permission-field-edit) | Low | A permission set or profile newly grants edit access to fields. |
+| [`permission-access-removed`](#permission-access-removed) | Medium | A permission set, profile, permission set group or muting permission set takes access away. |
+| [`permission-group-changed`](#permission-group-changed) | Low | A permission set group now includes more permission sets. |
+| [`guest-access`](#guest-access) | High | Guest (unauthenticated) site users gain access to objects, Apex classes or records. |
+| [`sharing-model-opened`](#sharing-model-opened) | High | An object's organization-wide default became more open (e.g. Private to Public Read/Write). |
+| [`sharing-model-restricted`](#sharing-model-restricted) | Medium | An object's organization-wide default became more restrictive or changed control. |
+| [`sharing-rule-changed`](#sharing-rule-changed) | Medium | A sharing rule was added, widened, narrowed or removed. |
 | [`deleted-still-referenced`](#deleted-still-referenced) | High | A deleted field, flow or class is still referenced elsewhere. |
+| [`deleted-still-named`](#deleted-still-named) | Medium | A deleted component of any metadata type is still named by other files in the project. |
+| [`renamed-still-named`](#renamed-still-named) | Medium | A renamed component's old name is still used by other files in the project. |
 | [`validation-rule-removed`](#validation-rule-removed) | Info | A validation rule was removed. |
 | [`validation-rule-inactive`](#validation-rule-inactive) | Info | A changed validation rule is inactive. |
 | [`flow-inactive`](#flow-inactive) | Info | A changed flow is not active. |
@@ -82,6 +93,30 @@ Changing the field's type, values or how it is populated changes which saves the
 A new or changed validation rule applies to existing automation that writes the object.
 
 Every flow, trigger and class that saves the object must now satisfy the rule. Check each writer sets the required fields.
+
+## automated-write-vs-duplicate-rule
+
+**AutomatedWriteVsDuplicateRule** · default severity: Medium
+
+Automation saves records that an active duplicate rule can block, or a duplicate rule now blocks saves that automation makes.
+
+A save that matches an existing record fails. Test the automation with matching data; Apex can set Database.DMLOptions.DuplicateRuleHeader.allowSave, and in any case the error must reach the user.
+
+## save-rule-changed
+
+**SaveRuleChanged** · default severity: Low
+
+An assignment, auto-response, escalation, duplicate or matching rule, or an approval process, was switched on or off, added, removed or reads different fields.
+
+These run as part of saving (or submitting) a record: ownership, emails, escalations, duplicate checks and approval locks change. Check which records they now apply to.
+
+## platform-event-contract
+
+**PlatformEventContract** · default severity: Medium
+
+A platform event or one of its fields changed; publishers and subscribers depend on it.
+
+Subscribers run later in their own transaction, so a mismatch shows up as failed event handling rather than a save error. Change publishers and subscribers together and test one event end to end.
 
 ## after-save-self-update
 
@@ -147,6 +182,54 @@ A permission set or profile newly grants edit access to fields.
 
 Review that each newly editable field is needed by the users holding the permission.
 
+## permission-access-removed
+
+**PermissionAccessRemoved** · default severity: Medium
+
+A permission set, profile, permission set group or muting permission set takes access away.
+
+Users who got the access only from there lose it: objects, fields, Apex classes, Visualforce pages, custom permissions or system permissions. The report names Lightning components and pages that need what was removed. Check who holds the access before deploying.
+
+## permission-group-changed
+
+**PermissionGroupChanged** · default severity: Low · security
+
+A permission set group now includes more permission sets.
+
+Everyone assigned the group gets the added access. Check the group's members need it.
+
+## guest-access
+
+**GuestAccess** · default severity: High · security
+
+Guest (unauthenticated) site users gain access to objects, Apex classes or records.
+
+Anyone who reaches the site gets this access without logging in. Grant guests only what public pages need, and share only records meant to be public.
+
+## sharing-model-opened
+
+**SharingModelOpened** · default severity: High · security
+
+An object's organization-wide default became more open (e.g. Private to Public Read/Write).
+
+Every user can now see or edit records they don't own. Check no record holds data some users must not see or change. Large orgs recalculate sharing on deploy.
+
+## sharing-model-restricted
+
+**SharingModelRestricted** · default severity: Medium
+
+An object's organization-wide default became more restrictive or changed control.
+
+Users can lose access to records they don't own, and automation running with the user's sharing may stop finding records. Add sharing rules for who still needs access.
+
+## sharing-rule-changed
+
+**SharingRuleChanged** · default severity: Medium · security
+
+A sharing rule was added, widened, narrowed or removed.
+
+New or wider rules open records to their audience (high when shared with all internal, partner or portal users for edit); removed or reduced rules take access away. Confirm the audience and access level.
+
 ## deleted-still-referenced
 
 **DeletedStillReferenced** · default severity: High
@@ -154,6 +237,22 @@ Review that each newly editable field is needed by the users holding the permiss
 A deleted field, flow or class is still referenced elsewhere.
 
 The deployment will fail or the references will break at runtime. Remove or update the references in the same change.
+
+## deleted-still-named
+
+**DeletedStillNamed** · default severity: Medium
+
+A deleted component of any metadata type is still named by other files in the project.
+
+Found by name, not by parsing, so check each listed file. Where it is a real reference, a deployment that includes the file fails, or the reference breaks once the component is gone from the org. Update or remove the references in the same change.
+
+## renamed-still-named
+
+**RenamedStillNamed** · default severity: Medium
+
+A renamed component's old name is still used by other files in the project.
+
+Renaming a metadata file creates a new component and leaves the old one in the org until it is deleted, so the change can work in an existing org and fail in a new one. Update the references in the same change.
 
 ## validation-rule-removed
 

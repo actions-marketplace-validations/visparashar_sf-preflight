@@ -7,6 +7,52 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The save path covers more of Salesforce's order of execution:
+  - Duplicate rules (after validation rules) and assignment, auto-response and escalation rules (after the
+    after-save triggers) appear in `preflight explain` and the report's order-of-execution tables.
+  - Fields read by these rules, matching rules and approval processes count as references, so changing or
+    deleting such a field is caught.
+  - `automated-write-vs-duplicate-rule`: automation saves records that an active duplicate rule can block,
+    or a changed duplicate rule now blocks saves that automation makes (high).
+  - `save-rule-changed`: assignment, auto-response, escalation, duplicate and matching rules and approval
+    processes switched on or off, added, removed, or reading different fields.
+  - Platform events: a changed or deleted event or event field lists its publishers (Apex, flows) and
+    subscribers (triggers, platform-event flows, Lightning components on the Emp API)
+    (`platform-event-contract`). The cascade stops at a published event, since subscribers run later in their
+    own transaction, instead of treating them as part of the same save.
+- A reference check for every metadata type. When a component is deleted, the files that still name it are
+  flagged (`deleted-still-named`), for the types without a precise check of their own: static resources,
+  named credentials, custom permissions, tabs, apps, value sets, quick actions, email templates, layouts,
+  custom objects and the rest. Matching uses each type's own reference syntax (`$Resource.X`,
+  `callout:X`, `$Permission.X`, `<valueSetName>`, ...) and, for distinctive names, XML values and quoted
+  strings, so common words don't match.
+- Renames: when a component of any type is renamed, files that still use the old name are flagged
+  (`renamed-still-named`). The old component stays in the org, so this works in one org and fails in a new one.
+- Access changes are analyzed in depth:
+  - Access taken away by a permission set or profile (objects, fields, Apex classes, Visualforce pages, custom
+    permissions, system permissions), naming the Lightning components and pages that use it
+    (`permission-access-removed`).
+  - Guest user profiles (by their Guest User License) and guest sharing rules that expose objects, classes or
+    records to unauthenticated visitors (`guest-access`).
+  - Organization-wide defaults that open up (`sharing-model-opened`) or tighten (`sharing-model-restricted`).
+  - Sharing rules added, widened, re-scoped, reduced or removed, rated by audience and access level
+    (`sharing-rule-changed`).
+  - Permission set groups that gain permission sets with Modify All, View All or system permissions, drop sets or
+    add mutes, and muting permission sets that mute more (`permission-group-changed`). Escalations in a
+    permission set also name the groups that carry it to users.
+- Destructive manifests: components listed in a changed `destructiveChanges.xml` (or `...Pre`/`...Post`) are
+  checked like deleted files, including fields, classes and flows, even when the manifest sits outside the
+  package directories.
+
+## [0.9.1] - 2026-10-09
+
+### Fixed
+
+- Release 0.9.0 was never published: its release run failed because the tests that run the built CLI executed before
+  the build. They now build it when it is missing. 0.9.1 contains everything listed under 0.9.0.
+
 ## [0.9.0] - 2026-10-09
 
 ### Added
@@ -337,7 +383,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/visparashar/sf-preflight/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/visparashar/sf-preflight/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/visparashar/sf-preflight/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/visparashar/sf-preflight/compare/v0.6.0...v0.7.0
