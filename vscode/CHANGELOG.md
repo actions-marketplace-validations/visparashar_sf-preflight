@@ -2,6 +2,10 @@
 
 ## [0.2.0]
 
+- **New extension ID: `visparashar.sf-preflight-vscode`** (the name `sf-preflight` is taken on the
+  VS Code Marketplace). On Open VSX, install it in place of `visparashar.sf-preflight` 0.1.0, which
+  is deprecated. Settings (`sfPreflight.*`) and commands are unchanged.
+
 - **Blast radius graph**: the change at the centre and what it sets off around it, one ring per
   hop: the objects it saves, the flows, triggers, validation rules and roll-ups that run, what
   references it, and the Agentforce actions it reaches. Nodes are coloured by their worst finding

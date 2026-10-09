@@ -242,7 +242,8 @@ The [sf-preflight extension](vscode/README.md) shows findings in the Problems pa
 the blast radius (what runs, in order, on every impacted object) beside your code, a graph of
 everything the change sets off, and the risk in the status bar. It re-analyzes when metadata changes, generates tests, explains save order,
 and offers the MCP tools to GitHub Copilot and other agents in the editor. It works in VS Code and
-editors built on it (Cursor, Salesforce Code Builder).
+editors built on it (Cursor, Salesforce Code Builder). Install `visparashar.sf-preflight-vscode` from
+the VS Code Marketplace or Open VSX.
 
 ### With org context (beta)
 
