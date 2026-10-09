@@ -26,5 +26,6 @@ don't disable a rule or edit `.preflight.json` to make a finding go away unless 
 | `agent-action-untested` | Low | No Testing Center test expects an affected agent action. | Add a test case (utterance plus expected topic and action). |
 | `agent-action-target-missing` | Low | An agent action calls an Apex class or flow that isn't in the project. | Retrieve it, or check the reference. |
 | `validation-rule-removed`, `validation-rule-inactive`, `flow-inactive`, `agent-metadata-changed`, `legacy-workflow` | Info | Context worth mentioning in your summary. | Usually nothing to fix. |
+| `metadata-not-analyzed` | Info | A changed component is of a metadata type sf-preflight only lists (layout, Lightning component, flexipage, label, ...). The report shows which project files mention it. | Check those files yourself: the analysis did not cover what this change affects. |
 
 Full explanations: https://github.com/visparashar/sf-preflight/blob/main/docs/RULES.md

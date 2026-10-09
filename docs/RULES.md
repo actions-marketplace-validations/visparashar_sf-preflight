@@ -33,6 +33,7 @@ that is only inside the blast radius).
 | [`agent-runtime-overprivileged`](#agent-runtime-overprivileged) | Medium | With --org: an affected agent's runtime user holds broad access such as Modify All Data. |
 | [`agent-action-no-confirmation`](#agent-action-no-confirmation) | Medium | An agent action deletes records without asking the user for confirmation. |
 | [`legacy-workflow`](#legacy-workflow) | Info | A legacy workflow rule changed. |
+| [`metadata-not-analyzed`](#metadata-not-analyzed) | Info | A changed component is of a metadata type that is not analyzed in depth. |
 
 ## recursion-cycle
 
@@ -233,3 +234,11 @@ Require confirmation for destructive actions so a misunderstood request can't de
 A legacy workflow rule changed.
 
 Workflow rules are not analyzed yet; consider migrating them to flows.
+
+## metadata-not-analyzed
+
+**MetadataNotAnalyzed** · default severity: Info
+
+A changed component is of a metadata type that is not analyzed in depth.
+
+sf-preflight recognizes the type (layouts, Lightning components, page layouts, labels, ...) but only lists it and the files that mention it. Review what depends on it yourself, and turn the rule off in .preflight.json if the noise is not useful.

@@ -102,6 +102,19 @@ A rule should push a `Finding` with a stable `rule` id (kebab-case), a severity,
 reads well in a table, a detail that explains *why it matters*, and the files involved. If the
 rule implies something worth testing, also push a `SuggestedTest`.
 
+## Metadata types and coverage
+
+Every Salesforce metadata type is recognized by name, from a table generated out of Salesforce's
+metadata registry (`scripts/gen-metadata-types.mjs` writes `src/core/metadataTypes.ts`; the
+registry is not a run-time dependency). Types with their own analysis (fields, validation rules,
+flows, Apex, permissions, Agentforce) are "analyzed in depth". Every other changed component
+(layouts, Lightning components, flexipages, labels, custom metadata, ...) is a `Metadata`
+component: it appears in the changed components, raises an info finding
+(`metadata-not-analyzed`), and the result's `coverage` lists, per component, the project files
+that mention its API name (`c-my-cmp`, `c/myCmp` and `c:myCmp` for Lightning components).
+`coverage.deep` and `coverage.basic` give the "analyzed in depth: N of M" line in reports. The
+mention search is by name: it finds where to look and does not follow what those files do.
+
 ## Known limitations
 
 - Apex type resolution covers locals, parameters, for-each variables, class fields and
@@ -111,6 +124,7 @@ rule implies something worth testing, also push a `SuggestedTest`.
 - The call graph merges overloads by method name and does not follow interfaces, virtual
   dispatch or dynamic `Type.forName` instantiation.
 - Files that fail to parse use the regex fallback and are listed in the report's warnings.
+- Types listed under *Metadata types and coverage* above are reported by name only.
 - Process Builder, legacy workflow rules, duplicate rules, assignment rules, escalation rules
   and sharing recalculation are not modelled yet.
 - Order *within* a phase is alphabetical; Salesforce's flow trigger order is not yet read.

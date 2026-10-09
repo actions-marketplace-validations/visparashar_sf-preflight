@@ -41,6 +41,7 @@ It is open source, runs offline on your source code, and needs no org credential
 | **DML/SOQL in loops** | In changed Apex and in Apex inside the blast radius |
 | **Permission escalations** | New Modify All / View All, delete access, sensitive system permissions — diffed against the base |
 | **Broken references** | Deleted fields, flows or classes that are still used |
+| **Everything else that changed** | Layouts, Lightning components, flexipages, labels and every other metadata type are listed with the files that mention them, and the report says how much of the change was analyzed in depth |
 | **Affected agent actions** | Agentforce actions the change reaches, their Testing Center coverage and what their runtime user needs |
 
 Every run also produces a **suggested test plan**: bulk, recursion, validation-collision,

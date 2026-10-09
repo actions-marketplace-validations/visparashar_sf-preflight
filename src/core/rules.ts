@@ -200,6 +200,13 @@ export const RULES: RuleInfo[] = [
     summary: "A legacy workflow rule changed.",
     help: "Workflow rules are not analyzed yet; consider migrating them to flows.",
   },
+  {
+    id: "metadata-not-analyzed",
+    name: "MetadataNotAnalyzed",
+    defaultSeverity: "info",
+    summary: "A changed component is of a metadata type that is not analyzed in depth.",
+    help: "sf-preflight recognizes the type (layouts, Lightning components, page layouts, labels, ...) but only lists it and the files that mention it. Review what depends on it yourself, and turn the rule off in .preflight.json if the noise is not useful.",
+  },
 ];
 
 const BY_ID = new Map(RULES.map((r) => [r.id, r]));

@@ -21,6 +21,8 @@ export type ComponentType =
   | "Profile"
   | "AgentMetadata"
   | "WorkflowRule"
+  /** Any other Salesforce metadata type: recognized by name (see `metadataType`), not analyzed in depth. */
+  | "Metadata"
   | "Other";
 
 /** Which kind of Agentforce metadata an `AgentMetadata` component is. */
@@ -38,6 +40,8 @@ export interface ComponentRef {
   type: ComponentType;
   /** Set for AgentMetadata components. */
   agentKind?: AgentFileKind;
+  /** Set for Metadata components: the Salesforce metadata type, e.g. `Layout` or `LightningComponentBundle`. */
+  metadataType?: string;
   /** Display name, e.g. `Opportunity.Contract_Signed_Date__c` or `AccountTrigger`. */
   name: string;
   /** Owning object for object-scoped components. */
@@ -514,6 +518,21 @@ export interface Reference {
   to: string;
 }
 
+/**
+ * How much of the change was analyzed in depth. Types without a dedicated analysis are still
+ * recognized and listed here, with the project files that mention them.
+ */
+export interface Coverage {
+  /** Changed components of types analyzed in depth (fields, flows, Apex, permissions, ...). */
+  deep: number;
+  /** Changed components of every other metadata type. */
+  basic: number;
+  /** The basic ones by metadata type. */
+  basicByType: { type: string; count: number }[];
+  /** Project files that mention each basic component (by API name), most useful first. */
+  mentions: { component: string; type: string; files: string[]; more: number }[];
+}
+
 export interface AnalysisResult {
   schemaVersion: 1;
   generatedAt: string;
@@ -533,6 +552,8 @@ export interface AnalysisResult {
   suggestedTests: SuggestedTest[];
   /** Agent actions the change affects (empty when the project has no agents or none are affected). */
   agents: AgentImpact[];
+  /** Present when the project's changes include components that are not analyzed in depth. */
+  coverage?: Coverage;
   summary: {
     risk: "high" | "medium" | "low";
     changedComponents: number;
