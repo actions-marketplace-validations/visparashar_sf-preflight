@@ -1,0 +1,51 @@
+name: Prepare release
+
+# Run from the Actions tab ("Run workflow") with the new version. It sets the version everywhere,
+# dates the changelog and opens a pull request. Merging that pull request releases it: see
+# release.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version, e.g. 0.9.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Open the release pull request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the version
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Use a plain version like 0.9.0"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: node scripts/version.mjs "$VERSION"
+      - name: Commit and open the pull request
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "release/$VERSION"
+          git add -A
+          git commit -s -m "chore(release): prepare $VERSION"
+          git push origin "release/$VERSION"
+          gh pr create --base main --head "release/$VERSION" \
+            --title "chore(release): prepare $VERSION" \
+            --body "Sets the version to $VERSION everywhere and dates the changelog. Review the changelog entry. Merging this pull request tags v$VERSION and publishes the CLI, then the sf CLI plugin."

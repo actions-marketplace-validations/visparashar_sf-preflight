@@ -100,23 +100,25 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            sf-plugin/package-lock.json
-      # The plugin's end-to-end test runs the CLI built from this checkout.
       - run: npm ci
       - run: npm run build
-      - run: npm ci
+      # The plugin depends on this version of the CLI, which is not on npm until the release
+      # publishes it. Test against the build from this checkout instead.
+      - name: Install the plugin against the local CLI
         working-directory: sf-plugin
+        run: |
+          npm pkg delete dependencies.sf-preflight
+          npm install
+          npm install --no-save ..
       - run: npm run typecheck
         working-directory: sf-plugin
       - run: npm test
         working-directory: sf-plugin
       - name: Build the manifest and check what would be published
+        working-directory: sf-plugin
         run: |
           npm run manifest
           npm pack --dry-run
-        working-directory: sf-plugin
 
   action:
     name: Action self-test
