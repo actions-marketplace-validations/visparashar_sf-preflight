@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `preflight monitor` watches a production org's Setup Audit Trail (read-only) and alerts on risky changes made
+  directly in the org: validation rules and flows switched off, broad permissions, Apex, sharing and security
+  settings. It can skip a deployment user, remember what it has reported, and post to the same Slack, Teams or
+  webhook as `preflight notify`. See [docs/MONITOR.md](docs/MONITOR.md).
 - `preflight notify` sends a short risk alert to Slack, Microsoft Teams or any JSON webhook from a saved
   report. The GitHub Action gets `notify-webhook`, `notify-on` and `notify-on-update` inputs. The message
   leaves out PR titles and branch names, cleans repository text, accepts only public `https` URLs, and a
