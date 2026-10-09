@@ -302,7 +302,7 @@ export function monitorToMarkdown(report: MonitorReport): string {
   else {
     lines.push("| Severity | Change | When (UTC) | In repository |", "|---|---|---|---|");
     for (const f of report.findings) {
-      const cell = plain(`${f.label}${f.detail ? `: ${f.detail}` : ""}`, 240).replace(/\|/g, "\\|");
+      const cell = plain(`${f.label}${f.detail ? `: ${f.detail}` : ""}`, 240).replace(/[\\|]/g, "\\$&");
       const repo = f.inRepository === undefined ? "–" : f.inRepository ? "name found" : "**no match**";
       lines.push(`| ${f.severity} | ${cell} | ${plain(f.when, 30)} | ${repo} |`);
     }

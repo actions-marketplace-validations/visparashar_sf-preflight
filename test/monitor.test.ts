@@ -142,3 +142,19 @@ describe("alertFromMonitor", () => {
     expect(monitorShouldNotify(report, "high")).toBe(true);
   });
 });
+
+describe("monitorToMarkdown", () => {
+  it("escapes backslashes and pipes in table cells", () => {
+    const { findings } = classifyAudit([e("Deactivated flow a\\|b | c")]);
+    const md = monitorToMarkdown({
+      org: "prod",
+      since: "s",
+      until: "u",
+      scanned: 1,
+      skipped: 0,
+      risk: "high",
+      findings,
+    });
+    expect(md).toContain("a\\\\\\|b \\| c");
+  });
+});
