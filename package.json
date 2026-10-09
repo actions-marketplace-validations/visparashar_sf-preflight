@@ -44,7 +44,7 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check . && node scripts/check-license-headers.mjs",
+    "lint": "biome check . && node scripts/check-license-headers.mjs && node scripts/version.mjs --check",
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",

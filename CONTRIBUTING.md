@@ -154,28 +154,30 @@ release notes.
 
 ## Releasing (maintainers)
 
-`main` is protected, so a release is a small pull request followed by a tag.
+`main` is protected, so a release is a small pull request. Merging it releases.
 
-1. Create a branch `release/X.Y.Z` from `main`.
-2. Move the **Unreleased** changelog entries under `## [X.Y.Z] - YYYY-MM-DD` and update the
-   compare links at the bottom.
-3. `npm version X.Y.Z --no-git-tag-version` to bump `package.json` and `package-lock.json`.
-   Set the same version in `.claude-plugin/plugin.json` (`version` and the `sf-preflight@X.Y.Z`
-   MCP argument) and in `skills/sf-preflight/SKILL.md` (`metadata.version`); a test fails until
-   they match.
-4. Open a pull request, wait for CI and CodeQL, and merge it.
-5. Tag the merge commit and push the tag:
+1. Make sure the changes since the last release are listed under **Unreleased** in
+   [CHANGELOG.md](CHANGELOG.md).
+2. Actions → **Prepare release** → Run workflow, with the new version (`X.Y.Z`). It runs
+   `node scripts/version.mjs X.Y.Z`, which sets the version in `package.json` and its lockfile, the
+   agent skill, the Claude Code plugin (and its pinned `sf-preflight@X.Y.Z`), the evidence doc and
+   the sf plugin (version and its `sf-preflight` dependency), dates the changelog and fixes its
+   compare links, then opens a pull request. (Without the workflow, run the script yourself and
+   open the pull request by hand. `npm run lint` fails if the places disagree.)
+3. Review the changelog entry, wait for CI and CodeQL, and merge.
 
-   ```bash
-   git fetch origin
-   git tag -a vX.Y.Z origin/main -m "sf-preflight X.Y.Z"
-   git push origin vX.Y.Z
-   ```
+Merging changes the version in `package.json`, which starts the **Release** workflow:
 
-The **Release** workflow then runs the checks, publishes to npm with provenance, creates the
-GitHub release and moves the major tag (`v0`) that the GitHub Action uses. If a run fails
-part-way, re-run it from the tag (Actions → Release → Run workflow → choose the tag); it skips
-steps that already succeeded.
+1. `plan` tags the merge commit `vX.Y.Z` (nothing is released if that tag already exists).
+2. `publish` runs the checks, publishes `sf-preflight` to npm with provenance, creates the GitHub
+   release and moves the major tag (`v0`) that the GitHub Action uses.
+3. `publish-plugin` then publishes `sf-plugin-preflight` at the same version, tested against the
+   CLI that was just published.
+
+Both publishing jobs use the `npm` environment: add required reviewers to it if you want a manual
+approval before anything is published. You can still release by pushing a `vX.Y.Z` tag yourself,
+and if a run fails part-way, re-run it from the tag (Actions → Release → Run workflow → choose the
+tag); it skips steps that already succeeded.
 
 ### The VS Code extension
 
