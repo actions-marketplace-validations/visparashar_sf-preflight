@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-09
+
 ### Added
 
 - Custom labels, custom metadata records and Visualforce are analyzed in depth. A removed label
@@ -317,7 +319,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/visparashar/sf-preflight/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/visparashar/sf-preflight/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/visparashar/sf-preflight/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/visparashar/sf-preflight/compare/v0.4.0...v0.5.0
