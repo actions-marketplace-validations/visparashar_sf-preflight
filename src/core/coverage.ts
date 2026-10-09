@@ -24,6 +24,10 @@ const DEEP_METADATA: ReadonlySet<string> = new Set([
   "AuraDefinitionBundle",
   "Layout",
   "FlexiPage",
+  "CustomLabels",
+  "CustomMetadata",
+  "ApexPage",
+  "ApexComponent",
 ]);
 
 export const isAnalyzedInDepth = (c: ComponentRef): boolean =>

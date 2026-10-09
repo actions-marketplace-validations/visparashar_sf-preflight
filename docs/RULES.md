@@ -40,6 +40,11 @@ that is only inside the blast radius).
 | [`record-type-values-removed`](#record-type-values-removed) | Low | A record type no longer offers picklist values it offered before. |
 | [`record-type-deactivated`](#record-type-deactivated) | Low | A record type was deactivated. |
 | [`record-type-still-referenced`](#record-type-still-referenced) | Medium | A deleted record type is still named in Apex, flows or formulas. |
+| [`label-removed-still-used`](#label-removed-still-used) | High | A custom label was removed but Apex, Visualforce, Lightning or flows still use it. |
+| [`cmdt-record-still-referenced`](#cmdt-record-still-referenced) | Medium | A deleted custom metadata record is still named in code that reads its type. |
+| [`cmdt-record-changed`](#cmdt-record-changed) | Info | A custom metadata record changed; files that read its type are listed. |
+| [`visualforce-missing-reference`](#visualforce-missing-reference) | Medium | A Visualforce page or component names an Apex controller or extension the project does not have. |
+| [`apex-used-by-page`](#apex-used-by-page) | Info | An Apex class is the controller or extension of Visualforce pages (high when the class is deleted). |
 | [`field-on-page`](#field-on-page) | Info | A changed field is on page layouts or Lightning pages. |
 | [`lightning-on-page`](#lightning-on-page) | Info | A changed Lightning component is placed on Lightning pages. |
 | [`page-missing-reference`](#page-missing-reference) | Medium | A changed layout or Lightning page uses a field or component that is not in the project. |
@@ -301,6 +306,46 @@ New records can no longer use it. Flows or Apex that create records of this type
 A deleted record type is still named in Apex, flows or formulas.
 
 Comparing against a record type by name does not fail the deployment; it quietly stops matching. Update the code, flows and formulas that name it.
+
+## label-removed-still-used
+
+**LabelRemovedStillUsed** · default severity: High
+
+A custom label was removed but Apex, Visualforce, Lightning or flows still use it.
+
+Code that names a missing label fails to compile. Restore the label or update what uses it.
+
+## cmdt-record-still-referenced
+
+**CmdtRecordStillReferenced** · default severity: Medium
+
+A deleted custom metadata record is still named in code that reads its type.
+
+Lookups by the record's name return nothing after the delete. Update the code, or keep the record.
+
+## cmdt-record-changed
+
+**CmdtRecordChanged** · default severity: Info
+
+A custom metadata record changed; files that read its type are listed.
+
+Custom metadata is configuration that code reads at run time. Check the readers behave with the new values.
+
+## visualforce-missing-reference
+
+**VisualforceMissingReference** · default severity: Medium
+
+A Visualforce page or component names an Apex controller or extension the project does not have.
+
+The page cannot be saved without its classes. Deploy them together or fix the name.
+
+## apex-used-by-page
+
+**ApexUsedByPage** · default severity: Info
+
+An Apex class is the controller or extension of Visualforce pages (high when the class is deleted).
+
+Changes to its properties and actions reach users through those pages. A deleted class breaks them.
 
 ## field-on-page
 
