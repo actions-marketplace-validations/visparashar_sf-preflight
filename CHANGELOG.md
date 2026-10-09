@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-09
+
+### Added
+
+- The report viewer links to the VS Code extension. Its landing page explains opening a saved report from the editor with **sf-preflight: Open report in the web viewer**.
+
 ## [0.10.0] - 2026-10-10
 
 ### Added
@@ -409,7 +415,8 @@ and SARIF output.
 - Git refs from the CLI, MCP and the action are validated so they can't be parsed as git
   options.
 
-[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/visparashar/sf-preflight/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/visparashar/sf-preflight/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/visparashar/sf-preflight/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/visparashar/sf-preflight/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/visparashar/sf-preflight/compare/v0.8.0...v0.9.0
