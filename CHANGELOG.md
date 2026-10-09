@@ -35,6 +35,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     subscribers (triggers, platform-event flows, Lightning components on the Emp API)
     (`platform-event-contract`). The cascade stops at a published event, since subscribers run later in their
     own transaction, instead of treating them as part of the same save.
+- A report viewer (`web/`): a static site that opens a JSON report or an evidence pack in the browser, with the
+  risk, quality gate, findings, the blast-radius graph from the VS Code extension, order of execution, cascade,
+  affected Agentforce actions, tests to run, org context and authorship. Evidence packs get their digest checked
+  in the browser (the same check as `preflight evidence --verify`). Opens GitHub Actions artifact zips, pasted JSON
+  and links (`?url=`), copies the CLI's Markdown, and prints cleanly. Files are never uploaded. Ships with
+  settings for Vercel and Netlify.
 - A reference check for every metadata type. When a component is deleted, the files that still name it are
   flagged (`deleted-still-named`), for the types without a precise check of their own: static resources,
   named credentials, custom permissions, tabs, apps, value sets, quick actions, email templates, layouts,

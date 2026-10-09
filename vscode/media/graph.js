@@ -264,7 +264,7 @@
       gEl.setAttribute("role", n.openable ? "button" : "img");
       gEl.setAttribute(
         "aria-label",
-        [n.label, caption(n).toLowerCase(), n.severity ? `${n.severity} risk` : "", n.openable ? "open file" : ""]
+        [n.label, caption(n).toLowerCase(), n.severity ? `${n.severity} risk` : "", n.openable ? openAction() : ""]
           .filter(Boolean)
           .join(", "),
       );
@@ -415,7 +415,7 @@
     if (n.openable) {
       const hint = document.createElement("div");
       hint.className = "meta";
-      hint.textContent = "Click to open";
+      hint.textContent = lastMeta.openAction ? `Click to ${lastMeta.openAction}` : "Click to open";
       tip.appendChild(hint);
     }
     tip.hidden = false;
@@ -545,6 +545,8 @@
   }
 
   let lastMeta = {};
+  // What clicking a node does: the host can name it (the web viewer lists the node's findings).
+  const openAction = () => lastMeta.openAction || "open file";
   window.addEventListener("message", (ev) => {
     if (ev.origin !== window.location.origin) return;
     const msg = ev.data;
@@ -559,6 +561,7 @@
       summary: str(meta.summary),
       busy: meta.busy === true,
       error: str(meta.error),
+      openAction: str(meta.openAction, 40),
     };
     if (!sameChange) moved = false;
     draw(graph, lastMeta);
